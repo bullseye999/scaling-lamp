@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Vaults & encryption keys (sensitive)
+*.db
+*.key
+*.gpg
+*.pem
+*.crt
+*.p12
+secure_vault.db
+quantum_vault.db
+vault.key
+quantum.key
+
+# Backups & temporary files
+*.tar
+*.tar.gpg
+*.zip
+*.log
+*.tmp
+*.swp
+*~
+system_backup_*.db
+temp_backup.tar
+
+# Prediction data & logs
+sports_predictions/
+sports_logs/
+system_proposals/
+*.json  # (but keep example configs)
+!requirements.txt
+!ciph_version.json   # optional, you may keep
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.secret
+config_local.yaml
+config_local.json
+
+# OS metadata
+.DS_Store
+Thumbs.db
+.desktop.ini
+*.orig
+*.rej
+
+# IDE / editor folders
+.vscode/
+.idea/
+*.sublime-*
+.vim/
+.venv/
+
+# Jupyter notebooks (if any)
+.ipynb_checkpoints/
+
+# Tor control cookie (if accidentally created)
+control.authcookie
+
+# Module manager cache (if any)
+*.pyc
+*.pyo
+
+# Large downloads or test assets (optional)
+*.pdf      # ignore PDFs by default – keep only if you have sample books
+!sample.pdf
