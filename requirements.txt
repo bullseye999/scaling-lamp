@@ -1,0 +1,31 @@
+# Core crypto & storage
+cryptography>=41.0.0
+pymupdf>=1.23.0          # PDF parsing for book_engine
+
+# Networking & APIs
+requests>=2.31.0
+feedparser>=6.0.10        # RSS parsing for OSINT & sports news
+schedule>=1.2.0           # task_scheduler
+stem>=1.8.2               # tor control (for new identity)
+socks>=1.0.0              # PySocks for Tor proxy
+
+# Optional post‑quantum (not required for basic operation)
+# pqcrypto>=0.2.0          # uncomment if you want quantum‑ready encryption
+
+# AI integrations
+openai>=1.0.0            # OpenAI client (if using GPT)
+
+# Config file support (optional)
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Sport prediction extra (optional)
+# numpy                     # if you need more advanced math
+
+# Testing (optional – for developers)
+# pytest>=7.0
+# black>=23.0
+
+# Note: Some modules (ollama, feedparser, stem) require system packages:
+#   - Tor must be installed separately (sudo apt install tor)
+#   - Ollama for local LLM (install from ollama.ai)
