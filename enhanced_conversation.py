@@ -7,8 +7,8 @@ import json
 import os
 
 # Renamed imports – adjust to your actual file names after redaction
-from personality_engine import AgentPersonality   # was CiphPersonality
-from system_worldview import get_worldview        # was ciph_worldview
+from personality_engine import AgentPersonality   
+from ciph_worldview import get_worldview        
 
 class OllamaBrain:
     """Handles communication with an Ollama instance (local or remote)."""
