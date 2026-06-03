@@ -32,7 +32,7 @@ from response_formatter import ResponseFormatter
 from smart_memory import SmartMemory
 from mood_engine import MoodEngine
 from quantum_vault import QuantumVault
-from enhanced_conversation import EnhancedConversation   # renamed from CiphConversation
+from enhanced_conversation import AgentConversation  
 
 
 class CiphCore:
@@ -61,7 +61,7 @@ class CiphCore:
         self.darknet = DarknetMonitor(self.vault)
         self.mood_engine = MoodEngine()
         self.file_analyzer = FileAnalyzer(self.vault)
-        self.conversation = EnhancedConversation(self.vault)
+        self.conversation = AgentConversation(self.vault)
 
         # Configuration
         self.max_width = 80
