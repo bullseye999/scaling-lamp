@@ -81,7 +81,8 @@ Below you see exactly how Ciph looks and feels in the terminal.
 
 ### 1. Startup banner
 When you launch ciph
-![Startup banner](https://raw.githubusercontent.com/bullseye999/scaling-lamp/main/images/ciphcore.jpeg)
+![Startup banner](https://github.com/bullseye999/scaling-lamp/blob/c13d9844041fb0ad4930006fc97b904fe336667f/images/ciphcore.jpeg)
+
 <br/>
 
 ### 2. `/status` – overall system health
