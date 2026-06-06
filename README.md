@@ -1,25 +1,5 @@
 
-```markdown
-<div align="center">
-<h1>⚫️ Ciph Core</h1>
-<p><strong>Your sovereign AI agent modular, encrypted, self‑evolving.</strong></p>
-
-<p>
-<img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
-<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue" alt="Platforms">
-<img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
-</p>
-
-<p>
-<a href="#-what-is-ciph-core">What is it?</a> •
-<a href="#-why-ciph--advantages">Advantages</a> •
-<a href="#-roadmap--where-im-going">Roadmap</a> •
-<a href="#-get-started">Get Started</a> •
-<a href="#-known-bugs">Bugs</a> •
-<a href="#-demo--screenshots">Demo</a>
-</p>
-</div>
+```
 
 ---
 
