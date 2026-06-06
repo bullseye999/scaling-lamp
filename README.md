@@ -1,6 +1,6 @@
 
 
-```markdown
+markdown
 <div align="center">
 <h1>⚫️ Ciph Core</h1>
 <p><strong>Your sovereign AI agent – modular, encrypted, self‑evolving.</strong></p>
@@ -22,7 +22,7 @@
 </p>
 </div>
 
-```
+
 ---
 
 ## 🧠 What is Ciph Core?
