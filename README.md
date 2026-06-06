@@ -65,13 +65,13 @@ When you launch ciph
 
 ![Startup banner](images/ciphcore.jpeg)
 
-￼
+
 <br/>
 
 ### 2. `/status` – overall system health
 *AI, security, project stats, memory entities, scheduled jobs.*
 
-￼
+
 
 ![Status command](images/status.png)
 
@@ -80,7 +80,7 @@ When you launch ciph
 ### 3. `/darknet-scan` – live threat intelligence through Tor
 *Finds zero‑day mentions, ransomware alerts, credential leaks.*
 
-￼
+
 ![Darknet Scan](images/darknet.png)
 
 <br/>
@@ -88,7 +88,7 @@ When you launch ciph
 ### 4. `/predict Arsenal vs Chelsea` – 5‑layer sports prediction
 *Poisson + market + news + LLM reasoning + arbiter. Shows conviction and contrarian signals.*
 
-￼
+
 
 ![Sports prediction](images/prediction.png)
 
@@ -97,7 +97,7 @@ When you launch ciph
 ### 5. `/self-analyze` – Ciph reads its own code and proposes upgrades
 *Generates `system_proposals/` files with actual code changes.*
 
-￼
+
 
 ![Self‑analysis](images/self_analyze.png)
 
@@ -148,7 +148,7 @@ All modules communicate through the vault, the module manager, and the core even
 ```bash
 git clone https://github.com/pendragon360/scaling-lamp.git
 
-￼
+
 ```![clone](images/gitclone.jpeg)
 
 ### 2. Enter the directory
@@ -156,21 +156,21 @@ git clone https://github.com/pendragon360/scaling-lamp.git
 ```bash
 cd scaling_lamp
 ```![cd](images/cd.jpeg)
-￼
+
 
 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```![requirements[(images/requirements.jpeg)
-￼
+
 
 4. Run Ciph
 
 ```bash
 python ciph_core.py
 ```![Startup](images/ciph.jpeg)
-￼
+
 ---
 
 📄 License
