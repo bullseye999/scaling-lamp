@@ -2,26 +2,24 @@
 
 ```markdown
 <div align="center">
-<h1>⚫️ Ciph Core</h1>
-<p><strong>Your sovereign AI agent modular, encrypted, self‑evolving.</strong></p>
 
-<p>
-<img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
-<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue" alt="Platforms">
-<img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
-</p>
+# ⚫️ Ciph Core
 
-<p>
-<a href="#-what-is-ciph-core">What is it?</a> •
-<a href="#-why-ciph--advantages">Advantages</a> •
-<a href="#-roadmap--where-im-going">Roadmap</a> •
-<a href="#-get-started">Get Started</a> •
-<a href="#-known-bugs">Bugs</a> •
-<a href="#-demo--screenshots">Demo</a>
-</p>
+**Your sovereign AI agent – modular, encrypted, self‑evolving.**
+
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue)]()
+[![Status](https://img.shields.io/badge/Status-Active-brightgreen)]()
+
+[📖 What is it?](#-what-is-ciph-core) •
+[✨ Advantages](#-why-ciph--advantages) •
+[🧭 Roadmap](#-roadmap--where-im-going) •
+[🚀 Get Started](#-get-started) •
+[🐞 Bugs](#-known-bugs) •
+[📸 Demo](#-demo--screenshots)
+
 </div>
-
 ---
 
 ## 🧠 What is Ciph Core?
