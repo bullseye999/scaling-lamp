@@ -149,7 +149,7 @@ All modules communicate through the vault, the module manager, and the core even
 git clone https://github.com/bullseye999/scaling-lamp.git
 
 
-```![clone](images/gitclone.jpeg)
+``` https://images/gitclone.jpeg
 
 ### 2. Enter the directory
 
