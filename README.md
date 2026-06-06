@@ -1,5 +1,26 @@
 
+
 ```
+<div align="center">
+<h1>⚫️ Ciph Core</h1>
+<p><strong>Your sovereign AI agent modular, encrypted, self‑evolving.</strong></p>
+
+<p>
+<img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
+<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue" alt="Platforms">
+<img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
+</p>
+
+<p>
+<a href="#-what-is-ciph-core">What is it?</a> •
+<a href="#-why-ciph--advantages">Advantages</a> •
+<a href="#-roadmap--where-im-going">Roadmap</a> •
+<a href="#-get-started">Get Started</a> •
+<a href="#-known-bugs">Bugs</a> •
+<a href="#-demo--screenshots">Demo</a>
+</p>
+</div>
 
 ---
 
@@ -63,8 +84,6 @@ Below you see exactly how Ciph looks and feels in the terminal.
 ### 1. Startup banner
 When you launch ciph
 
-![Startup banner](https://github.com/pendragon360/scaling-lamp/blob/main/images/ciphcore.jpeg?raw=true)
-
 <br/>
 
 ### 2. `/status` – overall system health
@@ -72,7 +91,7 @@ When you launch ciph
 
 
 
-![Status command](images/status.png)
+![Status command]()
 
 <br/>
 
@@ -80,7 +99,6 @@ When you launch ciph
 *Finds zero‑day mentions, ransomware alerts, credential leaks.*
 
 
-![Darknet Scan](images/darknet.png)
 
 <br/>
 
@@ -89,7 +107,7 @@ When you launch ciph
 
 
 
-![Sports prediction](images/prediction.png)
+![Sports prediction]()
 
 <br/>
 
@@ -98,7 +116,7 @@ When you launch ciph
 
 
 
-![Self‑analysis](images/self_analyze.png)
+![Self‑analysis]()
 
 <br/>
 
@@ -146,29 +164,28 @@ All modules communicate through the vault, the module manager, and the core even
 
 ```bash
 git clone https://github.com/pendragon360/scaling-lamp.git
+```
 
 
-``` https://images/gitclone.jpeg
-
-### 2. Enter the directory
+2. Enter the directory
 
 ```bash
-cd scaling_lamp
-```![cd](images/cd.jpeg)
+cd YOUR_REPO_NAME
+```
 
 
 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
-```![requirements[(images/requirements.jpeg)
+```
 
 
 4. Run Ciph
 
 ```bash
 python ciph_core.py
-```![Startup](images/ciph.jpeg)
+```
 
 ---
 
@@ -186,5 +203,7 @@ Built to be sovereign.
 ---
 
 ---
+
+
 
 
