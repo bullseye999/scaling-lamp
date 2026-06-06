@@ -81,6 +81,7 @@ Below you see exactly how Ciph looks and feels in the terminal.
 
 ### 1. Startup banner
 When you launch ciph
+![Startup banner(https://github.com/pendragon360/scaling-lamp/blob/073f61762274c0085923d6c0790a5da7c96ff4a3/ciphcore.jpeg)
 
 <br/>
 
