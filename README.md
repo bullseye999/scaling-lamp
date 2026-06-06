@@ -63,7 +63,7 @@ Below you see exactly how Ciph looks and feels in the terminal.
 ### 1. Startup banner
 When you launch ciph
 
-![Startup banner](/images/ciphcore.jpeg)
+![Startup banner](scaling-lamp/images/ciphcore.jpeg)
 
 
 <br/>
