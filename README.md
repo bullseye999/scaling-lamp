@@ -22,6 +22,7 @@
 </p>
 </div>
 
+```
 ---
 
 ## 🧠 What is Ciph Core?
