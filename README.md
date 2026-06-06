@@ -1,210 +1,211 @@
 
+```markdown
+<div align="center">
+<h1>⚫️ Ciph Core</h1>
+<p><strong>Your sovereign AI agent modular, encrypted, self‑evolving.</strong></p>
+
+<p>
+<img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
+<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue" alt="Platforms">
+<img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
+</p>
+
+<p>
+<a href="#-what-is-ciph-core">What is it?</a> •
+<a href="#-why-ciph--advantages">Advantages</a> •
+<a href="#-roadmap--where-im-going">Roadmap</a> •
+<a href="#-get-started">Get Started</a> •
+<a href="#-known-bugs">Bugs</a> •
+<a href="#-demo--screenshots">Demo</a>
+</p>
+</div>
+
 ---
 
-## `README.md`
+## 🧠 What is Ciph Core?
+
+Ciph Core is your **personal, sovereign AI agent**.
+It's not another chatbot or a cloud API wrapper. It's a complete, modular system that you control 100%.
+
+- **Encrypted by default** – conversations, keys, and configurations live in a local SQLite vault (AES‑256 + quantum‑resistant fallback).
+- **Modular** – OSINT, pentesting, trading, darknet monitoring, sports prediction – each feature is a hot‑swappable module.
+- **Autonomous** – background orchestrator runs workflows, task scheduler handles daily jobs, and the agent can even propose its own upgrades.
+- **Sovereign** – no third‑party cloud required. Works with local LLMs (Ollama) or OpenAI, but you stay in control.
+
+---
+
+## ✨ Why Ciph? (Advantages)
+
+| Advantage | What it means for you |
+|-----------|----------------------|
+| **🔐 Privacy by design** | Everything is encrypted locally. No telemetry, no "phone home". |
+| **🌐 Dark‑net ready** | Built‑in Tor proxy + control port for anonymous threat intelligence. |
+| **💰 Wealth ops** | Crypto arbitrage scans, trading signals, bug bounty automation, monetizable threat detection. |
+| **🧠 Self‑awareness** | `self_awareness.py` reads its own code, finds issues, and writes upgrade proposals. |
+| **⚽ Sports intelligence** | 5‑layer prediction engine (Poisson + xG + market + news + LLM). |
+| **🕹️ Complete CLI** | 50+ slash commands – from `/darknet-scan` to `/self-analyze`. |
+| **🛡️ Security layer** | Integrity checks, footprint cleaner, encrypted backups, emergency wipe. |
+
+---
+
+## 🧭 Roadmap where I'm going
+
+### 🔜 Next (short term)
+
+- [ ] **UI Control Panel** – web‑based dashboard to monitor modules, view logs, and trigger commands.
+- [ ] **Swarm intelligence** – multiple orchestrated agents working on different tasks simultaneously.
+- [ ] **Personal data lake** – all encrypted conversations, scans, trades in one queryable format.
+
+### 🚀 Long‑term vision
+
+- **Decentralized operation** – run Ciph across your own hardware, no cloud dependencies, no single point of failure.
+- **Proactive defense** – detect and respond to threats in real time, before they impact you.
+- **Augmented intelligence** – Ciph becomes a seamless extension of your own thinking, not just a tool you use.
+
+## 🐞 Known bugs
+
+| Bug | Status |
+|-----|--------|
+| Ollama timeouts on very long prompts | workaround: `/ai` switch to OpenAI; proper optimizer planned |
+| `smart_memory` can sometimes repeat old context | being refactored |
+| Command `/help` is overwhelming – too many commands | will be categorised in the UI release |
+| Filename typos (`ciph_verson.json`) already fixed | ✅ done |
+
+> If you find something else, please open an issue.
+
+---
+
+## 📸 Demo & screenshots
+
+Below you see exactly how Ciph looks and feels in the terminal.
+
+### 1. Startup banner
+When you launch ciph
+
+![Startup banner](images/ciphcore.jpeg)
+
+￼
+<br/>
+
+### 2. `/status` – overall system health
+*AI, security, project stats, memory entities, scheduled jobs.*
+
+￼
+
+![Status command](images/status.png)
+
+<br/>
+
+### 3. `/darknet-scan` – live threat intelligence through Tor
+*Finds zero‑day mentions, ransomware alerts, credential leaks.*
+
+￼
+![Darknet Scan](images/darknet.png)
+
+<br/>
+
+### 4. `/predict Arsenal vs Chelsea` – 5‑layer sports prediction
+*Poisson + market + news + LLM reasoning + arbiter. Shows conviction and contrarian signals.*
+
+￼
+
+![Sports prediction](images/prediction.png)
+
+<br/>
+
+### 5. `/self-analyze` – Ciph reads its own code and proposes upgrades
+*Generates `system_proposals/` files with actual code changes.*
+
+￼
+
+![Self‑analysis](images/self_analyze.png)
+
+<br/>
+
+🧱 Architecture – how the files link together
+
+```
+run_ciph.py
+└── ciph_core.py # main orchestrator, command router
+├── handle_command() → calls modules via ModuleManager
+└── generate_response() → mood + memory + AI (Ollama / OpenAI)
+
+ModuleManager (module_manager.py)
+├── loads/unloads: osint, pentest, trading, bounty, orchestrator, memory, …
+└── passes modules to AgentOrchestrator
+
+CipherVault (cipher_vault.py + quantum_vault.py)
+└── encrypted SQLite storage for conversations, config, knowledge graph
+
+Darknet / OSINT chain
+darknet_monitor.py + osint_miner.py → RSS + Tor + X → threat scoring → monetization
+
+Trading / Wealth
+trading_engine.py → market data, arbitrage, signals
+
+Sports
+sports_predictor.py + sports_performance.py → 5‑layer predictions + email reports
+
+Self‑awareness
+self_awareness.py → scans code, detects stubs, writes upgrade proposals via Ollama
+
+Security & OPSEC
+security_layer.py + dead_mans_switch.py + tor_proxy.py
+```
+
+All modules communicate through the vault, the module manager, and the core event loop. No spaghetti.
+
+---
+
+---
 
 ```markdown
-# Autonomous Agent System
-
-A modular, self‑evolving AI orchestration platform with OSINT, pentesting, trading automation, darknet monitoring, sports prediction, and autonomous agent coordination.
-
-> **Warning:** This system includes security testing and monitoring tools. Use only on systems you own or have explicit permission to test. The author assumes no liability for misuse.
-
----
-
-## 🧠 Overview
-
-This is a complete, production‑ready AI agent system that:
-
-- 🔐 **Encrypts everything** – Fernet + AES‑GCM + quantum‑resistant fallback
-- 🌐 **Routes through Tor** – Anonymous darknet monitoring and OSINT
-- 🕵️ **Scans for threats & opportunities** – RSS feeds, Twitter/X, exploit databases
-- 💰 **Finds monetizable vulnerabilities** – Bug bounties, zero‑day leads, arbitrage signals
-- 🛡️ **Performs security audits** – Port scanning, web vuln detection, SSL checks
-- 📈 **Trades crypto** – Market data, trend analysis, arbitrage scanning
-- ⚽ **Predicts sports outcomes** – Poisson + xG + market movement + LLM reasoning
-- 🧠 **Self‑awareness & evolution** – Reads its own code, proposes upgrades, writes new code
-- 🤖 **Orchestrates autonomous workflows** – Agent coordination, scheduling, background tasks
-
----
-
-## 📦 Modules
-
-| Module | Description |
-|--------|-------------|
-| `ciph_core.py` | Main orchestrator, CLI, command handler |
-| `agent_orchestrator.py` | Multi‑workflow autonomous agent runner |
-| `cipher_vault.py` | Encrypted SQLite storage (AES‑256) |
-| `quantum_vault.py` | Quantum‑resistant encrypted storage |
-| `darknet_monitor.py` | Threat intel via Tor (RSS + onion sources) |
-| `osint_miner.py` | RSS + X monitoring, threat scoring, monetization |
-| `pentest_engine.py` | Port scanning, web vulns, SSL audit |
-| `bounty_hunter.py` | Automated bug bounty vulnerability detection |
-| `trading_engine.py` | Crypto market data, arbitrage, signals |
-| `sports_predictor.py` | 5‑layer football prediction engine |
-| `sports_performance.py` | Tracks win rate, ROI, email reports |
-| `self_awareness.py` | Self‑code analysis, upgrade proposals |
-| `task_scheduler.py` | Background jobs (OSINT, backups, cleanup) |
-| `tor_proxy.py` | SOCKS5 proxy + control port for Tor |
-| `dead_mans_switch.py` | Automatic data destruction on inactivity |
-| `module_manager.py` | Hot‑swappable dynamic module loader |
-| `response_formatter.py` | Clean, color‑coded terminal output |
-| `personality_engine.py` | Casual, direct response styling |
-| `mood_engine.py` | Detects user mood from text |
-| `smart_memory.py` | Context‑aware memory with pinned facts |
-| `brain_router.py` | Routes queries to Ollama (local) or OpenAI |
-| `enhanced_conversation.py` | Conversation manager with personality |
-| `ollama_interface.py` | Local LLM interface (Ollama) |
-| `file_analyzer.py` | Project scanning, file search, code analysis |
-| `config_manager.py` | JSON/YAML/env configuration |
-| `security_layer.py` | Footprint cleaning, integrity checks, emergency wipe |
-
----
-
-## 🚀 Quick Start
+## 🚀 Installation & running
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/your-repo-name.git
-cd your-repo-name
-```
+git clone https://github.com/pendragon360/scaling-lamp.git
 
-### 2. Install dependencies
+￼
+```![clone](images/gitclone.jpeg)
+
+### 2. Enter the directory
+
+```bash
+cd scaling_lamp
+```![cd](images/cd.jpeg)
+￼
+
+3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
-```
+```![requirements[(images/requirements.jpeg)
+￼
 
-### 3. (Optional) Install & start Tor for darknet features
-
-```bash
-sudo apt install tor
-sudo systemctl start tor
-```
-
-### 4. (Optional) Install Ollama for local LLM
+4. Run Ciph
 
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3.1:8b
-```
+python ciph_core.py
+```![Startup](images/ciph.jpeg)
+￼
+---
 
-### 5. Run the system
+📄 License
 
-```bash
-python run_ciph.py
-```
+MIT – free for educational and research use.
+The author assumes no liability for misuse of the security or darknet features.
 
 ---
 
-## 🎮 Basic Commands
+Built to be sovereign.
 
-Once inside the CLI:
-
-| Command | Description |
-|---------|-------------|
-| `/status` | Show system status (AI, security, modules) |
-| `/reality-check` | Show actual module status (no AI fantasy) |
-| `/load osint` | Load OSINT module |
-| `/darknet-scan` | Run darknet threat intel via Tor |
-| `/osint` | Run RSS + X threat scan |
-| `/bounty-scan <url>` | Scan website for vulnerabilities |
-| `/market-data` | Get live crypto prices |
-| `/arbitrage-scan` | Find price differences across exchanges |
-| `/predict Arsenal vs Chelsea` | Sports prediction (5‑layer) |
-| `/sports-mode on` | Start background sports prediction daemon |
-| `/self-analyze` | Have the system propose upgrades |
-| `/upgrades` | List pending upgrades |
-| `/apply-upgrade <id>` | Apply an approved upgrade |
-| `/ghost-mode` | Route all traffic through Tor |
-| `/emergency-wipe CONFIRM_WIPE_ALL` | Destroy all sensitive data |
-| `/help` | Show all commands |
-
----
-
-## ⚙️ Configuration
-
-Create a `.env` file or set environment variables:
-
-```bash
-OPENAI_API_KEY=your_key_here
-OPENAI_API_BASE=https://api.openai.com/v1
-AI_MODEL=gpt-4o-mini
-OLLAMA_API_URL=http://localhost:11434/api/chat
-TWITTER_BEARER_TOKEN=your_token_here   # optional
-ODDS_API_KEY=your_key_here              # optional
-```
-
-For persistent secrets, use the built‑in vault (`/setkey` command).
-
----
-
-## 🧪 Testing
-
-Each module can be tested individually:
-
-```bash
-python cipher_vault.py
-python darknet_monitor.py
-python trading_engine.py
-python sports_predictor.py
 ```
 
 ---
 
-## 📁 Directory Structure
-
-| Path | Purpose |
-|------|---------|
-| `secure_vault.db` | Encrypted conversation storage |
-| `vault.key` | Encryption key (keep secure) |
-| `sports_predictions/` | JSON files of predictions |
-| `sports_logs/` | LLM reasoning logs |
-| `system_proposals/` | Upgrade proposal files |
-| `system_version.json` | Version & evolution tracking |
-
 ---
 
-## ⚠️ Legal & Ethics
 
-- **Only scan systems you own or have explicit permission to test.**
-- **Darknet monitoring should be used for threat intelligence research only.**
-- **Trading signals are educational – not financial advice.**
-- **The emergency wipe is permanent – use with caution.**
-
-By using this software, you agree to comply with all applicable laws.
-
----
-
-## 🛠️ Requirements
-
-- Python 3.9+
-- Tor (for darknet features)
-- Ollama (optional, for local LLM)
-- OpenAI API key (optional, for cloud LLM)
-
-See `requirements.txt` for Python dependencies.
-
----
-
-## 📄 License
-
-MIT License – free for educational and research use.
-
----
-
-## 🙏 Acknowledgements
-
-Built with:
-- [PyMuPDF](https://pymupdf.readthedocs.io/) – PDF ingestion
-- [Feedparser](https://pythonhosted.org/feedparser/) – RSS parsing
-- [Stem](https://stem.torproject.org/) – Tor control
-- [Ollama](https://ollama.com/) – Local LLM
-- [Cryptography](https://cryptography.io/) – Fernet & HKDF
-
----
-
-**Built by an independent developer.**  
-*For questions or collaborations, open an issue on GitHub.*
-```
