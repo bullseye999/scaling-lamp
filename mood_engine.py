@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mood_engine.py - Detect user's energy and adapt response style
+# mood_engine.py - Ciph reads your energy and adapts
 
 import re
 import time
@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple
 
 class MoodEngine:
     """
-    Reads the user's energy from every message.
+    Ciph reads the Operator's energy from every message.
     Adjusts tone, pacing, and response depth accordingly.
     No forced positivity. Just real calibration.
     """
@@ -61,7 +61,7 @@ class MoodEngine:
         ],
     }
 
-    # How the AI adjusts per mood
+    # How Ciph adjusts per mood
     RESPONSE_STYLE = {
         'focused': {
             'tone': 'direct and technical',
@@ -123,10 +123,11 @@ class MoodEngine:
                 if signal in text_lower:
                     scores[mood] += 1
 
+        # Get highest scoring mood
         best_mood = max(scores, key=lambda m: scores[m])
         best_score = scores[best_mood]
 
-        # Additional structural signals
+        # Also check structural signals
         if self._is_short_command(text):
             best_mood = 'focused'
         elif self._is_venting(text):
@@ -141,18 +142,33 @@ class MoodEngine:
 
     def get_style_injection(self, mood: str = None) -> str:
         """
-        Returns a style instruction to inject into the system prompt.
+        Returns a style instruction to inject into Ciph's system prompt.
         Tells the AI how to respond given the detected mood.
         """
         mood = mood or self.current_mood
         style = self.RESPONSE_STYLE.get(mood, self.RESPONSE_STYLE['neutral'])
 
         return (
-            f"\nUSER'S CURRENT MOOD: {mood.upper()}\n"
+            f"\nOPERATOR'S CURRENT MOOD: {mood.upper()}\n"
             f"Adjust your response: {style['tone']}.\n"
             f"Response length: {style['length']}.\n"
             f"If you add an opener, something like: \"{style['opener_hint']}\"\n"
         )
+
+    def get_temperature(self, mood: str = None) -> float:
+        """Return a temperature setting based on detected mood."""
+        mood = mood or self.current_mood
+        mapping = {
+            'focused': 0.2,
+            'frustrated': 0.3,
+            'exploratory': 0.6,
+            'low': 0.4,
+            'hyped': 0.7,
+            'reflective': 0.8,
+            'strategic': 0.5,
+            'neutral': 0.4
+        }
+        return mapping.get(mood, 0.4)
 
     def get_mood_summary(self) -> Dict[str, Any]:
         """Summary of mood patterns this session"""
@@ -179,7 +195,7 @@ class MoodEngine:
     def flag_shift(self) -> str:
         """
         Detect if mood just changed significantly.
-        Returns a note for the AI to acknowledge naturally — or empty string.
+        Returns a note for Ciph to acknowledge naturally — or empty string.
         """
         if len(self.mood_history) < 2:
             return ""
@@ -187,6 +203,7 @@ class MoodEngine:
         prev = self.mood_history[-2]['mood']
         curr = self.mood_history[-1]['mood']
 
+        # Significant shifts worth acknowledging
         notable_shifts = {
             ('hyped', 'low'):         "energy dropped — check in.",
             ('low', 'hyped'):         "something switched — build on it.",

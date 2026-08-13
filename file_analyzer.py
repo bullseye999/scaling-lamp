@@ -236,12 +236,66 @@ class FileAnalyzer:
         
         return ""
     
+    def scan_for_secrets(self, filepath: str) -> List[Dict[str, Any]]:
+        """Scan file for sensitive keys or passwords"""
+        import re
+        secrets = []
+        patterns = {
+            'api_key': r'(api[_-]?key|apikey|api_key)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{16,64})[\'"]?',
+            'aws_key': r'(AKIA|ASIA)[A-Z0-9]{16}',
+            'private_key': r'-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----',
+            'password': r'(password|passwd|pwd)\s*[:=]\s*[\'"]?([^\'"\s]+)[\'"]?',
+        }
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            for secret_type, pattern in patterns.items():
+                matches = re.finditer(pattern, content, re.IGNORECASE)
+                for match in matches:
+                    secrets.append({
+                        'type': secret_type,
+                        'file': filepath,
+                        'line': content[:match.start()].count('\n') + 1,
+                        'matched': match.group(0)[:50],
+                        'severity': 'HIGH'
+                    })
+        except Exception:
+            pass
+        return secrets
+
+    def calculate_code_metrics(self, filepath: str) -> Dict[str, Any]:
+        """Calculate basic lines and complexity metrics"""
+        import re
+        metrics = {'lines': 0, 'functions': 0, 'classes': 0}
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            lines = content.split('\n')
+            metrics['lines'] = len(lines)
+            metrics['functions'] = len(re.findall(r'^\s*def\s+', content, re.MULTILINE))
+            metrics['classes'] = len(re.findall(r'^\s*class\s+', content, re.MULTILINE))
+        except Exception:
+            pass
+        return metrics
+
+    def git_status(self, repo_path: str = ".") -> Dict[str, Any]:
+        """Check git repository status"""
+        import subprocess
+        try:
+            res = subprocess.run(['git', 'status', '--porcelain'], cwd=repo_path, capture_output=True, text=True)
+            if res.returncode == 0:
+                changes = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                return {'is_git_repo': True, 'changes_count': len(changes), 'changes': changes[:10]}
+        except Exception:
+            pass
+        return {'is_git_repo': False}
+
     def _current_timestamp(self) -> str:
         """Get current timestamp string"""
         from datetime import datetime
         return datetime.now().isoformat()
 
-
+# Test the file analyzer
 if __name__ == "__main__":
     from cipher_vault import CipherVault
     vault = CipherVault()

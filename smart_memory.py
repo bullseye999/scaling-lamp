@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# smart_memory.py - Smart, context‑aware memory for the assistant
+# smart_memory.py - Ciph remembers and references naturally
 
 import json
 import time
@@ -9,8 +9,8 @@ from cipher_vault import CipherVault
 
 class SmartMemory:
     """
-    Remembers what matters.
-    Surfaces past context naturally in conversation – not like a database query,
+    Ciph remembers what matters.
+    Surfaces past context naturally in conversation — not like a database query,
     like a person who was actually paying attention.
     """
 
@@ -26,7 +26,7 @@ class SmartMemory:
     # ─────────────────────────────────────────────
 
     def _load_pinned_facts(self):
-        """Load pinned facts from vault."""
+        """Load pinned facts from vault"""
         raw = self.vault.get_config("pinned_facts")
         if raw:
             try:
@@ -37,25 +37,26 @@ class SmartMemory:
     def _save_pinned_facts(self):
         self.vault.set_config("pinned_facts", json.dumps(self.pinned_facts))
 
-    def pin(self, key: str, value: str):
-        """Pin a fact for long‑term recall."""
+    def pin(self, key: str, value: str, tags: list = None):
+        """Pin a fact for long-term recall with optional category tags"""
         self.pinned_facts[key.lower()] = {
             'value': value,
+            'tags': tags or ['general'],
             'pinned_at': datetime.now().isoformat()
         }
         self._save_pinned_facts()
 
     def recall(self, key: str) -> Optional[str]:
-        """Recall a pinned fact."""
+        """Recall a pinned fact"""
         entry = self.pinned_facts.get(key.lower())
         return entry['value'] if entry else None
 
     def list_pinned(self) -> Dict[str, str]:
-        """List all pinned facts."""
+        """List all pinned facts"""
         return {k: v['value'] for k, v in self.pinned_facts.items()}
 
     def forget(self, key: str) -> bool:
-        """Remove a pinned fact."""
+        """Remove a pinned fact"""
         if key.lower() in self.pinned_facts:
             del self.pinned_facts[key.lower()]
             self._save_pinned_facts()
@@ -66,13 +67,14 @@ class SmartMemory:
     # SESSION MEMORY
     # ─────────────────────────────────────────────
 
-    def add_to_session(self, role: str, content: str, mood: str = None):
-        """Add a message to current session memory."""
+    def add_to_session(self, role: str, content: str, mood: str = None, thread: str = 'main'):
+        """Add a message to current session memory with thread tracking"""
         entry = {
             'role': role,
             'content': content,
             'timestamp': time.time(),
-            'mood': mood
+            'mood': mood,
+            'thread': thread
         }
         self.session_memory.append(entry)
 
@@ -80,8 +82,14 @@ class SmartMemory:
         if len(self.session_memory) > 40:
             self.session_memory = self.session_memory[-40:]
 
+    def _calculate_recency(self, timestamp: float) -> float:
+        """Calculate exponential recency score (1.0 = current, decay half-life = 7 days)"""
+        age = time.time() - timestamp
+        half_life = 7 * 24 * 3600  # 7 days
+        return 2 ** (-age / half_life)
+
     def get_session_context(self, limit: int = 6) -> List[Dict[str, str]]:
-        """Get recent session for AI context window."""
+        """Get recent session for AI context window"""
         recent = self.session_memory[-limit * 2:]
         return [
             {'role': m['role'], 'content': m['content']}
@@ -103,9 +111,9 @@ class SmartMemory:
         relevant_pins = self._find_relevant_pins(user_input)
         if relevant_pins:
             facts = '. '.join([f"{k}: {v}" for k, v in relevant_pins.items()])
-            context_parts.append(f"Things known about the user: {facts}")
+            context_parts.append(f"Things u know about him: {facts}")
 
-        # 2. Check vault for relevant past conversations
+        # 2. Check vault for relevant past convos
         relevant_convos = self._search_relevant_convos(user_input, limit=2)
         if relevant_convos:
             refs = []
@@ -113,12 +121,12 @@ class SmartMemory:
                 age = self._time_ago(conv['timestamp'])
                 snippet = conv['prompt'][:60].strip()
                 refs.append(f'"{snippet}..." ({age})')
-            context_parts.append(f"The user mentioned this before: {'; '.join(refs)}")
+            context_parts.append(f"He mentioned this before: {'; '.join(refs)}")
 
         # 3. Check mood history
         last_mood = self._get_last_mood()
         if last_mood:
-            context_parts.append(f"The user's recent vibe: {last_mood}")
+            context_parts.append(f"His recent vibe: {last_mood}")
 
         if not context_parts:
             return ""
@@ -126,7 +134,7 @@ class SmartMemory:
         return "\n\nMEMORY CONTEXT:\n" + "\n".join(f"- {p}" for p in context_parts)
 
     def _find_relevant_pins(self, query: str, limit: int = 3) -> Dict[str, str]:
-        """Find pinned facts relevant to the query."""
+        """Find pinned facts relevant to the query"""
         query_words = set(query.lower().split())
         scored = []
 
@@ -137,11 +145,11 @@ class SmartMemory:
             if overlap > 0:
                 scored.append((overlap, key, entry['value']))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
+        scored.sort(key=lambda x: x[0],reverse=True)
         return {k: v for _, k, v in scored[:limit]}
 
     def _search_relevant_convos(self, query: str, limit: int = 2) -> List[Dict]:
-        """Pull relevant past conversations."""
+        """Pull relevant past conversations"""
         all_convos = self.vault.get_recent_conversations(limit=50)
         query_words = set(query.lower().split())
         scored = []
@@ -150,21 +158,21 @@ class SmartMemory:
             content = f"{conv['prompt']} {conv['response']}".lower()
             content_words = set(content.split())
             overlap = len(query_words & content_words)
-            if overlap >= 2:
+            if overlap >= 2:  # At least 2 word match
                 scored.append((overlap, conv))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [conv for _, conv in scored[:limit]]
 
     def _get_last_mood(self) -> Optional[str]:
-        """Get last detected mood from session."""
+        """Get last detected mood from session"""
         for entry in reversed(self.session_memory):
             if entry.get('mood'):
                 return entry['mood']
         return None
 
     def _time_ago(self, timestamp: float) -> str:
-        """Human‑readable time ago."""
+        """Human-readable time ago"""
         diff = time.time() - timestamp
         if diff < 3600:
             return f"{int(diff/60)}m ago"
@@ -180,9 +188,9 @@ class SmartMemory:
     # ─────────────────────────────────────────────
 
     def session_summary(self) -> str:
-        """Brief summary of current session."""
+        """Brief summary of current session"""
         if not self.session_memory:
-            return "no conversation yet this session."
+            return "no convo yet this session."
 
         turns = len([m for m in self.session_memory if m['role'] == 'user'])
         topics = set()

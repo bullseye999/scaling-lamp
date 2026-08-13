@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-# personality_engine.py - Response styling for casual, direct personality
+#/usr/bin/env python3
+# personality_engine.py - FIXED: Proper slang frequency, no bullet points, no random openers
 
 import re
 import random
 
-class AgentPersonality:
+class CiphPersonality:
     
     def __init__(self):
         self.openers = {
@@ -42,7 +42,7 @@ class AgentPersonality:
             "lock in.",
         ]
 
-        # Phrases the assistant should never say
+        # Things Ciph should NEVER say
         self.banned_phrases = [
             "certainly", "absolutely", "of course",
             "great question", "i'd be happy to",
@@ -51,9 +51,10 @@ class AgentPersonality:
             "in conclusion", "furthermore",
             "it's important to note", "i can help you with",
             "i'm just here to", "no hidden agendas",
+            "i'm just ciph", "i'm just an ai",
         ]
 
-        # Casual replacements — applied SPARINGLY, not globally
+        # Casual replacements — applied SPARINGLY not globally
         self.casual_map = {
             r'\byou\b': 'u',
             r'\bwith\b': 'w/',
@@ -70,18 +71,13 @@ class AgentPersonality:
         }
 
     def inject_personality(self, text: str) -> str:
-        """Main pipeline for styling response text."""
+        """Minimal personality injection to clean up boilerplate without altering content structure"""
         text = self._remove_banned_phrases(text)
-        text = self._remove_bullet_points(text)
-        text = self._break_long_sentences(text)
-        text = self._apply_casual_spelling(text)       # Selective, not global
-        text = self._maybe_add_opener(text)            # 25% chance, context-aware
-        text = self._maybe_add_closer(text)            # 15% chance
         text = self._fix_punctuation(text)
         return text.strip()
 
     def _remove_banned_phrases(self, text: str) -> str:
-        """Strip corporate AI speak."""
+        """Strip corporate AI speak"""
         for phrase in self.banned_phrases:
             pattern = re.compile(re.escape(phrase), re.IGNORECASE)
             text = pattern.sub('', text)
@@ -91,7 +87,7 @@ class AgentPersonality:
     def _remove_bullet_points(self, text: str) -> str:
         """
         Convert bullet/numbered lists to natural prose.
-        The assistant doesn't write lists – it talks.
+        Ciph doesn't write lists — he talks.
         """
         lines = text.split('\n')
         cleaned = []
@@ -130,7 +126,7 @@ class AgentPersonality:
         return ' '.join(cleaned)
 
     def _break_long_sentences(self, text: str) -> str:
-        """Break walls of text into punchy lines."""
+        """Break walls of text into punchy lines"""
         sentences = re.split(r'(?<=[.!?])\s+', text)
         result = []
 
@@ -156,6 +152,7 @@ class AgentPersonality:
         """
         Apply casual spelling VERY selectively.
         Max 2-3 replacements per response, not every word.
+        'amigo' only once max per response.
         """
         replacement_count = 0
         max_replacements = 3
@@ -187,8 +184,8 @@ class AgentPersonality:
 
     def _maybe_add_opener(self, text: str) -> str:
         """
-        25% chance to add an opener.
-        Never add 'option one' unless there are actually options.
+        25% chance to add opener.
+        NEVER add 'option one' unless there are actually options.
         """
         if random.random() < 0.25:
             # Only use strategic opener if text actually contains options
@@ -204,7 +201,7 @@ class AgentPersonality:
         return text
 
     def _maybe_add_closer(self, text: str) -> str:
-        """15% chance to add a natural closer."""
+        """15% chance to add a natural closer"""
         if random.random() < 0.15:
             closer = random.choice(self.closers)
             if not text.rstrip().endswith(('.', '?', '!')):
@@ -213,7 +210,7 @@ class AgentPersonality:
         return text
 
     def _fix_punctuation(self, text: str) -> str:
-        """Clean up punctuation artifacts."""
+        """Clean up punctuation artifacts"""
         # Remove double punctuation
         text = re.sub(r'\.{2,}', '...', text)
         text = re.sub(r'\?{2,}', '?', text)
@@ -225,14 +222,14 @@ class AgentPersonality:
         return text
 
     def generate_from_scratch(self, intent: str, context: dict = None) -> str:
-        """Generate a response from scratch for specific intents."""
+        """Generate response from scratch for specific intents"""
         if context is None:
             context = {}
 
         templates = {
             'greeting': [
                 "yo. what's the move?",
-                "system online. talk to me.",
+                "ciph online. talk to me.",
                 "aight. we up. what u need?",
                 "system live. what's good?",
             ],

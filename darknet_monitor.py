@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# darknet_monitor.py - Darknet intelligence via Tor (generic version)
+# darknet_monitor.py - Real darknet intelligence via Tor
 
 import requests
 import time
@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from cipher_vault import CipherVault
 
-# Tor SOCKS5 proxy config (default Tor installation)
+# Tor SOCKS5 proxy config
 TOR_PROXY = {
     "http":  "socks5h://127.0.0.1:9050",
     "https": "socks5h://127.0.0.1:9050"
@@ -19,11 +19,33 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
 }
 
+
+
+class TTLCache:
+    def __init__(self, ttl_seconds: int = 3600):
+        self.cache = {}
+        self.ttl = ttl_seconds
+
+    def get(self, key: str) -> Optional[Any]:
+        entry = self.cache.get(key)
+        if entry:
+            if time.time() - entry['timestamp'] < self.ttl:
+                return entry['value']
+            else:
+                del self.cache[key]
+        return None
+
+    def set(self, key: str, value: Any):
+        self.cache[key] = {
+            'value': value,
+            'timestamp': time.time()
+        }
+
 class DarknetMonitor:
     """
-    Darknet intelligence through Tor.
+    Real darknet intelligence through Tor.
     Monitors threat intel, bug bounty leads, credential leaks, market trends.
-    All requests are routed through Tor for anonymity.
+    Everything routed through Tor — no clearnet exposure.
     """
 
     def __init__(self, vault: CipherVault):
@@ -33,7 +55,7 @@ class DarknetMonitor:
         self.alerts       = []
 
         # ── THREAT INTEL SOURCES (clearnet via Tor) ──
-        # Public security feeds accessed anonymously through Tor
+        # These are public security feeds accessed anonymously through Tor
         self.threat_feeds = [
             'https://www.exploit-db.com/rss.xml',
             'https://www.cisa.gov/uscert/ncas/current-activity.xml',
@@ -42,7 +64,7 @@ class DarknetMonitor:
             'https://krebsonsecurity.com/feed/',
         ]
 
-        # ── ONION SOURCES — active darknet intel aggregators ──
+        # ── ONION SITES — real working darknet intel sources ──
         self.onion_sources = {
             'threat_intel': [
                 # Dark.fail mirror index — lists active onion services
@@ -64,7 +86,7 @@ class DarknetMonitor:
         }
 
         # ── CREDENTIAL LEAK PATTERNS ──
-        # Only checks for the user's own identifiers — never used to look up others
+        # Only checks for the Operator's own identifiers — never used to look up others
         self.monitored_identifiers: List[str] = []  # Add with add_identifier()
 
     # ─────────────────────────────────────────────
@@ -126,6 +148,7 @@ class DarknetMonitor:
 
         for feed_url in self.threat_feeds:
             try:
+                # Parse feed through Tor
                 resp = self._tor_get(feed_url)
                 if not resp:
                     continue
@@ -157,6 +180,7 @@ class DarknetMonitor:
                 print(f"  ✗ Feed error: {str(e)[:50]}")
                 continue
 
+        # Sort by score
         findings.sort(key=lambda x: x['score'], reverse=True)
         return findings[:15]
 
@@ -267,6 +291,7 @@ class DarknetMonitor:
         """
         print("🔐 Checking credential leaks via Tor...")
 
+        # Load monitored identifiers
         stored = self.vault.get_config('monitored_identifiers')
         if stored:
             self.monitored_identifiers = json.loads(stored)
@@ -278,9 +303,9 @@ class DarknetMonitor:
 
         for identifier in self.monitored_identifiers:
             try:
+                # HIBP API — anonymous check through Tor
                 url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{identifier}"
-                hibp_key = self.vault.get_config("HIBP_API_KEY") or ''
-                headers = {**HEADERS, 'hibp-api-key': hibp_key}
+                headers = {**HEADERS, 'hibp-api-key': self.vault.get_config('HIBP_REMOVED') or ''}
 
                 resp = self._tor_get(url, timeout=15)
 
@@ -341,6 +366,7 @@ class DarknetMonitor:
         if resp and resp.status_code == 200:
             content = resp.text.lower()
 
+            # Extract service names mentioned
             service_patterns = [
                 'market', 'forum', 'exchange', 'wallet',
                 'escrow', 'mixer', 'tumbler'
@@ -354,6 +380,7 @@ class DarknetMonitor:
                         'mentions': count
                     })
 
+        # Store results
         self._store_alert(
             'MARKET_SCAN',
             f"Market scan complete. Signals: {len(trends['market_signals'])}",
@@ -371,9 +398,10 @@ class DarknetMonitor:
         Run all four monitoring modules in sequence.
         This is what /darknet-scan calls.
         """
-        print("\n🌑 DARKNET SCAN INITIATED")
+        print("\n🌑 CIPH DARKNET SCAN INITIATED")
         print("=" * 50)
 
+        # Verify Tor first
         tor_status = self.verify_tor()
         if not tor_status['tor_active']:
             return {
@@ -394,23 +422,29 @@ class DarknetMonitor:
             'critical_count': 0,
         }
 
+        # 1. Threat intel
         results['threat_intel'] = self.scan_threat_intel()
         print(f"✓ Threat intel: {len(results['threat_intel'])} findings\n")
 
+        # 2. Bug bounty leads
         results['bounty_leads'] = self.scan_bounty_leads()
         print(f"✓ Bounty leads: {len(results['bounty_leads'])} leads\n")
 
+        # 3. Credential leaks
         results['credential'] = self.check_credential_leaks()
         print(f"✓ Credential check: complete\n")
 
+        # 4. Market trends
         results['market_trends'] = self.scan_market_trends()
         print(f"✓ Market trends: {len(results['market_trends'].get('market_signals', []))} signals\n")
 
+        # Tally
         results['total_alerts']   = len(results['threat_intel']) + len(results['bounty_leads'])
         results['critical_count'] = sum(
             1 for t in results['threat_intel'] if t.get('category') == 'critical'
         )
 
+        # Store summary in vault
         self.vault.store_conversation(
             "DARKNET_SCAN",
             f"Threats: {len(results['threat_intel'])} | Bounty: {len(results['bounty_leads'])} | Critical: {results['critical_count']}",
@@ -425,7 +459,7 @@ class DarknetMonitor:
         return results
 
     def get_scan_summary(self, results: Dict[str, Any]) -> str:
-        """Generate a readable summary to report back"""
+        """Generate a readable summary for Ciph to report back"""
         if 'error' in results:
             return f"Scan failed: {results['error']}"
 
@@ -434,11 +468,13 @@ class DarknetMonitor:
             f"Threat intel: {len(results.get('threat_intel', []))} findings.",
         ]
 
+        # Top critical threat
         threats = results.get('threat_intel', [])
         if threats:
             top = threats[0]
             lines.append(f"Top signal: {top['title'][:80]} ({top['category'].upper()}, score {top['score']}).")
 
+        # Bounty leads
         bounty = results.get('bounty_leads', [])
         if bounty:
             lines.append(f"Bug bounty leads: {len(bounty)} found.")
@@ -446,6 +482,7 @@ class DarknetMonitor:
             if cves:
                 lines.append(f"CVEs detected: {', '.join(cves[:3])}.")
 
+        # Credential status
         creds = results.get('credential', [])
         breached = [c for c in creds if c.get('breached')]
         if breached:
@@ -458,6 +495,34 @@ class DarknetMonitor:
     # ─────────────────────────────────────────────
     # HELPERS
     # ─────────────────────────────────────────────
+
+    def _evaluate_alert_severity(self, alert: Dict) -> str:
+        """Evaluate alert severity with multiple weighted factors"""
+        severity = 0
+        risk_weights = {'CRITICAL': 10, 'HIGH': 7, 'MEDIUM': 4, 'LOW': 2}
+        severity += risk_weights.get(alert.get('risk', 'LOW'), 2)
+        if alert.get('via') == 'tor':
+            severity += 2
+        if severity >= 10:
+            return 'CRITICAL'
+        elif severity >= 7:
+            return 'HIGH'
+        elif severity >= 4:
+            return 'MEDIUM'
+        return 'LOW'
+
+    def get_trend_analysis(self) -> Dict[str, Any]:
+        """Analyze historical darknet alert trends"""
+        total = len(self.alerts)
+        by_risk = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        for a in self.alerts:
+            r = a.get('risk', 'LOW')
+            by_risk[r] = by_risk.get(r, 0) + 1
+        return {
+            'total_alerts': total,
+            'by_risk': by_risk,
+            'trend': 'STABLE' if total < 20 else 'ACTIVE'
+        }
 
     def _store_alert(self, alert_type: str, message: str, risk: str):
         """Store alert in vault"""
@@ -484,6 +549,9 @@ class DarknetMonitor:
         }
 
 
+# ─────────────────────────────────────────────
+# TEST
+# ─────────────────────────────────────────────
 if __name__ == "__main__":
     from cipher_vault import CipherVault
     vault   = CipherVault()

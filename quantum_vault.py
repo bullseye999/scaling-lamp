@@ -7,7 +7,7 @@ import time
 from typing import Optional, List, Dict, Any
 import json
 
-# Post-quantum cryptography library (optional)
+# Post-quantum cryptography library
 try:
     import pqcrypto
     QUANTUM_READY = True
@@ -232,7 +232,7 @@ class QuantumVault:
             'key_derivation': 'multiple_hash_hkdf'
         }
 
-
+# Test the quantum vault
 if __name__ == "__main__":
     vault = QuantumVault()
     
