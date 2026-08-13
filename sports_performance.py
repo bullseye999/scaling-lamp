@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# sports_performance.py - Sports prediction performance tracker
+# sports_performance.py - Ciph Sports Performance Tracker
 # Tracks prediction accuracy, ROI, layer performance
 # Sends reports via email daily and after every 10 predictions
 
@@ -14,12 +14,12 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, Any, List, Optional
 from cipher_vault import CipherVault
 
-PREDICTIONS_DIR = "sports_predictions"
+PREDICTIONS_DIR = "ciph_predictions"
 
 
 class SportsPerformance:
     """
-    Sports prediction performance tracker.
+    Ciph's sports prediction performance tracker.
     
     Tracks:
     - Win rate per outcome type
@@ -83,6 +83,13 @@ class SportsPerformance:
         win_rate   = round((correct / total) * 100, 1) if total > 0 else 0
 
         # Per outcome accuracy
+        for outcome in ['HOME WIN', 'DRAW', 'AWAY WIN']:
+            predicted_as = [p for p in resolved
+                           if p.get('final', {}).get('final_outcome') == outcome]
+            correct_out  = [p for p in predicted_as
+                           if p.get('actual_result') == outcome]
+            pct = round((len(correct_out) / len(predicted_as)) * 100, 1) if predicted_as else 0
+
         outcome_accuracy = {}
         for outcome in ['HOME WIN', 'DRAW', 'AWAY WIN']:
             predicted_as = [p for p in resolved
@@ -97,7 +104,7 @@ class SportsPerformance:
 
         # Layer accuracy
         layer_stats = {}
-        for layer in ['math', 'market', 'system']:
+        for layer in ['math', 'market', 'ciph']:
             layer_correct = 0
             layer_total   = 0
             for p in resolved:
@@ -153,7 +160,7 @@ class SportsPerformance:
         med_rate  = round((med_correct  / len(med_conv))  * 100, 1) if med_conv  else 0
 
         # Current weights
-        weights_raw = self.vault.get_config('sports_weights')
+        weights_raw = vault_get(self.vault, 'sports_weights')
         weights     = json.loads(weights_raw) if weights_raw else {}
 
         return {
@@ -192,11 +199,11 @@ class SportsPerformance:
     # ─────────────────────────────────────────────
 
     def format_report(self, stats: Dict[str, Any]) -> str:
-        """Format stats into a clean readable report."""
+        """Format stats into a clean readable report"""
         now = datetime.now().strftime('%d %b %Y %H:%M')
 
         if stats.get('message') and stats['total_predictions'] == 0:
-            return f"SYSTEM SPORTS REPORT — {now}\nNo predictions made yet."
+            return f"CIPH SPORTS REPORT — {now}\nNo predictions made yet."
 
         # Layer comparison
         layer_lines = ""
@@ -219,7 +226,7 @@ class SportsPerformance:
 
         report = f"""
 ╔══════════════════════════════════════════╗
-║     SYSTEM SPORTS INTELLIGENCE REPORT    ║
+║     CIPH SPORTS INTELLIGENCE REPORT      ║
 ║     {now:^36} ║
 ╚══════════════════════════════════════════╝
 
@@ -251,7 +258,7 @@ class SportsPerformance:
   {weight_line}
 
 —
-🔒 Sports Intelligence Engine
+🔒 Ciph Intelligence Engine
         """.strip()
 
         return report
@@ -261,14 +268,14 @@ class SportsPerformance:
     # ─────────────────────────────────────────────
 
     def send_report(self, trigger: str = 'manual') -> str:
-        """Send performance report via email."""
+        """Send performance report via email"""
         if not self.email_from or not self.email_password or not self.email_to:
             return "Email not configured. Use /setup-email to configure."
 
         stats  = self.calculate_stats()
         report = self.format_report(stats)
 
-        subject = f"Sports Report — {datetime.now().strftime('%d %b %Y')} [{trigger}]"
+        subject = f"Ciph Sports Report — {datetime.now().strftime('%d %b %Y')} [{trigger}]"
 
         try:
             msg                    = MIMEMultipart('alternative')
@@ -280,6 +287,7 @@ class SportsPerformance:
             text_part = MIMEText(report, 'plain')
 
             # HTML version — cleaner in email
+            html_report = report.replace('\n', '<br>').replace(' ', '&nbsp;')
             html_body   = f"""
 <html><body>
 <div style="font-family: monospace; background: #0a0a0a; color: #00ff88; padding: 20px; border-radius: 8px;">
@@ -296,6 +304,7 @@ class SportsPerformance:
                 server.login(self.email_from, self.email_password)
                 server.sendmail(self.email_from, self.email_to, msg.as_string())
 
+            # Log send
             self.vault.set_config('last_report_sent', datetime.now().isoformat())
 
             return f"Report sent to {self.email_to}. Win rate: {stats['win_rate']}%"
@@ -304,7 +313,7 @@ class SportsPerformance:
             return f"Email failed: {str(e)[:80]}"
 
     def check_10_prediction_trigger(self) -> bool:
-        """Check if we've hit 10 new predictions since last email."""
+        """Check if we've hit 10 new predictions since last email"""
         last_count_raw = self.vault.get_config('last_report_count')
         last_count     = int(last_count_raw) if last_count_raw else 0
 
@@ -337,14 +346,14 @@ class SportsPerformance:
         self.daily_thread = threading.Thread(
             target=self._daily_loop,
             daemon=True,
-            name='DailyReportThread'
+            name='CiphDailyReport'
         )
         self.daily_thread.start()
 
         return f"Daily reports scheduled at {hour:02d}:00 every day → {self.email_to}"
 
     def _daily_loop(self):
-        """Background loop – sends daily report at configured hour."""
+        """Background loop — sends daily report at configured hour"""
         while self.daily_running:
             now = datetime.now()
             if now.hour == self.daily_hour and now.minute == 0:
@@ -393,9 +402,16 @@ class SportsPerformance:
         }
 
     def terminal_report(self) -> str:
-        """Show report in terminal without emailing."""
+        """Show report in terminal without emailing"""
         stats = self.calculate_stats()
         return self.format_report(stats)
+
+
+def vault_get(vault, key):
+    try:
+        return vault.get_config(key)
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":

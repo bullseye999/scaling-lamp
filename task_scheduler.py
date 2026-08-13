@@ -37,7 +37,7 @@ class TaskScheduler:
                 import json
                 self.default_schedule = json.loads(schedule_data)
             except Exception:
-                pass
+                pass  # Use defaults if loading fails
     
     def _save_schedule(self):
         """Save schedule to vault"""
@@ -84,8 +84,8 @@ class TaskScheduler:
                 self._run_memory_cleanup
             )
 
-        # Autonomous OSINT cycle every 4 hours
-        schedule.every(4).hours.do(self._run_autonomous_osint)
+        # In task_scheduler.py, add to _schedule_default_tasks:
+            schedule.every(4).hours.do(self._run_autonomous_osint)
         
         # Backup vault every 12 hours
         if self.default_schedule['backup_vault']['enabled']:
@@ -99,11 +99,11 @@ class TaskScheduler:
             osint_module = self.module_manager.get_module('osint')
             if osint_module:
                 results = osint_module.monitor_all_feeds()
-                alert_count = len(results.get('alerts', []))
+                alert_count = len(results['alerts'])
                 # Store scan result
                 self.vault.store_conversation(
                     "🕵️ AUTO-OSINT SCAN",
-                    f"Time: {datetime.now()}\nItems: {sum(len(items) for items in results.get('results', {}).values())}\nAlerts: {alert_count}",
+                    f"Time: {datetime.now()}\nItems: {sum(len(items) for items in results['results'].values())}\nAlerts: {alert_count}",
                     context_tag="auto_task"
                 )
                 print(f"‖ AUTO-OSINT: {alert_count} alerts found ‖")
@@ -136,8 +136,8 @@ class TaskScheduler:
             import shutil
             import os
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_file = f"system_backup_{timestamp}.db"
-            shutil.copy2("secure_vault.db", backup_file)
+            backup_file = f"ciph_backup_{timestamp}.db"
+            shutil.copy2("ciph_vault.db", backup_file)
             
             self.vault.store_conversation(
                 "💾 AUTO-BACKUP",
@@ -172,13 +172,13 @@ class TaskScheduler:
                 # Store summary
                 self.vault.store_conversation(
                     "AUTO_OSINT_CYCLE",
-                    f"Threats analyzed: {result.get('threats_analyzed', 0)}\n"
-                    f"Critical alerts: {result.get('critical_alerts', 0)}\n"
+                    f"Threats analyzed: {result['threats_analyzed']}\n"
+                    f"Critical alerts: {result['critical_alerts']}\n"
                     f"Money ops found: {len(opportunities)}",
                     context_tag="auto_osint"
                 )
             
-                print(f"🤖 AUTO-OSINT: {result.get('threats_analyzed', 0)} threats, {len(opportunities)} money ops")
+                print(f"🤖 AUTO-OSINT: {result['threats_analyzed']} threats, {len(opportunities)} money ops")
         except Exception as e:
             print(f"‖ AUTO-OSINT Error: {e} ‖")
     
@@ -208,7 +208,7 @@ class TaskScheduler:
             return f"‖ Schedule updated for {task_name} ‖"
         return f"‖ Unknown task: {task_name} ‖"
 
-
+# Test the task scheduler
 if __name__ == "__main__":
     from cipher_vault import CipherVault
     from module_manager import ModuleManager

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# config_manager.py - Professional configuration system (generic version)
+# config_manager.py - Professional configuration system
 
 import os
 import json
@@ -8,11 +8,11 @@ from typing import Dict, Any, Optional
 
 class ConfigManager:
     """
-    Professional configuration management for the system.
-    Supports JSON, YAML, and environment variables.
+    Professional configuration management for Ciph
+    Supports JSON, YAML, environment variables
     """
     
-    def __init__(self, vault, config_path: str = "system_config.yaml"):
+    def __init__(self, vault, config_path: str = "ciph_config.yaml"):
         self.vault = vault
         self.config_path = config_path
         self.default_config = {
@@ -39,6 +39,7 @@ class ConfigManager:
     
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from file or create default"""
+        # Try YAML first
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, 'r') as f:
@@ -49,10 +50,12 @@ class ConfigManager:
             except Exception:
                 pass
         
+        # Try environment variables
         env_config = self._load_from_env()
         if env_config:
             return {**self.default_config, **env_config}
         
+        # Return default and create config file
         self._save_config(self.default_config)
         return self.default_config
     
@@ -60,11 +63,17 @@ class ConfigManager:
         """Load configuration from environment variables"""
         env_config = {}
         
-        # Map environment variables to config structure (generic prefix)
+        # Map environment variables to config structure
         env_mappings = {
-            'APP_ENVIRONMENT': ['environment'],
-            'APP_AI_MODEL': ['ai', 'model'],
-            'APP_AUTO_BACKUP_HOURS': ['security', 'auto_backup_hours']
+            'CIPH_ENVIRONMENT': ['environment'],
+            'CIPH_AI_MODEL': ['ai', 'model'],
+            'CIPH_AI_TEMPERATURE': ['ai', 'temperature'],
+            'CIPH_AI_MAX_TOKENS': ['ai', 'max_tokens'],
+            'CIPH_AUTO_BACKUP_HOURS': ['security', 'auto_backup_hours'],
+            'CIPH_AUTO_WIPE_HOURS': ['security', 'auto_wipe_timeout_hours'],
+            'CIPH_RUNPOD_API_KEY': ['runpod', 'api_key'],
+            'CIPH_TOR_ENABLED': ['tor', 'enabled'],
+            'CIPH_LOG_LEVEL': ['logging', 'level'],
         }
         
         for env_var, config_path in env_mappings.items():
@@ -105,9 +114,30 @@ class ConfigManager:
                 return default
         
         return current
-    
+
+    def get_version(self) -> str:
+        """Get config version"""
+        return self.get('version', '1.0.0')
+
+    def get_change_log(self) -> list:
+        """Get configuration change history"""
+        return self.get('change_log', [])
+
+    def log_change(self, key: str, old_value: Any, new_value: Any):
+        """Log configuration change"""
+        from datetime import datetime
+        log = self.get_change_log()
+        log.append({
+            'key': key,
+            'old': old_value,
+            'new': new_value,
+            'timestamp': datetime.now().isoformat()
+        })
+        self.set('change_log', log[-100:])
+
     def set(self, key_path: str, value: Any):
         """Set configuration value by dot notation"""
+        old_val = self.get(key_path)
         keys = key_path.split('.')
         current = self.current_config
         
@@ -119,12 +149,15 @@ class ConfigManager:
         current[keys[-1]] = value
         self._save_config(self.current_config)
         
+        if key_path != 'change_log':
+            self.log_change(key_path, old_val, value)
+
         # Also store in vault for critical settings
         if key_path.startswith('ai.') or key_path.startswith('security.'):
             self.vault.set_config(f"config_{key_path}", str(value))
     
     def get_environment_config(self) -> Dict[str, Any]:
-        """Get environment‑specific configuration"""
+        """Get environment-specific configuration"""
         environment = self.get('environment', 'development')
         
         env_configs = {
@@ -153,7 +186,7 @@ class ConfigManager:
         
         # Check required AI settings if AI is enabled
         if self.get('modules.ai.enabled', True):
-            api_key = self.vault.get_config("AI_API_KEY")
+            api_key = self.vault.get_config("ANTHROPIC_REMOVED")
             if not api_key:
                 issues.append("AI API key not configured")
         
@@ -169,7 +202,7 @@ class ConfigManager:
             'version': self.get('version')
         }
 
-
+# Test the config manager
 if __name__ == "__main__":
     from cipher_vault import CipherVault
     vault = CipherVault()

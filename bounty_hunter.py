@@ -2,15 +2,19 @@
 # bounty_hunter.py - Automated Bug Bounty & Vulnerability Scanner
 
 import requests
+import subprocess
 import time
+import json
+import socket
+import re
+from functools import wraps
 from typing import List, Dict, Any
 from cipher_vault import CipherVault
 
 class BountyHunter:
     """
-    Automated bug bounty hunting and vulnerability reporting.
-    Scans targets, finds vulnerabilities, generates reports.
-    Use only on systems you own or have explicit permission to test.
+    Automated bug bounty hunting and vulnerability reporting
+    Scans targets, finds vulnerabilities, generates reports
     """
     
     def __init__(self, vault: CipherVault):
@@ -35,6 +39,7 @@ class BountyHunter:
         # Test for common web vulnerabilities
         vuln_checks = [
             self._test_sql_injection(url),
+            self._test_blind_sqli(url),
             self._test_xss(url),
             self._test_lfi(url),
             self._test_ssrf(url)
@@ -44,11 +49,16 @@ class BountyHunter:
             if check.get('found'):
                 vulnerabilities.append(check)
         
+        waf = self._detect_waf(url)
+        tech = self.fingerprint_technology(url)
+
         # Store results
         result = {
             'target': url,
             'vulnerabilities_found': len(vulnerabilities),
             'vulnerabilities': vulnerabilities,
+            'waf_detected': waf,
+            'technologies': tech,
             'scan_time': time.time(),
             'risk_level': 'HIGH' if vulnerabilities else 'LOW'
         }
@@ -135,7 +145,7 @@ class BountyHunter:
                 test_url = f"{url}?url={payload}"
                 response = requests.get(test_url, timeout=5)
                 
-                # Check for internal service responses (non-404 indicates potential SSRF)
+                # Check for internal service responses
                 if response.status_code != 404:
                     return {
                         'type': 'SSRF',
@@ -147,6 +157,76 @@ class BountyHunter:
                 continue
         
         return {'type': 'SSRF', 'found': False}
+    
+    def _detect_waf(self, url: str) -> Optional[str]:
+        """Detect WAF signatures in target headers"""
+        waf_signatures = {
+            'cloudflare': ['cf-ray', 'cloudflare'],
+            'aws_waf': ['x-amzn-requestid'],
+            'sucuri': ['sucuri-id'],
+            'wordfence': ['wf-'],
+        }
+        try:
+            resp = requests.get(url, timeout=5)
+            headers_str = str(resp.headers).lower()
+            for waf_name, signatures in waf_signatures.items():
+                for sig in signatures:
+                    if sig in headers_str:
+                        return waf_name
+        except Exception:
+            pass
+        return None
+
+    def fingerprint_technology(self, url: str) -> Dict[str, Any]:
+        """Identify server technology and web frameworks"""
+        tech = {}
+        try:
+            resp = requests.get(url, timeout=5)
+            headers = resp.headers
+            content = resp.text
+            if 'server' in headers:
+                tech['server'] = headers['server']
+            if 'x-powered-by' in headers:
+                tech['framework'] = headers['x-powered-by']
+            if 'wp-content' in content:
+                tech['cms'] = 'WordPress'
+            elif 'Drupal' in content:
+                tech['cms'] = 'Drupal'
+        except Exception:
+            pass
+        return tech
+
+    def _test_blind_sqli(self, url: str) -> Dict[str, Any]:
+        """Test for time-based blind SQL injection"""
+        payloads = ["' AND SLEEP(3)--", "' OR SLEEP(3)--"]
+        for payload in payloads:
+            try:
+                start = time.time()
+                requests.get(f"{url}?id={payload}", timeout=8)
+                elapsed = time.time() - start
+                if elapsed > 3:
+                    return {
+                        'type': 'BLIND_SQLI',
+                        'found': True,
+                        'payload': payload,
+                        'confidence': 'HIGH'
+                    }
+            except Exception:
+                pass
+        return {'type': 'BLIND_SQLI', 'found': False}
+
+    def enumerate_subdomains(self, domain: str) -> List[str]:
+        """Enumerate subdomains using DNS resolution"""
+        wordlist = ['www', 'mail', 'ftp', 'admin', 'api', 'dev', 'test', 'staging', 'portal', 'm']
+        found = []
+        for sub in wordlist:
+            host = f"{sub}.{domain}"
+            try:
+                socket.gethostbyname(host)
+                found.append(host)
+            except Exception:
+                pass
+        return found
     
     def generate_bounty_report(self, target: str) -> str:
         """Generate professional bug bounty report"""
@@ -164,7 +244,7 @@ class BountyHunter:
 """
         
         for vuln in scan_results['vulnerabilities']:
-            report += f"• {vuln['type']}: {vuln.get('payload', 'N/A')} (Confidence: {vuln.get('confidence', 'LOW')})\n"
+            report += f"• {vuln['type']}: {vuln['payload']} (Confidence: {vuln['confidence']})\n"
         
         report += f"""
 💡 RECOMMENDATIONS:
@@ -182,11 +262,17 @@ class BountyHunter:
         return report
     
     def monitor_bounty_programs(self) -> List[Dict[str, Any]]:
-        """Monitor popular bug bounty programs for new targets (placeholder)"""
+        """Monitor popular bug bounty programs for new targets"""
         print("🎯 Monitoring bug bounty programs...")
         
         # Popular bug bounty platforms (free programs)
-        # In a real implementation, you would scrape or use APIs.
+        bounty_programs = [
+            {'name': 'HackerOne', 'url': 'https://hackerone.com/bug-bounty-programs'},
+            {'name': 'Bugcrowd', 'url': 'https://bugcrowd.com/programs'},
+            {'name': 'OpenBugBounty', 'url': 'https://www.openbugbounty.org/'}
+        ]
+        
+        # Simulate finding active programs (in real implementation, would scrape these)
         active_programs = [
             {
                 'platform': 'HackerOne',
@@ -232,15 +318,14 @@ class BountyHunter:
             'detailed_results': results
         }
 
-
+# Test the bounty hunter
 if __name__ == "__main__":
-    from cipher_vault import CipherVault
     vault = CipherVault()
     hunter = BountyHunter(vault)
     
     print("🧪 TESTING BOUNTY HUNTER...")
     
-    # Public test site (Acunetix intentionally vulnerable)
+    # Test website scanning
     test_url = "http://testphp.vulnweb.com"
     scan_results = hunter.scan_website(test_url)
     print(f"🔍 Scan results: {scan_results['vulnerabilities_found']} vulnerabilities found")

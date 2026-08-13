@@ -1,18 +1,17 @@
-#!/usr/bin/env python3
-# book_engine.py - Ingest, search, and reason from books (PDF / text)
-
 import os
 import json
 import hashlib
 from datetime import datetime
+from difflib import get_close_matches
 from typing import Dict, Any, List, Optional
 from cipher_vault import CipherVault
 
 class BookEngine:
     """
-    Personal knowledge base from books.
+    Ciph's personal library.
     Reads PDFs, chunks them intelligently, stores them searchable.
-    The assistant can query any book by topic, chapter, or situation.
+    Ciph can query any book by topic, chapter, or situation.
+    All knowledge serves the Operator.
     """
 
     CHUNK_SIZE = 800       # words per chunk
@@ -22,7 +21,7 @@ class BookEngine:
     def __init__(self, vault: CipherVault):
         self.vault     = vault
         self.library   = {}   # title -> metadata
-        self.books_dir = "system_books"   # renamed from ciph_books
+        self.books_dir = "ciph_books"
         os.makedirs(self.books_dir, exist_ok=True)
         self._load_library_index()
 
@@ -32,7 +31,7 @@ class BookEngine:
 
     def ingest_pdf(self, filepath: str, title: str = None, author: str = None, category: str = 'general') -> str:
         """
-        Read a PDF and store it in the knowledge base.
+        Read a PDF and store it in Ciph's knowledge base.
         Chunks intelligently, stores in vault, indexes for search.
         """
         if not os.path.exists(filepath):
@@ -50,29 +49,30 @@ class BookEngine:
             title = title or os.path.basename(filepath).replace('.pdf', '').replace('_', ' ').title()
             author = author or 'Unknown'
 
-            # Extract full text
-            full_text = ""
+            # Extract full text cleanly with list append + join (O(N))
+            text_parts = []
             for page_num, page in enumerate(doc):
                 text = page.get_text()
                 if text.strip():
-                    full_text += f"\n[Page {page_num + 1}]\n{text}"
+                    text_parts.append(f"\n[Page {page_num + 1}]\n{text}")
 
+            full_text = "".join(text_parts)
             doc.close()
 
             if not full_text.strip():
                 return f"No text extracted from {filepath}. May be a scanned image PDF."
 
-            # Generate book ID
-            book_id = hashlib.md5(title.encode()).hexdigest()[:8]
+            # Generate SHA256 book ID
+            book_id = hashlib.sha256(title.encode()).hexdigest()[:8]
 
             # Chunk the text
             chunks = self._chunk_text(full_text)
             print(f"  {len(chunks)} chunks created from {len(full_text)} characters")
 
-            # Store each chunk in vault
+            # Store each chunk in vault (6-digit format supports up to 1,000,000 chunks)
             stored = 0
             for i, chunk in enumerate(chunks):
-                key = f"book_{book_id}_chunk_{i:04d}"
+                key = f"book_{book_id}_chunk_{i:06d}"
                 entry = {
                     'book_id':   book_id,
                     'title':     title,
@@ -103,7 +103,7 @@ class BookEngine:
                 f"Book ingested: {title} by {author}. "
                 f"{len(chunks)} chunks stored. "
                 f"{len(full_text.split())} words indexed. "
-                f"The system can now reason from this book."
+                f"Ciph can now reason from this book."
             )
 
         except Exception as e:
@@ -113,11 +113,11 @@ class BookEngine:
         """
         Ingest raw text directly — for pasting summaries or excerpts.
         """
-        book_id = hashlib.md5(title.encode()).hexdigest()[:8]
+        book_id = hashlib.sha256(title.encode()).hexdigest()[:8]
         chunks  = self._chunk_text(text)
 
         for i, chunk in enumerate(chunks):
-            key   = f"book_{book_id}_chunk_{i:04d}"
+            key   = f"book_{book_id}_chunk_{i:06d}"
             entry = {
                 'book_id':   book_id,
                 'title':     title,
@@ -143,6 +143,11 @@ class BookEngine:
 
         return f"Text ingested: {title}. {len(chunks)} chunks stored."
 
+    def update_book(self, book_title: str, new_filepath: str) -> str:
+        """Update an existing book with a new version"""
+        self.remove_book(book_title)
+        return self.ingest_pdf(new_filepath, title=book_title)
+
     # ─────────────────────────────────────────────
     # SEARCH
     # ─────────────────────────────────────────────
@@ -150,7 +155,7 @@ class BookEngine:
     def search(self, query: str, book_title: str = None, limit: int = None) -> List[Dict]:
         """
         Search across all books or a specific book.
-        Returns relevant chunks ranked by relevance.
+        Returns relevant chunks ranked by relevance and fuzzy matching.
         """
         limit       = limit or self.MAX_SEARCH_RESULTS
         query_words = set(query.lower().split())
@@ -170,24 +175,36 @@ class BookEngine:
             chunks = meta['chunks']
 
             for i in range(chunks):
-                key = f"book_{book_id}_chunk_{i:04d}"
+                key = f"book_{book_id}_chunk_{i:06d}"
                 raw = self.vault.get_config(key)
                 if not raw:
-                    continue
+                    # Fallback to legacy 4-digit key if existing
+                    raw = self.vault.get_config(f"book_{book_id}_chunk_{i:04d}")
+                    if not raw:
+                        continue
 
                 try:
                     entry = json.loads(raw)
                 except Exception:
                     continue
 
-                # Score by keyword overlap
+                # Score by keyword overlap + fuzzy matching
                 chunk_words = set(entry['text'].lower().split())
                 keywords    = set(entry.get('keywords', []))
-                overlap     = len(query_words & (chunk_words | keywords))
+                combined_words = chunk_words | keywords
+                overlap     = len(query_words & combined_words)
 
-                if overlap > 0:
+                # Fuzzy matching bonus
+                fuzzy_matches = 0
+                for qw in query_words:
+                    if len(qw) > 3 and get_close_matches(qw, list(combined_words), cutoff=0.85):
+                        fuzzy_matches += 1
+
+                score = overlap + (fuzzy_matches * 0.5)
+
+                if score > 0:
                     results.append({
-                        'score':    overlap,
+                        'score':    score,
                         'title':    entry['title'],
                         'author':   entry['author'],
                         'chunk':    entry['chunk_idx'],
@@ -221,7 +238,7 @@ class BookEngine:
 
     def get_situational_advice(self, situation: str) -> str:
         """
-        Given a situation the user is facing, pull relevant wisdom
+        Given a situation the Operator is facing, pull relevant wisdom
         from all books in the library.
         """
         results = self.search(situation, limit=3)
@@ -246,7 +263,7 @@ class BookEngine:
         if not self.library:
             return "Library empty. Add books with /add-book <filepath>"
 
-        lines = [f"Library — {len(self.library)} books:\n"]
+        lines = [f"Ciph's library — {len(self.library)} books:\n"]
         for book_id, meta in self.library.items():
             lines.append(
                 f"  [{meta['category'].upper()}] {meta['title']} — {meta['author']} "
@@ -269,8 +286,8 @@ class BookEngine:
         chunks = meta['chunks']
 
         for i in range(chunks):
-            key = f"book_{book_id}_chunk_{i:04d}"
-            self.vault.set_config(key, '')
+            self.vault.set_config(f"book_{book_id}_chunk_{i:04d}", '')
+            self.vault.set_config(f"book_{book_id}_chunk_{i:06d}", '')
 
         del self.library[book_id]
         self._save_library_index()
@@ -295,8 +312,8 @@ class BookEngine:
 
     def build_book_context(self, user_input: str) -> str:
         """
-        Build book context to inject into the system prompt.
-        Automatically surfaces relevant passages when the user talks
+        Build book context to inject into Ciph's system prompt.
+        Automatically surfaces relevant passages when the Operator is talking
         about strategy, power, decisions, or situations.
         """
         if not self.library:
@@ -357,11 +374,12 @@ class BookEngine:
             'those', 'it', 'its', 'they', 'their', 'them', 'we', 'our',
             'you', 'your', 'he', 'she', 'his', 'her', 'page', 'chapter'
         }
+        critical_short = {'war', 'win', 'lose', 'power', 'law', 'god', 'man', 'king'}
 
         words    = text.lower().split()
         keywords = [
             w.strip('.,!?;:()[]"\'') for w in words
-            if len(w) > 4 and w not in stopwords and w.isalpha()
+            if (len(w) > 3 or w in critical_short) and w not in stopwords and w.isalpha()
         ]
 
         # Return most frequent meaningful words

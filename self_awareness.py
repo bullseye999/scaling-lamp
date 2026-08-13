@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# self_awareness.py - Self‑introspection and evolution engine
+# self_awareness.py - Ciph reads its own code, proposes upgrades, writes the code itself
 
 import os
 import ast
@@ -10,23 +10,25 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from cipher_vault import CipherVault
 
-# Ollama config – for the system to think about its own upgrades
-OLLAMA_URL = "http://localhost:11434/api/chat"
-OLLAMA_MODEL = "llama3.2:3b"
+# Ollama config - for Ciph to think about its own upgrades
+PROXY_URL = "http://127.0.0.1:5001/v1/chat/completions"
+#OLLAMA_MODEL = "llama3.2:3b"
 
 class SelfAwareness:
     """
-    Introspection and evolution engine.
+    Ciph's introspection and evolution engine.
     - Reads and understands its own source code
     - Identifies real problems from usage patterns
     - Proposes meaningful upgrades
     - Writes the upgrade code itself
-    - Creates proposal files for the user to review
-    - Nothing touches existing files without approval
+    - Creates proposal files for the Operator to review
+    - Nothing touches existing files without the Operator's approval
     """
 
-    MODULES_LIST = [
+    CIPH_MODULES = [
         'ciph_core.py',
+        'ciph_proxy.py',
+        'intent_router.py',
         'enhanced_conversation.py',
         'personality_engine.py',
         'memory_engine.py',
@@ -50,7 +52,7 @@ class SelfAwareness:
         'self_awareness.py',
     ]
 
-    PROPOSALS_DIR = "system_proposals"
+    PROPOSALS_DIR = "ciph_proposals"
 
     def __init__(self, vault: CipherVault):
         self.vault            = vault
@@ -67,7 +69,7 @@ class SelfAwareness:
     # ─────────────────────────────────────────────
 
     def _scan_self(self):
-        for module in self.MODULES_LIST:
+        for module in self.CIPH_MODULES:
             if os.path.exists(module):
                 self.module_snapshots[module] = self._analyze_module(module)
 
@@ -131,6 +133,123 @@ class SelfAwareness:
                     issues.append(f"Line {i}: unimplemented stub")
         return issues
 
+
+    def build_code_index(self, root_dir: str = ".") -> Dict[str, Dict]:
+        """
+        Scan all .py files in the project (excluding venv, __pycache__, ciph_proposals)
+        and build an index of module names, docstrings, and important symbols.
+        Returns a dict: {module_name: {"path": str, "doc": str, "classes": [], "functions": []}}
+        """
+        index = {}
+        root_dir = os.path.abspath(root_dir)
+        exclude_dirs = {'.venv', 'venv', '__pycache__', 'ciph_proposals', 'ciph_books', 'ciph_predictions', 'ciph_sports_logs'}
+        
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # Skip excluded directories
+            dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+            for file in filenames:
+                if not file.endswith('.py'):
+                    continue
+                full_path = os.path.join(dirpath, file)
+                rel_path = os.path.relpath(full_path, root_dir)
+                module_name = file[:-3]  # remove .py
+                
+                # Read first 500 chars to get docstring and simple stats
+                try:
+                    with open(full_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except Exception:
+                    continue
+                
+                # Simple extraction of docstring (between triple quotes)
+                docstring = ""
+                import re
+                match = re.search(r'"""(.*?)"""', content, re.DOTALL)
+                if match:
+                    docstring = match.group(1).strip()[:200]  # limit length
+                
+                # Extract class names (very simple regex)
+                classes = re.findall(r'^\s*class\s+(\w+)', content, re.MULTILINE)
+                functions = re.findall(r'^\s*def\s+(\w+)', content, re.MULTILINE)
+                
+                index[module_name] = {
+                    "path": rel_path,
+                    "doc": docstring,
+                    "classes": classes[:5],      # limit for brevity
+                    "functions": functions[:10],
+                    "imports": []  # could be added later
+                }
+        
+        # Cache the index to a file for quick reload
+        cache_file = os.path.join(root_dir, "code_index.json")
+        with open(cache_file, 'w') as f:
+            json.dump(index, f, indent=2)
+        
+        self.code_index = index
+        self.code_index_time = datetime.now().isoformat()
+        return index
+
+    def get_module_list(self, with_descriptions: bool = False) -> List[str]:
+        """Return list of available module names (from code index)."""
+        if not hasattr(self, 'code_index'):
+            self.build_code_index()
+        if with_descriptions:
+            return {name: info.get("doc", "")[:80] for name, info in self.code_index.items()}
+        return list(self.code_index.keys())
+
+    def module_exists(self, module_name: str) -> bool:
+        """Check if a module name exists in the codebase."""
+        if not hasattr(self, 'code_index'):
+            self.build_code_index()
+        return module_name in self.code_index
+
+    def get_module_info(self, module_name: str) -> Optional[Dict]:
+        """Return detailed info about a module."""
+        if not hasattr(self, 'code_index'):
+            self.build_code_index()
+        return self.code_index.get(module_name)
+
+    def record_rejection(self, proposal_id: str, reason: str = ""):
+        """Record a rejected proposal for learning."""
+        history_file = "proposal_history.json"
+        if os.path.exists(history_file):
+            with open(history_file, 'r') as f:
+                history = json.load(f)
+        else:
+            history = {"rejected": [], "approved": []}
+        
+        history["rejected"].append({
+            "id": proposal_id,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        })
+        # Keep only last 50
+        if len(history["rejected"]) > 50:
+            history["rejected"] = history["rejected"][-50:]
+        
+        with open(history_file, 'w') as f:
+            json.dump(history, f, indent=2)
+
+    def get_rejection_summary(self) -> str:
+        """Return a short summary of recent rejections (for prompt injection)."""
+        history_file = "proposal_history.json"
+        if not os.path.exists(history_file):
+            return "No previous rejections."
+        with open(history_file, 'r') as f:
+            history = json.load(f)
+        rejects = history.get("rejected", [])[-5:]  # last 5
+        if not rejects:
+            return "No recent rejections."
+        lines = ["Recent rejected proposals:"]
+        for r in rejects:
+            lines.append(f"- {r['id']}: {r['reason'][:60]}")
+        return "\n".join(lines)
+
+
+
+       
+    
+
     # ─────────────────────────────────────────────
     # SELF REPORT
     # ─────────────────────────────────────────────
@@ -154,13 +273,45 @@ class SelfAwareness:
         )
 
         return (
-            f"I am the system. {modules_loaded} modules, {total_lines} lines of Python, "
+            f"I am Ciph. {modules_loaded} modules, {total_lines} lines of Python, "
             f"{total_functions} functions, {total_classes} classes. "
             f"Most complex: {most_complex[0]} at {most_complex[1]['line_count']} lines. "
             f"{total_issues} issues detected. "
             f"Most issues in: {most_issues[0]}. "
             f"{len(self.pending_upgrades)} upgrade proposals pending your approval."
         )
+
+    def _call_llm(self, prompt: str, system_override: str = None) -> str:
+        """
+        Send a prompt to the RunPod endpoint via the local proxy.
+        Returns the generated text.
+        """
+        # Default system message for self‑analysis
+        system_msg = system_override or (
+            "You are Ciph's code evolution engine. "
+            "Write clean, working Python code only. No explanations, no markdown, no backticks. "
+            "Just raw Python code."
+        )
+        
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt}
+        ]
+           
+        payload = {
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 500
+        }
+        
+        try:
+            resp = requests.post(PROXY_URL, json=payload, timeout=120)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"  LLM call failed: {str(e)[:60]}")
+            return ""
 
     def get_module_report(self, module_name: str) -> str:
         if module_name not in self.module_snapshots:
@@ -184,14 +335,16 @@ class SelfAwareness:
 
     # ─────────────────────────────────────────────
     # INTELLIGENT UPGRADE PROPOSALS
+    # Ciph thinks about real improvements, not just lint fixes
     # ─────────────────────────────────────────────
 
     def analyze_and_propose(self) -> int:
         """
-        Analyze own codebase and usage patterns, then propose meaningful upgrades.
+        Ciph analyzes its own codebase and usage patterns.
+        Proposes meaningful upgrades — not just style fixes.
         Writes the actual upgrade code using Ollama.
         """
-        print("🧬 System analyzing own architecture...")
+        print("🧬 Ciph analyzing own architecture...")
         proposals = 0
 
         # 1. Analyze each module for real problems
@@ -199,6 +352,7 @@ class SelfAwareness:
             if not snap.get('exists'):
                 continue
 
+            # Unimplemented stubs — these are real broken features
             stubs = [i for i in snap['issues'] if 'stub' in i]
             if stubs:
                 proposal = self._create_upgrade_proposal(
@@ -215,7 +369,7 @@ class SelfAwareness:
         proposals += smart_proposals
 
         # 3. Version tracking
-        if not os.path.exists('system_version.json'):
+        if not os.path.exists('ciph_version.json'):
             version_content = json.dumps({
                 "version": "1.0.0",
                 "created": datetime.now().isoformat(),
@@ -225,10 +379,10 @@ class SelfAwareness:
             }, indent=2)
             self._save_proposal_file(
                 proposal_id="UP-VERSION",
-                filename="system_version.json",
+                filename="ciph_version.json",
                 content=version_content,
                 title="Add version tracking",
-                description="Tracks the system's evolution over time. Every approval gets logged here.",
+                description="Tracks Ciph's evolution over time. Every approval gets logged here.",
                 priority="medium",
                 module="ciph_core.py",
                 is_new_file=True
@@ -241,7 +395,7 @@ class SelfAwareness:
     def _generate_smart_proposals(self) -> int:
         """
         Generate intelligent proposals based on real usage patterns.
-        Uses Ollama to think about what would actually improve the system.
+        Uses Ollama to think about what would actually improve Ciph.
         """
         proposals = 0
 
@@ -283,7 +437,7 @@ class SelfAwareness:
 
         if pain_points.count('hallucination') >= 2:
             code = self._write_upgrade_code(
-                "Write a Python function called validate_response(response, vault) "
+                "Write a Python function called validate_ciph_response(response, vault) "
                 "that checks if a response contains claims about darknet findings or scan results. "
                 "If it does, it verifies those claims exist in recent vault conversations. "
                 "If not verified, returns a corrected response saying to run the actual scan first. "
@@ -295,7 +449,7 @@ class SelfAwareness:
                     filename="hallucination_guard.py",
                     content=code,
                     title="Hallucination guard — verify claims against real scan data",
-                    description="Detected hallucination pattern: the system invents darknet findings. This guard cross-checks claims against actual vault scan results before returning responses.",
+                    description="Detected hallucination pattern: Ciph invents darknet findings. This guard cross-checks claims against actual vault scan results before returning responses.",
                     priority="high",
                     module="enhanced_conversation.py",
                     is_new_file=True
@@ -310,7 +464,7 @@ class SelfAwareness:
                 "Current triggers include darknet, exploit, vulnerability etc. "
                 "Write 10 additional trigger phrases I should add to OLLAMA_TOPICS list "
                 "as a Python list called ADDITIONAL_TRIGGERS. "
-                "Focus on: OPSEC topics, personal/emotional topics the user might discuss, "
+                "Focus on: OPSEC topics, personal/emotional topics the Operator might discuss, "
                 "security testing topics. Keep it as a simple Python list assignment."
             )
             if code:
@@ -329,49 +483,29 @@ class SelfAwareness:
         return proposals
 
     def _write_upgrade_code(self, prompt: str) -> Optional[str]:
-        """Use Ollama to write the actual upgrade code."""
-        try:
-            payload = {
-                "model":    OLLAMA_MODEL,
-                "messages": [
-                    {
-                        "role":    "system",
-                        "content": "You are a code evolution engine. Write clean, working Python code only. No explanations, no markdown, no backticks. Just raw Python code."
-                    },
-                    {
-                        "role":    "user",
-                        "content": prompt
-                    }
-                ],
-                "stream":      False,
-                "temperature": 0.3,
-                "max_tokens":  500
-            }
-            resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
-            resp.raise_for_status()
-            code = resp.json()["message"]["content"].strip()
+        """Use RunPod (via proxy) to write the actual upgrade code."""
+        code = self._call_llm(prompt)
+        if code:
             # Strip any markdown that snuck in
             code = code.replace("```python", "").replace("```", "").strip()
             return code
-        except Exception as e:
-            print(f"  Ollama unavailable for code generation: {str(e)[:40]}")
-            return None
-
+        return None
     # ─────────────────────────────────────────────
-    # PROPOSAL FILES — What the user reviews
+    # PROPOSAL FILES — What the Operator reviews
     # ─────────────────────────────────────────────
 
     def _save_proposal_file(self, proposal_id: str, filename: str, content: str,
                              title: str, description: str, priority: str,
                              module: str, is_new_file: bool = True):
         """
-        Save a proposal as a readable file in system_proposals/.
-        This is what the user sees and reviews before approving.
+        Save a proposal as a readable file in ciph_proposals/.
+        This is what the Operator sees and reviews before approving.
         """
         proposal_path = os.path.join(self.PROPOSALS_DIR, f"{proposal_id}_{filename}")
 
+        # Write the actual code/content file
         with open(proposal_path, 'w') as f:
-            f.write(f"# SYSTEM UPGRADE PROPOSAL {proposal_id}\n")
+            f.write(f"# CIPH UPGRADE PROPOSAL {proposal_id}\n")
             f.write(f"# Title: {title}\n")
             f.write(f"# Priority: {priority.upper()}\n")
             f.write(f"# Target module: {module}\n")
@@ -383,6 +517,7 @@ class SelfAwareness:
             f.write("#\n# " + "=" * 60 + "\n\n")
             f.write(content)
 
+        # Register in pending upgrades
         proposal = {
             'id':            proposal_id,
             'module':        module,
@@ -407,11 +542,12 @@ class SelfAwareness:
 
     def _create_upgrade_proposal(self, module: str, title: str,
                                    problem: str, priority: str) -> Optional[Dict]:
-        """Create a proposal by having Ollama write the fix code."""
+        """Create a proposal by having Ollama write the fix code"""
         snap = self.module_snapshots.get(module, {})
         if not snap.get('exists'):
             return None
 
+        # Read the actual module so Ollama can see what needs fixing
         try:
             with open(module, 'r') as f:
                 source = f.read()
@@ -449,9 +585,9 @@ class SelfAwareness:
 
     def apply_upgrade(self, proposal_id: str) -> str:
         """
-        User approved. Apply the upgrade.
+        the Operator approved. Apply the upgrade.
         For new files: creates the file in project directory.
-        For existing file modifications: user still manually applies
+        For existing file modifications: the Operator still manually applies
         the diff — we just mark it approved and show instructions.
         """
         proposal = self._find_proposal(proposal_id)
@@ -463,9 +599,11 @@ class SelfAwareness:
         is_new_file   = proposal.get('is_new_file', True)
 
         if is_new_file:
+            # Read the proposal file content (skip header comments)
             try:
                 with open(proposal_file, 'r') as f:
                     lines = f.readlines()
+                # Skip header comment lines
                 code_lines = []
                 in_header  = True
                 for line in lines:
@@ -475,6 +613,7 @@ class SelfAwareness:
                     code_lines.append(line)
                 code = ''.join(code_lines).strip()
 
+                # Write to project directory
                 with open(target_file, 'w') as f:
                     f.write(code)
 
@@ -485,6 +624,7 @@ class SelfAwareness:
                 self._save_pending()
                 self._record_evolution(proposal['module'], proposal['title'])
 
+                # Rescan after applying
                 if os.path.exists(target_file):
                     self.module_snapshots[target_file] = self._analyze_module(target_file)
 
@@ -493,6 +633,7 @@ class SelfAwareness:
             except Exception as e:
                 return f"Apply failed: {str(e)[:80]}"
         else:
+            # Existing file modification — show instructions
             proposal['status']     = 'APPROVED'
             proposal['approved_at']= datetime.now().isoformat()
             self.approved_history.append(proposal)
@@ -505,10 +646,37 @@ class SelfAwareness:
                 f"Then manually apply to: {target_file}"
             )
 
+    def _validate_proposal_code(self, code: str) -> Dict[str, Any]:
+        """Validate proposed Python code with AST parsing before saving"""
+        try:
+            ast.parse(code)
+            return {'valid': True}
+        except SyntaxError as e:
+            return {'valid': False, 'error': f"Syntax error at line {e.lineno}: {e.msg}"}
+        except Exception as e:
+            return {'valid': False, 'error': str(e)}
+
+    def rollback_upgrade(self, proposal_id: str) -> str:
+        """Rollback an applied upgrade using stored backup if available"""
+        proposal = self._find_proposal(proposal_id)
+        if not proposal:
+            return f"Proposal {proposal_id} not found."
+        backup = proposal.get('backup')
+        if not backup or not os.path.exists(backup):
+            return f"No backup file found for {proposal_id}."
+        target_file = proposal.get('target_file', '')
+        try:
+            import shutil
+            shutil.copy2(backup, target_file)
+            return f"Rolled back {proposal_id} using {backup}."
+        except Exception as e:
+            return f"Rollback failed: {e}"
+
     def reject_upgrade(self, proposal_id: str, reason: str = '') -> str:
         proposal = self._find_proposal(proposal_id)
         if not proposal:
             return f"Proposal {proposal_id} not found."
+        self.record_rejection(proposal_id, reason)   # <-- ADD THIS
 
         proposal['status']      = 'REJECTED'
         proposal['rejected_at'] = datetime.now().isoformat()
@@ -517,6 +685,7 @@ class SelfAwareness:
         self.pending_upgrades   = [p for p in self.pending_upgrades if p['id'] != proposal_id]
         self._save_pending()
 
+        # Clean up proposal file
         pfile = proposal.get('proposal_file', '')
         if pfile and os.path.exists(pfile):
             os.remove(pfile)
@@ -549,13 +718,14 @@ class SelfAwareness:
         history.append(entry)
         self.vault.set_config('evolution_history', json.dumps(history[-100:]))
 
-        if os.path.exists('system_version.json'):
+        # Update version file if it exists
+        if os.path.exists('ciph_version.json'):
             try:
-                with open('system_version.json', 'r') as f:
+                with open('ciph_version.json', 'r') as f:
                     version = json.load(f)
                 version['last_evolution'] = datetime.now().isoformat()
                 version['evolution_count'] = version.get('evolution_count', 0) + 1
-                with open('system_version.json', 'w') as f:
+                with open('ciph_version.json', 'w') as f:
                     json.dump(version, f, indent=2)
             except Exception:
                 pass

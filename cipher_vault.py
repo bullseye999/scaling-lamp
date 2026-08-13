@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# cipher_vault.py - Professional encrypted storage (generic version)
+# cipher_vault.py - Professional encrypted storage
+# ENHANCED VERSION: Fixed type hints + maintained full functionality
 
 import sqlite3
 import json
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet # type: ignore
 import base64
 import os
 from typing import Optional, Dict, Any, List
@@ -11,11 +12,12 @@ from datetime import datetime
 
 class CipherVault:
     """
-    Secure, encrypted storage for conversation memory and configuration.
+    Secure, encrypted storage for Ciph's memory and configurations.
     All data is encrypted before being written to the SQLite database.
+    ENHANCED: Fixed type hints + added datetime parsing utilities
     """
 
-    def __init__(self, db_path: str = "secure_vault.db", key_file: str = "vault.key"):
+    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key"):
         self.db_path = db_path
         self.key_file = key_file
         self._init_key()
@@ -40,7 +42,7 @@ class CipherVault:
     def _encrypt(self, data: str) -> str:
         """Encrypt a string."""
         if data is None:
-            data = ""
+            data = ""  # Handle None values
         return self.cipher_suite.encrypt(data.encode()).decode()
 
     def _decrypt(self, encrypted_data: str) -> Optional[str]:
@@ -81,18 +83,23 @@ class CipherVault:
         prompt = prompt or ""
         response = response or ""
         context_tag = context_tag or "general"
-
-        conn = sqlite3.connect(self.db_path)
-        c = conn.cursor()
+        
         import time
         timestamp = time.time()
-
-        c.execute('''
-            INSERT INTO conversations (timestamp, encrypted_prompt, encrypted_response, context_tag)
-            VALUES (?, ?, ?, ?)
-        ''', (timestamp, self._encrypt(prompt), self._encrypt(response), context_tag))
-        conn.commit()
-        conn.close()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            c = conn.cursor()
+            c.execute('BEGIN TRANSACTION')
+            c.execute('''
+                INSERT INTO conversations (timestamp, encrypted_prompt, encrypted_response, context_tag)
+                VALUES (?, ?, ?, ?)
+            ''', (timestamp, self._encrypt(prompt), self._encrypt(response), context_tag))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def get_recent_conversations(self, limit: int = 10, context_tag: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve recent conversations, decrypted."""
@@ -115,9 +122,10 @@ class CipherVault:
 
         conversations = []
         for timestamp, enc_prompt, enc_response in rows:
+            # Handle potential None values
             decrypted_prompt = self._decrypt(enc_prompt) if enc_prompt else ""
             decrypted_response = self._decrypt(enc_response) if enc_response else ""
-
+            
             conversations.append({
                 'timestamp': timestamp,
                 'prompt': decrypted_prompt or "",
@@ -129,7 +137,7 @@ class CipherVault:
         """Store an encrypted configuration value."""
         key = key or ""
         value = value or ""
-
+        
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.execute('''
@@ -142,7 +150,7 @@ class CipherVault:
     def get_config(self, key: str) -> Optional[str]:
         """Retrieve a decrypted configuration value."""
         key = key or ""
-
+        
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.execute('SELECT encrypted_value FROM config WHERE key = ?', (key,))
@@ -153,12 +161,13 @@ class CipherVault:
         return None
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
-        """Parse various date formats from feeds."""
+        """Parse various date formats from feeds - FIXED TYPE HINT"""
         if not date_str:
             return None
-
+            
         try:
-            for fmt in ['%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S %Z',
+            # Try different date formats
+            for fmt in ['%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S %Z', 
                        '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S']:
                 try:
                     return datetime.strptime(date_str, fmt)
@@ -172,18 +181,21 @@ class CipherVault:
         """Get database statistics and health info."""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-
+        
+        # Get conversation count
         c.execute('SELECT COUNT(*) FROM conversations')
         conv_count = c.fetchone()[0]
-
+        
+        # Get config count
         c.execute('SELECT COUNT(*) FROM config')
         config_count = c.fetchone()[0]
-
+        
+        # Get oldest and newest entries
         c.execute('SELECT MIN(timestamp), MAX(timestamp) FROM conversations')
         time_range = c.fetchone()
-
+        
         conn.close()
-
+        
         return {
             'conversation_count': conv_count,
             'config_count': config_count,
@@ -197,50 +209,53 @@ class CipherVault:
         """Clean up conversations older than specified days."""
         import time
         cutoff_time = time.time() - (days_old * 24 * 60 * 60)
-
+        
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM conversations WHERE timestamp < ?', (cutoff_time,))
         count_before = c.fetchone()[0]
-
+        
         c.execute('DELETE FROM conversations WHERE timestamp < ?', (cutoff_time,))
         conn.commit()
         conn.close()
-
+        
         return count_before
 
-    def export_conversations(self, output_file: str = "vault_export.json") -> bool:
-        """Export all conversations to an encrypted JSON file."""
+    def export_conversations(self, output_file: str = "ciph_export.json") -> bool:
+        """Export all conversations to encrypted JSON file."""
         try:
-            conversations = self.get_recent_conversations(limit=10000)
-
+            conversations = self.get_recent_conversations(limit=10000)  # Large limit to get all
+            
             export_data = {
                 'export_time': datetime.now().isoformat(),
                 'conversation_count': len(conversations),
                 'conversations': conversations
             }
-
+            
+            # Encrypt the export data
             encrypted_export = self._encrypt(json.dumps(export_data))
-
+            
             with open(output_file, 'w') as f:
                 json.dump({'encrypted_data': encrypted_export}, f, indent=2)
-
+            
             return True
         except Exception as e:
             print(f"Export failed: {e}")
             return False
 
     def _get_connection(self):
-        """Internal method to get database connection – for advanced operations."""
+        """Internal method to get database connection - for advanced operations."""
         return sqlite3.connect(self.db_path)
 
-
+# Enhanced example usage with new features
 if __name__ == "__main__":
     vault = CipherVault()
 
-    vault.set_config("SYSTEM_VERSION", "Secure Vault v1.0")
-    vault.set_config("SECURITY_LEVEL", "ENCRYPTED")
+    # Store a secret config (like an API key - in real use, we'll handle this more carefully)
+    vault.set_config("SYSTEM_VERSION", "Ciph v1.0 Enhanced")
+    vault.set_config("SECURITY_LEVEL", "QUANTUM_AWARE")
 
+    # Store test conversations
     vault.store_conversation(
         "What's the threat landscape for quantum computing?",
         "It's evolving rapidly. The main near-term risk is harvest-now-decrypt-later attacks.",
@@ -253,6 +268,7 @@ if __name__ == "__main__":
         context_tag="system"
     )
 
+    # Retrieve recent conversations
     recent = vault.get_recent_conversations(limit=5)
     print("📊 RECENT CONVERSATIONS:")
     for conv in recent:
@@ -260,12 +276,14 @@ if __name__ == "__main__":
         print(f"< {conv['response']}")
         print()
 
+    # Show database stats
     stats = vault.get_database_stats()
     print("📈 DATABASE STATISTICS:")
     for key, value in stats.items():
         print(f"  {key}: {value}")
 
+    # Test config retrieval
     version = vault.get_config("SYSTEM_VERSION")
     print(f"🔧 SYSTEM VERSION: {version}")
 
-    print("✅ CIPHER VAULT - ALL SYSTEMS OPERATIONAL")
+    print("✅ CIPHER VAULT ENHANCED - ALL SYSTEMS OPERATIONAL")

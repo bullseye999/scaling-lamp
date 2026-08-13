@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# sports_predictor.py - Advanced football prediction engine
+# sports_predictor.py - Ciph's demonic football prediction engine
 # Multi-signal decision engine with feedback learning
-# Architecture: Poisson + xG + Market Movement + News + LLM Reasoning + Arbiter
+# Architecture: Poisson + xG + Market Movement + News + Ciph Reasoning + Arbiter
 
 import os
 import json
@@ -9,6 +9,7 @@ import time
 import hashlib
 import threading
 import requests
+import sports_skills.football as football
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from cipher_vault import CipherVault
@@ -18,17 +19,17 @@ from cipher_vault import CipherVault
 # ─────────────────────────────────────────────
 
 FOOTBALL_API    = "https://api.football-data.org/v4"
-OLLAMA_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/chat")
+PROXY_URL = "http://127.0.0.1:5001/v1/chat/completions"
 OLLAMA_MODEL    = "llama3.1:8b"
-LOGS_DIR        = "sports_logs"
-PREDICTIONS_DIR = "sports_predictions"
+LOGS_DIR        = "ciph_sports_logs"
+PREDICTIONS_DIR = "ciph_predictions"
 
 # Layer weights — auto-adjusted based on performance
 DEFAULT_WEIGHTS = {
     'math':   0.40,
     'market': 0.30,
     'news':   0.10,
-    'system': 0.20
+    'ciph':   0.20
 }
 
 # Leagues to monitor
@@ -44,13 +45,13 @@ LEAGUES = {
 
 class SportsPredictor:
     """
-    Advanced football prediction engine.
+    Ciph's demonic football prediction engine.
     
     5 layers:
     1. Math     — Poisson distribution + xG
     2. Market   — Odds movement, sharp money detection
     3. News     — Injuries, suspensions, context
-    4. System   — LLM reasoning over all layers
+    4. Ciph     — LLM reasoning over all layers
     5. Arbiter  — Normalized scoring, final conviction score
     
     Runs as background daemon — learns continuously.
@@ -65,6 +66,8 @@ class SportsPredictor:
         self.daemon_running  = False
         self.daemon_thread   = None
         self.monitored_leagues = self._load_monitored_leagues()
+        # At the end of __init__, after loading weights, add:
+        self.min_edge = float(self.vault.get_config('sports_min_edge') or 0.05)  # 5% minimum edge
 
         os.makedirs(LOGS_DIR,        exist_ok=True)
         os.makedirs(PREDICTIONS_DIR, exist_ok=True)
@@ -89,7 +92,7 @@ class SportsPredictor:
         self.daemon_thread  = threading.Thread(
             target=self._daemon_loop,
             daemon=True,
-            name='SportsDaemon'
+            name='CiphSportsDaemon'
         )
         self.daemon_thread.start()
 
@@ -111,15 +114,18 @@ class SportsPredictor:
             try:
                 print(f"\n[Sports Daemon] Cycle {cycle + 1} — {datetime.now().strftime('%H:%M')}")
 
+                # Pull and cache fixtures
                 for league in self.monitored_leagues:
                     fixtures = self._fetch_upcoming_fixtures(league)
                     if fixtures:
                         self._cache_fixtures(league, fixtures)
                         print(f"[Sports Daemon] {league}: {len(fixtures)} fixtures cached")
 
+                # Check recent results and update weights
                 self._update_weights_from_results()
 
                 cycle += 1
+                # Sleep 6 hours
                 for _ in range(360):
                     if not self.daemon_running:
                         break
@@ -128,6 +134,123 @@ class SportsPredictor:
             except Exception as e:
                 print(f"[Sports Daemon] Error: {str(e)[:60]}")
                 time.sleep(300)
+
+    def set_min_edge(self, edge: float):
+        """Set minimum edge for trade (e.g., 0.05 = 5%)."""
+        self.min_edge = edge
+        self.vault.set_config('sports_min_edge', str(edge))
+        return f"Minimum edge set to {edge*100}%"
+
+
+
+    def fetch_actual_result(self, home_team: str, away_team: str, match_date: str) -> Optional[str]:
+        """Fetch the result of a single match from a specific date."""
+        from datetime import datetime
+
+        try:
+            date_obj = datetime.strptime(match_date, '%Y-%m-%d')
+        except ValueError:
+            return None
+
+       # print(f"[Auto] Fetching result for {home_team} vs {away_team} on {match_date}")
+
+        try:
+            # Fetch the schedule for the given date
+            schedule = football.get_daily_schedule(date=str(date_obj.date()))
+            # Structure: schedule['data']['events'] is a list of matches
+            events = schedule.get('data', {}).get('events', [])
+            if not events:
+                return None
+
+            # Find the match
+            found_match = None
+            for event in events:
+                event_home = event.get('home', {}).get('name', '').lower()
+                event_away = event.get('away', {}).get('name', '').lower()
+
+                if (home_team.lower() == event_home and away_team.lower() == event_away):
+                    found_match = event
+                    break
+
+            if not found_match:
+                return None
+
+            # Extract the result
+            home_score = found_match.get('home', {}).get('score')
+            away_score = found_match.get('away', {}).get('score')
+
+            if home_score is None or away_score is None:
+                return None
+
+            if home_score > away_score:
+                return 'HOME WIN'
+            elif away_score > home_score:
+                return 'AWAY WIN'
+            else:
+                return 'DRAW'
+
+        except Exception as e:
+            print(f"[Auto] Error fetching result for {home_team} vs {away_team}: {e}")
+            return None
+
+
+
+    def auto_resolve_predictions(self, days_back=7, verbose=False):
+        """Scan prediction files and resolve those completed over 24 hours ago."""
+        from datetime import datetime, timedelta
+
+        # Only print if verbose flag is True
+        if verbose:
+            print("[Auto] Running daily prediction resolution...")
+
+        for fname in os.listdir(PREDICTIONS_DIR):
+            if not fname.endswith('.json'):
+                continue
+            file_path = os.path.join(PREDICTIONS_DIR, fname)
+            with open(file_path, 'r') as f:
+                pred = json.load(f)
+
+            # Skip if already resolved
+            if pred.get('actual_result') not in (None, 'PENDING'):
+                continue
+
+            pred_date_str = pred['predicted_at'].split('T')[0]
+            try:
+                pred_date = datetime.strptime(pred_date_str, '%Y-%m-%d')
+            except ValueError:
+                continue
+
+            # Wait at least 24 hours before trying to resolve
+            if datetime.now() - pred_date < timedelta(hours=24):
+                continue
+
+            home = pred['home_team']
+            away = pred['away_team']
+        
+            # COMMENT OUT or REMOVE this line:
+            # print(f"[Auto] Fetching result for {home} vs {away} on {pred_date.strftime('%Y-%m-%d')}")
+        
+            actual = self.fetch_actual_result(home, away, pred_date.strftime('%Y-%m-%d'))
+
+            if actual:
+                # Only print if verbose
+                if verbose:
+                    print(f"[Auto] Resolved {home} vs {away}: {actual}")
+                self.update_weights_from_result(fname.replace('.json', ''), actual)
+
+
+    def start_auto_learner(self):
+        """Main loop for the background sports learner thread."""
+        import time
+        while True:
+            try:
+                self.auto_resolve_predictions()
+                # Sleep for 24 hours
+                time.sleep(86400)
+            except Exception as e:
+                print(f"[Auto-Learner] Error: {e}")
+                time.sleep(3600)  # Wait an hour before retrying on error
+    
 
     # ─────────────────────────────────────────────
     # LAYER 1 — MATH (Poisson + xG)
@@ -141,25 +264,31 @@ class SportsPredictor:
         """
         import math
 
+        # Get attack/defense strength
         home_attack  = home_stats.get('avg_goals_scored', 1.4)
         home_defense = home_stats.get('avg_goals_conceded', 1.2)
         away_attack  = away_stats.get('avg_goals_scored', 1.2)
         away_defense = away_stats.get('avg_goals_conceded', 1.4)
 
+        # League averages (Premier League baseline)
         league_avg_home = 1.5
         league_avg_away = 1.1
 
+        # Expected goals using attack/defense strength
         home_xg = (home_attack / league_avg_home) * (away_defense / league_avg_away) * league_avg_home
         away_xg = (away_attack / league_avg_away) * (home_defense / league_avg_home) * league_avg_away
 
+        # Add home advantage
         home_xg *= 1.1
 
+        # Poisson probabilities for scorelines 0-5
         def poisson_prob(lam, k):
             return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
 
         home_probs = [poisson_prob(home_xg, i) for i in range(6)]
         away_probs = [poisson_prob(away_xg, i) for i in range(6)]
 
+        # Calculate match outcome probabilities
         home_win = draw = away_win = 0
         scorelines = []
 
@@ -174,8 +303,10 @@ class SportsPredictor:
                 elif h == a: draw    += prob
                 else:        away_win += prob
 
+        # Sort scorelines by probability
         scorelines.sort(key=lambda x: x['prob'], reverse=True)
 
+        # Over 2.5 and BTTS
         over_25 = sum(
             home_probs[h] * away_probs[a]
             for h in range(6) for a in range(6)
@@ -186,11 +317,13 @@ class SportsPredictor:
             for h in range(1, 6) for a in range(1, 6)
         )
 
+        # Normalize
         total    = home_win + draw + away_win
         home_win = home_win / total if total > 0 else 0.33
         draw     = draw     / total if total > 0 else 0.33
         away_win = away_win / total if total > 0 else 0.34
 
+        # Confidence score 0-1
         max_prob   = max(home_win, draw, away_win)
         confidence = min(1.0, max_prob * 1.2)
 
@@ -225,6 +358,7 @@ class SportsPredictor:
         Detect sharp money movement in odds.
         Sharp movement = odds shift without public reason = insider confidence.
         """
+        # Try to get odds from free source
         odds_data = self._fetch_odds(home_team, away_team)
 
         if not odds_data:
@@ -242,18 +376,22 @@ class SportsPredictor:
         open_home    = odds_data.get('open_home',  current_home)
         open_away    = odds_data.get('open_away',  current_away)
 
+        # Implied probabilities
         home_implied = 1 / current_home if current_home > 0 else 0.33
         draw_implied = 1 / current_draw if current_draw > 0 else 0.33
         away_implied = 1 / current_away if current_away > 0 else 0.34
 
+        # Normalize
         total        = home_implied + draw_implied + away_implied
         home_implied = home_implied / total
         away_implied = away_implied / total
         draw_implied = draw_implied / total
 
+        # Detect movement
         home_movement = ((open_home - current_home) / open_home) if open_home > 0 else 0
         away_movement = ((open_away - current_away) / open_away) if open_away > 0 else 0
 
+        # Sharp signal
         sharp_signal  = 'NEUTRAL'
         sharp_score   = 0.5
 
@@ -275,6 +413,7 @@ class SportsPredictor:
             outcome = 'DRAW'
             confidence = draw_implied
 
+        # If sharp money detected — boost confidence
         if sharp_signal != 'NEUTRAL':
             confidence = min(0.9, confidence * 1.2)
 
@@ -337,16 +476,6 @@ class SportsPredictor:
 
         try:
             import feedparser
-        except ImportError:
-            return {
-                'layer': 'news',
-                'news_items': [],
-                'impact_score': 0.0,
-                'raw_score': 0.5,
-                'summary': 'feedparser not installed'
-            }
-
-        try:
             feeds = [
                 f"https://www.skysports.com/rss/12040",
                 f"https://www.bbc.co.uk/sport/football/rss.xml",
@@ -376,6 +505,7 @@ class SportsPredictor:
                         if not (home_mentioned or away_mentioned):
                             continue
 
+                        # Detect sentiment
                         neg_hits = sum(1 for k in negative_keywords if k in content)
                         pos_hits = sum(1 for k in positive_keywords if k in content)
 
@@ -398,10 +528,13 @@ class SportsPredictor:
                 except Exception:
                     continue
 
-        except Exception:
+        except ImportError:
             pass
 
+        # Normalize impact to -1 to 1
         impact_score = max(-0.5, min(0.5, impact_score))
+
+        # Convert to confidence adjustment
         raw_score = 0.5 + impact_score
 
         return {
@@ -413,17 +546,18 @@ class SportsPredictor:
         }
 
     # ─────────────────────────────────────────────
-    # LAYER 4 — SYSTEM REASONING (LLM)
+    # LAYER 4 — CIPH REASONING
     # ─────────────────────────────────────────────
 
-    def _system_layer(self, home_team: str, away_team: str,
+    def _ciph_layer(self, home_team: str, away_team: str,
                     math_result: Dict, market_result: Dict,
                     news_result: Dict, match_id: str) -> Dict[str, Any]:
         """
-        LLM reasons over all previous layers.
+        Ciph reasons over all previous layers.
         Outputs structured prediction with confidence.
         All dialogue logged and timestamped.
         """
+        # Build context for Ciph
         context = f"""You are analyzing a football match for prediction purposes.
 
 MATCH: {home_team} vs {away_team}
@@ -462,10 +596,11 @@ Based on ALL of this data, provide your prediction in this EXACT JSON format:
 
 Respond with ONLY the JSON. No other text."""
 
+        # Log the dialogue
         log_entry = {
             'match_id':   match_id,
             'timestamp':  datetime.now().isoformat(),
-            'type':       'system_reasoning_request',
+            'type':       'ciph_reasoning_request',
             'home_team':  home_team,
             'away_team':  away_team,
             'prompt':     context,
@@ -479,7 +614,7 @@ Respond with ONLY the JSON. No other text."""
                 "messages": [
                     {
                         "role":    "system",
-                        "content": "You are a football prediction intelligence. You analyze data and output precise JSON predictions. Never output anything except valid JSON."
+                        "content": "You are Ciph, a football prediction intelligence. You analyze data and output precise JSON predictions. Never output anything except valid JSON."
                     },
                     {
                         "role":    "user",
@@ -490,39 +625,43 @@ Respond with ONLY the JSON. No other text."""
                 "temperature": 0.2,
             }
 
-            resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
+            resp = requests.post(PROXY_URL, json=payload, timeout=120)
             resp.raise_for_status()
 
             raw_response = resp.json()["message"]["content"].strip()
-            raw_response = raw_response.replace("```json", "").replace("```", "").strip()
 
-            import re
+            # Strip any markdown
+            raw_response = raw_response.replace("```json", "").replace("```", "").strip()
+            
+            #Robust JSON extraction
+            import re 
             match = re.search(r'\{.*\}', raw_response, re.DOTALL)
             if match:
-                system_prediction = json.loads(match.group(0))
+                ciph_prediction = json.loads(match.group(0))
             else:
-                print(f"[System Layer] Raw response: {raw_response[:200]}")
+                print(f"[Ciph Layer] Raw response: {raw_response[:200]}")
                 raise ValueError("No valid JSON in response")
 
+            # Log the response
             log_entry['response']      = raw_response
-            log_entry['system_outcome']  = system_prediction.get('outcome')
-            log_entry['system_confidence'] = system_prediction.get('confidence')
-            log_entry['contrarian']    = system_prediction.get('contrarian', False)
+            log_entry['ciph_outcome']  = ciph_prediction.get('outcome')
+            log_entry['ciph_confidence'] = ciph_prediction.get('confidence')
+            log_entry['contrarian']    = ciph_prediction.get('contrarian', False)
             log_entry['status']        = 'success'
 
             self._log_dialogue(match_id, log_entry)
 
             return {
-                'layer':             'system',
-                'outcome':           system_prediction.get('outcome', 'HOME WIN'),
-                'confidence':        float(system_prediction.get('confidence', 0.5)),
-                'over_25':           float(system_prediction.get('over_25',    0.5)),
-                'btts':              float(system_prediction.get('btts',       0.5)),
-                'key_factors':       system_prediction.get('key_factors',      []),
-                'contrarian':        system_prediction.get('contrarian',       False),
-                'contrarian_reason': system_prediction.get('contrarian_reason', ''),
-                'reasoning':         system_prediction.get('reasoning',        ''),
-                'raw_score':         float(system_prediction.get('confidence', 0.5)),
+                'layer':             'ciph',
+                'outcome':           ciph_prediction.get('outcome', 'HOME WIN'),
+                'confidence':        float(ciph_prediction.get('confidence', 0.5)),
+                'over_25':           float(ciph_prediction.get('over_25',    0.5)),
+                'btts':              float(ciph_prediction.get('btts',       0.5)),
+                'key_factors':       ciph_prediction.get('key_factors',      []),
+                'contrarian':        ciph_prediction.get('contrarian',       False),
+                'contrarian_reason': ciph_prediction.get('contrarian_reason', ''),
+                'reasoning':         ciph_prediction.get('reasoning',        ''),
+                'raw_score':         float(ciph_prediction.get('confidence', 0.5)),
                 'raw_response':      raw_response
             }
 
@@ -532,7 +671,7 @@ Respond with ONLY the JSON. No other text."""
             self._log_dialogue(match_id, log_entry)
 
             return {
-                'layer':      'system',
+                'layer':      'ciph',
                 'outcome':    math_result.get('outcome', 'HOME WIN'),
                 'confidence': 0.5,
                 'raw_score':  0.5,
@@ -545,7 +684,7 @@ Respond with ONLY the JSON. No other text."""
 
     def _arbiter(self, home_team: str, away_team: str,
                  math_r: Dict, market_r: Dict,
-                 news_r: Dict, system_r: Dict) -> Dict[str, Any]:
+                 news_r: Dict, ciph_r: Dict) -> Dict[str, Any]:
         """
         Normalize all layers to same scale.
         Calculate weighted conviction score.
@@ -553,6 +692,7 @@ Respond with ONLY the JSON. No other text."""
         """
         weights = self.weights
 
+        # Convert outcomes to numeric scores
         def outcome_to_score(result: Dict) -> Tuple[float, float, float]:
             outcome = result.get('outcome', 'HOME WIN')
             conf    = result.get('confidence', result.get('raw_score', 0.5))
@@ -566,34 +706,72 @@ Respond with ONLY the JSON. No other text."""
         math_h,   math_d,   math_a   = outcome_to_score(math_r)
         market_h, market_d, market_a = outcome_to_score(market_r) if market_r.get('available') else (0.33, 0.33, 0.34)
         news_adj                      = news_r.get('impact_score', 0)
-        system_h,   system_d,   system_a   = outcome_to_score(system_r)
+        ciph_h,   ciph_d,   ciph_a   = outcome_to_score(ciph_r)
 
+        # Market weight boost if sharp signal detected
         market_weight = weights['market']
         if market_r.get('sharp_signal') not in ('NEUTRAL', 'NO_DATA', None):
             market_weight = min(0.45, market_weight * 1.5)
 
+        # Weighted final scores
         w_math   = weights['math']
         w_news   = weights['news']
-        w_system = weights['system']
+        w_ciph   = weights['ciph']
 
-        total_w  = w_math + market_weight + w_news + w_system
+        # Renormalize weights
+        total_w  = w_math + market_weight + w_news + w_ciph
         w_math   = w_math   / total_w
         w_mkt    = market_weight / total_w
         w_news_n = w_news   / total_w
-        w_system_n = w_system / total_w
+        w_ciph_n = w_ciph   / total_w
 
         final_home = (w_math * math_h + w_mkt * market_h +
-                      w_news_n * (0.33 + news_adj) + w_system_n * system_h)
+                      w_news_n * (0.33 + news_adj) + w_ciph_n * ciph_h)
         final_draw = (w_math * math_d + w_mkt * market_d +
-                      w_news_n * 0.33 + w_system_n * system_d)
+                      w_news_n * 0.33 + w_ciph_n * ciph_d)
         final_away = (w_math * math_a + w_mkt * market_a +
-                      w_news_n * (0.33 - news_adj) + w_system_n * system_a)
-
+                      w_news_n * (0.33 - news_adj) + w_ciph_n * ciph_a)
+        
+        # Normalize to sum to 1
         total      = final_home + final_draw + final_away
         final_home = final_home / total if total > 0 else 0.33
         final_draw = final_draw / total if total > 0 else 0.33
         final_away = final_away / total if total > 0 else 0.34
+      
+        
+        # ========== INSERT EDGE CALCULATION HERE ==========
+        # Get market implied probabilities (from market layer)
+        market_home = market_r.get('home_win_pct', 33.3) / 100.0
+        market_draw = market_r.get('draw_pct', 33.3) / 100.0
+        market_away = market_r.get('away_win_pct', 33.4) / 100.0
 
+        # Determine Ciph's most likely outcome and its probability
+        ciph_probs = {'HOME WIN': final_home, 'DRAW': final_draw, 'AWAY WIN': final_away}
+        ciph_outcome = max(ciph_probs, key=ciph_probs.get)
+        ciph_prob = ciph_probs[ciph_outcome]
+
+        # Corresponding market probability
+        market_prob = {
+            'HOME WIN': market_home,
+            'DRAW': market_draw,
+            'AWAY WIN': market_away
+        }[ciph_outcome]
+
+        # Calculate edge
+        edge = ciph_prob - market_prob
+
+        # Trade decision
+        min_edge = getattr(self, 'min_edge', 0.05)
+        if edge >= min_edge:
+            trade_decision = 'TRADE'
+            trade_reason = f'Edge: {edge:.1%}'
+        else:
+            trade_decision = 'NO_TRADE'
+            trade_reason = f'Edge too small: {edge:.1%} (need {min_edge:.0%})'
+        # ========== END EDGE CALCULATION ==========
+
+
+        # Final outcome
         if final_home >= final_draw and final_home >= final_away:
             final_outcome = 'HOME WIN'
             conviction    = final_home
@@ -604,18 +782,21 @@ Respond with ONLY the JSON. No other text."""
             final_outcome = 'DRAW'
             conviction    = final_draw
 
-        outcomes   = [math_r.get('outcome'), market_r.get('outcome'), system_r.get('outcome')]
+        # Detect contrarian signal
+        outcomes   = [math_r.get('outcome'), market_r.get('outcome'), ciph_r.get('outcome')]
         outcomes   = [o for o in outcomes if o]
         is_contrarian = len(set(outcomes)) > 1
 
+        # Rating
         if conviction >= 0.65:   rating = 'HIGH'
         elif conviction >= 0.50: rating = 'MEDIUM'
         else:                    rating = 'LOW'
 
+        # Over 2.5 and BTTS (weighted average)
         over_25 = (w_math * math_r.get('over_25_pct', 50) / 100 +
-                   w_system_n * system_r.get('over_25', 0.5))
+                   w_ciph_n * ciph_r.get('over_25', 0.5))
         btts    = (w_math * math_r.get('btts_pct', 40) / 100 +
-                   w_system_n * system_r.get('btts', 0.4))
+                   w_ciph_n * ciph_r.get('btts', 0.4))
 
         return {
             'final_outcome':  final_outcome,
@@ -630,14 +811,20 @@ Respond with ONLY the JSON. No other text."""
             'layer_verdicts': {
                 'math':   math_r.get('outcome'),
                 'market': market_r.get('outcome'),
-                'system':   system_r.get('outcome')
+                'ciph':   ciph_r.get('outcome')
             },
             'weights_used':   {
                 'math':   round(w_math,   2),
                 'market': round(w_mkt,    2),
                 'news':   round(w_news_n, 2),
-                'system': round(w_system_n, 2)
-            }
+                'ciph':   round(w_ciph_n, 2)
+            },
+            # NEW FIELDS:
+            'trade_decision': trade_decision,
+            'trade_reason': trade_reason,
+            'ciph_probability': ciph_prob,
+            'market_probability': market_prob,
+            'edge': edge
         }
 
     # ─────────────────────────────────────────────
@@ -652,11 +839,13 @@ Respond with ONLY the JSON. No other text."""
             f"{home_team}{away_team}{datetime.now().date()}".encode()
         ).hexdigest()[:10]
 
-        print(f"\n[Sports] Analyzing: {home_team} vs {away_team}")
+        print(f"\n[Ciph Sports] Analyzing: {home_team} vs {away_team}")
 
+        # Get team stats
         home_stats = self._get_team_stats(home_team)
         away_stats = self._get_team_stats(away_team)
 
+        # Run all layers
         print("  [1/4] Math layer (Poisson + xG)...")
         math_result = self._math_layer(home_team, away_team, home_stats, away_stats)
 
@@ -666,8 +855,8 @@ Respond with ONLY the JSON. No other text."""
         print("  [3/4] News layer (Context)...")
         news_result = self._news_layer(home_team, away_team)
 
-        print("  [4/4] System reasoning layer...")
-        system_result = self._system_layer(
+        print("  [4/4] Ciph reasoning layer...")
+        ciph_result = self._ciph_layer(
             home_team, away_team,
             math_result, market_result, news_result,
             match_id
@@ -676,9 +865,10 @@ Respond with ONLY the JSON. No other text."""
         print("  [5/5] Arbiter calculating conviction...")
         arbiter_result = self._arbiter(
             home_team, away_team,
-            math_result, market_result, news_result, system_result
+            math_result, market_result, news_result, ciph_result
         )
 
+        # Full prediction package
         prediction = {
             'match_id':    match_id,
             'home_team':   home_team,
@@ -688,20 +878,23 @@ Respond with ONLY the JSON. No other text."""
                 'math':    math_result,
                 'market':  market_result,
                 'news':    news_result,
-                'system':    system_result,
+                'ciph':    ciph_result,
                 'arbiter': arbiter_result
             },
             'final': arbiter_result,
-            'signal': self._format_signal(home_team, away_team, arbiter_result, system_result, math_result)
+            'signal': self._format_signal(home_team, away_team, arbiter_result, ciph_result, math_result)
         }
 
+        # Check 10 prediction email trigger
         if hasattr(self, 'performance') and self.performance.check_10_prediction_trigger():
             self.performance.send_report(trigger='10-predictions')
 
+        # Save prediction
         self._save_prediction(match_id, prediction)
 
         return prediction
 
+        
     def predict_today(self) -> str:
         """Predict all matches today across monitored leagues"""
         today    = datetime.now().strftime('%Y-%m-%d')
@@ -716,6 +909,7 @@ Respond with ONLY the JSON. No other text."""
                 all_predictions.append(pred['signal'])
 
         if not all_predictions:
+            # Check tomorrow
             tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
             for league in self.monitored_leagues:
                 fixtures = self._get_cached_fixtures(league)
@@ -725,7 +919,7 @@ Respond with ONLY the JSON. No other text."""
                            ', '.join([f"{f['home']} vs {f['away']}" for f in tomorrow_fixtures[:3]])
             return "No matches today or tomorrow in monitored leagues."
 
-        header = f"SPORTS PREDICTIONS — {today}\n{'='*50}\n"
+        header = f"CIPH PREDICTIONS — {today}\n{'='*50}\n"
         return header + '\n\n'.join(all_predictions)
 
     # ─────────────────────────────────────────────
@@ -733,7 +927,21 @@ Respond with ONLY the JSON. No other text."""
     # ─────────────────────────────────────────────
 
     def _format_signal(self, home: str, away: str,
-                       arbiter: Dict, system: Dict, math: Dict) -> str:
+                       arbiter: Dict, ciph: Dict, math: Dict) -> str:
+        # If NO_TRADE, return a different message
+        if arbiter.get('trade_decision') == 'NO_TRADE':
+            edge = arbiter.get('edge', 0)
+            min_edge = getattr(self, 'min_edge', 0.05)
+            return f"""
+⚠️ NO TRADE RECOMMENDED
+Match: {home} vs {away}
+Ciph probability: {arbiter.get('ciph_probability', 0)*100:.1f}%
+Market implied: {arbiter.get('market_probability', 0)*100:.1f}%
+Edge: {edge*100:.1f}% (minimum required: {min_edge*100:.0f}%)
+Reason: {arbiter.get('trade_reason', 'Insufficient edge')}
+
+No action suggested. Wait for higher confidence opportunity.
+"""
         rating_emoji = {'HIGH': '🟢', 'MEDIUM': '🟡', 'LOW': '🔴'}.get(arbiter['rating'], '⚪')
         contrarian   = "⚡ CONTRARIAN SIGNAL" if arbiter['is_contrarian'] else ""
 
@@ -744,11 +952,11 @@ Respond with ONLY the JSON. No other text."""
                 layer_agrees += f"\n    {layer.upper()}: {verdict}"
 
         key_factors = ""
-        for factor in system.get('key_factors', [])[:3]:
+        for factor in ciph.get('key_factors', [])[:3]:
             key_factors += f"\n  • {factor}"
 
         signal = f"""
-⚽ SPORTS INTELLIGENCE — {datetime.now().strftime('%d %b %Y')}
+⚽ CIPH INTELLIGENCE — {datetime.now().strftime('%d %b %Y')}
 {'='*45}
 {home} vs {away}
 
@@ -768,13 +976,13 @@ Respond with ONLY the JSON. No other text."""
 
 🧠 LAYER VERDICTS:{layer_agrees}
 
-💡 KEY FACTORS:{key_factors if key_factors else '\n  No key factors'}
+💡 KEY FACTORS:{key_factors if key_factors else chr(10) + '  No key factors'}
 
-📝 SYSTEM REASONING:
-  {system.get('reasoning', 'N/A')}
+📝 CIPH REASONING:
+  {ciph.get('reasoning', 'N/A')}
 
 —
-🔒 Sports Intelligence Engine
+🔒 Powered by Ciph Intelligence Engine
 """
         return signal.strip()
 
@@ -797,23 +1005,26 @@ Respond with ONLY the JSON. No other text."""
         layers  = prediction.get('layers', {})
         correct = {}
 
-        for layer_name in ['math', 'market', 'system']:
+        for layer_name in ['math', 'market', 'ciph']:
             layer_pred = layers.get(layer_name, {}).get('outcome')
             if layer_pred:
                 correct[layer_name] = (layer_pred == actual_result.upper())
 
+        # Update weights — increase weight of correct layers
         for layer, was_correct in correct.items():
             if was_correct:
                 self.weights[layer] = min(0.6, self.weights[layer] * 1.05)
             else:
                 self.weights[layer] = max(0.1, self.weights[layer] * 0.95)
 
+        # Renormalize
         total = sum(self.weights.values())
         for k in self.weights:
             self.weights[k] = round(self.weights[k] / total, 3)
 
         self._save_weights()
 
+        # Log result
         prediction['actual_result'] = actual_result.upper()
         prediction['result_logged'] = datetime.now().isoformat()
         prediction['layer_correct'] = correct
@@ -1041,8 +1252,8 @@ Respond with ONLY the JSON. No other text."""
             output.append(f"Type: {entry.get('type', 'N/A')}")
             output.append(f"Math says: {entry.get('math_says', 'N/A')}")
             output.append(f"Market says: {entry.get('market_says', 'N/A')}")
-            output.append(f"System says: {entry.get('system_outcome', 'N/A')}")
-            output.append(f"Confidence: {entry.get('system_confidence', 'N/A')}")
+            output.append(f"Ciph says: {entry.get('ciph_outcome', 'N/A')}")
+            output.append(f"Confidence: {entry.get('ciph_confidence', 'N/A')}")
             output.append(f"Status: {entry.get('status', 'N/A')}")
             if entry.get('contrarian'):
                 output.append(f"CONTRARIAN: Yes")
@@ -1078,7 +1289,7 @@ if __name__ == "__main__":
     from cipher_vault import CipherVault
     vault     = CipherVault()
     predictor = SportsPredictor(vault)
-    print("Sports Engine ready.")
+    print("Ciph Sports Engine ready.")
     print(json.dumps(predictor.get_status(), indent=2))
     print("\nGet free API key: https://www.football-data.org/client/register")
     print("Then: /set-football-api YOUR_KEY")
