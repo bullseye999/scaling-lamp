@@ -41,7 +41,9 @@ class IntentRouter:
 
             # Bounty
             r'\bbounty\s+scan\s+(\S+)\b': '/bounty-scan {1}',
+            r'\bbounty\s+scan\b': '/bounty-scan',
             r'\bbounty\s+report\s+(\S+)\b': '/bounty-report {1}',
+            r'\bbounty\s+report\b': '/bounty-report',
             r'\bbounty\s+programs?\b': '/bounty-programs',
 
             # Workflows
