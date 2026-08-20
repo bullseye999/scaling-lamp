@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# job_queue.py - Background job queue for long-running tasks
+# job_queue.py - Background job queue and multi-threaded worker pool
 
 import time
 import uuid
@@ -10,7 +10,7 @@ from datetime import datetime
 from queue import Queue
 
 class JobQueue:
-    """Background job queue. Long tasks don't block chat."""
+    """Asynchronous background job queue with thread workers to prevent blocking interactive chat."""
 
     def __init__(self):
         self.jobs: Dict[str, Dict] = {}
