@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-# state_manager.py - Clean separation of state types
-# System State (truth), Background State (no LLM access), Runtime Snapshot (LLM sees)
+# state_manager.py - Three-tier isolated state store for CIPH
+# Tier 1: System State (Ground Truth, only executor modifies)
+# Tier 2: Background State (Isolated tasks, no LLM access)
+# Tier 3: Runtime Snapshot (Sanitized view exposed to LLM)
 
 import time
 from typing import Dict, Any, List
 
 class StateManager:
-    """Three isolated state stores: System, Background, Snapshot."""
+    """Three isolated state stores: System State, Background State, and Runtime Snapshot."""
 
     def __init__(self):
         # System State - TRUTH (only executor can modify)
