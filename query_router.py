@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# query_router.py - Direct state and calculation answering without LLM overhead
+
 import time
 import re
 import ast
@@ -7,7 +10,7 @@ from typing import Dict, Any, Optional
 
 class QueryRouter:
     """Handles factual questions by directly querying system state.
-    NEVER touches the LLM for state answers. Returns pure facts."""
+    Bypasses LLM inference for deterministic answers to save tokens and eliminate latency."""
 
     def __init__(self, state_manager, vault=None):
         self.state = state_manager
