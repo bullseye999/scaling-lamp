@@ -9,7 +9,6 @@ import time
 import hashlib
 import threading
 import requests
-import sports_skills.football as football
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from cipher_vault import CipherVault
@@ -145,52 +144,44 @@ class SportsPredictor:
 
     def fetch_actual_result(self, home_team: str, away_team: str, match_date: str) -> Optional[str]:
         """Fetch the result of a single match from a specific date."""
-        from datetime import datetime
-
         try:
             date_obj = datetime.strptime(match_date, '%Y-%m-%d')
         except ValueError:
             return None
 
-       # print(f"[Auto] Fetching result for {home_team} vs {away_team} on {match_date}")
+        if not self.api_key:
+            return None
 
         try:
-            # Fetch the schedule for the given date
-            schedule = football.get_daily_schedule(date=str(date_obj.date()))
-            # Structure: schedule['data']['events'] is a list of matches
-            events = schedule.get('data', {}).get('events', [])
-            if not events:
+            date_str = date_obj.strftime('%Y-%m-%d')
+            resp = requests.get(
+                f"{FOOTBALL_API}/matches",
+                headers=self.headers,
+                params={'dateFrom': date_str, 'dateTo': date_str},
+                timeout=10
+            )
+            if resp.status_code != 200:
                 return None
 
-            # Find the match
-            found_match = None
-            for event in events:
-                event_home = event.get('home', {}).get('name', '').lower()
-                event_away = event.get('away', {}).get('name', '').lower()
-
-                if (home_team.lower() == event_home and away_team.lower() == event_away):
-                    found_match = event
-                    break
-
-            if not found_match:
-                return None
-
-            # Extract the result
-            home_score = found_match.get('home', {}).get('score')
-            away_score = found_match.get('away', {}).get('score')
-
-            if home_score is None or away_score is None:
-                return None
-
-            if home_score > away_score:
-                return 'HOME WIN'
-            elif away_score > home_score:
-                return 'AWAY WIN'
-            else:
-                return 'DRAW'
-
+            matches = resp.json().get('matches', [])
+            for match in matches:
+                m_home = match.get('homeTeam', {}).get('name', '').lower()
+                m_away = match.get('awayTeam', {}).get('name', '').lower()
+                if (home_team.lower() in m_home or m_home in home_team.lower()) and \
+                   (away_team.lower() in m_away or m_away in away_team.lower()):
+                    score = match.get('score', {}).get('fullTime', {})
+                    home_score = score.get('home')
+                    away_score = score.get('away')
+                    if home_score is None or away_score is None:
+                        return None
+                    if home_score > away_score:
+                        return 'HOME WIN'
+                    elif away_score > home_score:
+                        return 'AWAY WIN'
+                    else:
+                        return 'DRAW'
+            return None
         except Exception as e:
-            print(f"[Auto] Error fetching result for {home_team} vs {away_team}: {e}")
             return None
 
 
