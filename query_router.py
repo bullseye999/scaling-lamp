@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# query_router.py - Direct state and calculation answering without LLM overhead
-
 import time
 import re
 import ast
@@ -10,7 +7,7 @@ from typing import Dict, Any, Optional
 
 class QueryRouter:
     """Handles factual questions by directly querying system state.
-    Bypasses LLM inference for deterministic answers to save tokens and eliminate latency."""
+    NEVER touches the LLM for state answers. Returns pure facts."""
 
     def __init__(self, state_manager, vault=None):
         self.state = state_manager
@@ -76,13 +73,39 @@ class QueryRouter:
         
         return False
 
+    def _eval_ast_math(self, node):
+        operators = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.Pow: operator.pow,
+            ast.USub: operator.neg,
+            ast.UAdd: operator.pos,
+        }
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        elif isinstance(node, ast.BinOp):
+            left = self._eval_ast_math(node.left)
+            right = self._eval_ast_math(node.right)
+            op_type = type(node.op)
+            if op_type in operators:
+                return operators[op_type](left, right)
+            raise ValueError(f"Unsupported binary operator: {op_type}")
+        elif isinstance(node, ast.UnaryOp):
+            operand = self._eval_ast_math(node.operand)
+            op_type = type(node.op)
+            if op_type in operators:
+                return operators[op_type](operand)
+            raise ValueError(f"Unsupported unary operator: {op_type}")
+        raise ValueError(f"Unsupported AST node: {type(node)}")
+
     def answer_calculation(self, text: str) -> str:
-        """Safe basic calculation evaluator"""
+        """Safe AST-based calculation evaluator (no eval)"""
         expr = re.sub(r'^(calc|calculate|math)\s*', '', text, flags=re.IGNORECASE).strip()
         try:
-            # Evaluate basic math using safe subset
-            clean_expr = re.sub(r'[^0-9+\-*/() .]', '', expr)
-            result = eval(clean_expr, {"__builtins__": {}}, {})
+            tree = ast.parse(expr, mode='eval')
+            result = self._eval_ast_math(tree.body)
             return f"🔢 Calculation Result: {result}"
         except Exception:
             return f"❌ Could not calculate: '{expr}'"
