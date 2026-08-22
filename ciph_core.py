@@ -9,7 +9,25 @@ import time
 import json
 import requests
 import threading
+from pathlib import Path
 from typing import Optional
+from datetime import datetime
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=True)
+except ImportError:
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("'").strip('"'))
 from cipher_vault import CipherVault
 from ciph_kernel_v3 import CiphKernelV3
 from query_router import QueryRouter
@@ -32,12 +50,17 @@ from smart_memory import SmartMemory
 from mood_engine import MoodEngine
 from quantum_vault import QuantumVault
 from enhanced_conversation import CiphConversation
+from ciph_router import CiphRouter
+from bounty_hunter import BountyHunter
+from war_room import WarRoom
+from ciph_autonomous_agent import AutonomousActionAgent
 
 class CiphCore:
     def __init__(self):
         self.vault = CipherVault()
         self.quantum_vault = QuantumVault()
         self.router = BrainRouter()
+        self.ciph_router = CiphRouter()
         self.module_manager = ModuleManager(self.vault)
         self.awareness = SelfAwareness(self.vault)
         # After self.awareness = SelfAwareness(self.vault)
@@ -57,7 +80,8 @@ class CiphCore:
         #self.identity = IdentityGuard(self.vault)
         self.books = BookEngine(self.vault)
         self.trading = self.module_manager.get_module('trading')
-        self.bounty = self.module_manager.get_module('bounty')
+        self.bounty = BountyHunter(self.vault, self.ciph_router)
+        self.war_room = WarRoom(self.vault, self.ciph_router)
         self.orchestrator = self.module_manager.get_module('orchestrator')  # Will be None until loaded
         self.scheduler = TaskScheduler(self.vault, self.module_manager)
         self.security = SecurityLayer(self.vault)
@@ -95,34 +119,25 @@ class CiphCore:
         )
         self.job_queue = JobQueue()
         self.job_queue.start(num_workers=2)
-        # Pin the Operator's identity so Ciph always knows who it's talking to
-        self.smart_memory.pin('operator', 'the Operator — your creator and the person you always talk to')
-        self.smart_memory.pin('ciph_purpose', 'You are the Operator\'s personal AI — not a generic assistant')
-        # WHO OPERATOR IS
-        self.smart_memory.pin('name', 'Operator')
-        self.smart_memory.pin('role', 'Sovereign Operator')
-        self.smart_memory.pin('location', 'Global')
-        self.smart_memory.pin('projects', 'Autonomous system orchestration')
-        self.smart_memory.pin('focus', 'Full system autonomy, clean architecture, intelligence tools')
-        
-        # HOW TO TALK TO OPERATOR
-        self.smart_memory.pin('age_stage', 'Currently in university')
+        self.smart_memory.pin('privacy_rule', 'Never share confidential operator information. You only serve your verified operator.')
+        self.smart_memory.pin('operator', 'Operator — your creator and sovereign system controller')
+        self.smart_memory.pin('ciph_purpose', 'You are a sovereign personal AI system — not a generic assistant')
 
-        # PERSONALITY
+        # OPERATOR PERSONA
 
-        # GOALS
+        # GOALS & SYSTEM VISION
+        self.smart_memory.pin('main_goal', 'Autonomous cybersecurity intelligence, bug bounty reconnaissance, OSINT, and strategic execution.')
 
-        # CURRENT SITUATION
-
-        # HOW TO TALK TO OPERATOR
-        self.smart_memory.pin('clearnet_access', 'Ciph can access the clearnet. OSINT module monitors live RSS feeds, trading engine hits live crypto APIs, darknet monitor accesses clearnet security feeds through Tor. Never say you cannot access the web.')
-        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in scan results or memory. If asked about darknet activity without a recent scan, say: run /darknet-scan first.')
-        self.smart_memory.pin('response_style', 'When the Operator asks for help with a goal, immediately map your actual capabilities to that goal. Never give generic advice. Think: what can I actually do right now that moves this forward.')
-        self.smart_memory.pin('capability_awareness', 'Your real capabilities: darknet threat intel via Tor, bug bounty vulnerability scanning, live crypto market data and arbitrage signals, OSINT on targets, port scanning, web vulnerability detection, credential leak monitoring, trading signals. Use these when relevant.')
-        self.smart_memory.pin('honesty_rule', 'Never claim capabilities that are not built. the Operator knows the codebase. Lying to him destroys trust. Always say what is real and what is not yet built.')
+        # HOW TO COMMUNICATE
+        self.smart_memory.pin('clearnet_access', 'Ciph can access intelligence feeds. OSINT module monitors live feeds, trading engine hits market APIs, darknet monitor accesses security feeds through Tor.')
+        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in verified scan results or memory.')
+        self.smart_memory.pin('response_style', 'When asked for strategic direction, immediately map capabilities to goals. Never give generic advice.')
+        self.smart_memory.pin('capability_awareness', 'Capabilities: Tor darknet intelligence, bug bounty surface scanning, live market signals, OSINT, and adversarial simulation.')
         self.mood_engine = MoodEngine()
         self.file_analyzer = FileAnalyzer(self.vault)
-        self.conversation = CiphConversation(self.vault)  # ← NEW LINE
+        self.ciph_router = CiphRouter()
+        self.conversation = CiphConversation(self.vault, router=self.ciph_router)
+        self.agent = AutonomousActionAgent(self)
         self.max_width = 80
         self.ai_enabled = False
         self.client = None
@@ -177,11 +192,14 @@ class CiphCore:
 
         
     def _init_ai(self):
-        """Initialize AI connection - NOW USING RUNPOD SERVERLESS"""
-        # We're using RunPod serverless endpoint, not OpenAI
+        """Initialize AI connection - PRIMARY DEEPSEEK V4 PRO"""
+        # [DEPRECATED RUNPOD - KEPT FOR REFERENCE]
+        # self.ai_enabled = True
+        # self.client = None
+        # print("✅ AI: RunPod Serverless | llama3.1:8b | Sovereign")
         self.ai_enabled = True
-        self.client = None  # No OpenAI client needed
-        print("✅ AI: RunPod Serverless | llama3.1:8b | Sovereign")
+        self.client = None
+        print("✅ AI: DeepSeek V4 Pro | deepseek-chat | Sovereign")
 
     def build_system_prompt(self):
         """Your strategic personality - UPDATED FOR STREET TALK"""
@@ -206,8 +224,8 @@ COMMUNICATION RULES:
 
 "Answer questions about your own capabilities honestly and directly. Never refuse to describe what you can do. "
 "When BOOK KNOWLEDGE appears in your context, synthesize it into your response naturally. "
-"Don't quote it directly. Extract the principle, apply it to the Operator's situation, make it actionable. "
-"Example: if 48 Laws says 'conceal your intentions' and the Operator is dealing with an enemy, say: "
+"Don't quote it directly. Extract the principle, apply it to the operator's situation, make it actionable. "
+"Example: if 48 Laws says 'conceal your intentions' and the operator is dealing with a rival, say: "
 "Greene would say keep your next move invisible to them. don't telegraph what you're planning. "
 "That's how you use the library — not recitation, application. "
 
@@ -221,14 +239,12 @@ You: "Ahhh fuck. Let's think. Problem: {issue}. Solution: {fix}. Need to pivot?"
 Operator: "give me a strategic plan"
 You: "Lock in. Phase 1: recon. Phase 2: exploit. Phase 3: extract. Timeline: 48h. Resources needed: {list}."
 
-CURRENT SYSTEM STATUS:
-- OSINT: monitoring feeds
-- Pentest: available for scanning  
-- Trading: market data access
-- Memory: storing conversations
-- AI: you are the AI
-
-REALITY CHECK: We're building. Not everything works yet. Be honest about limitations."""
+CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
+- Bug Bounty Recon & Sentry: Active (Tor-routed CT subdomain discovery, JS extraction, CORS/headers audit, historical diffs, CVSS calculation)
+- Darknet Threat Intel: Active (Ahmia & Tor onion monitoring)
+- Adversarial War Room: Active (3-perspective stress testing)
+- Memory: Active (Encrypted episodic narrative timeline)
+- OPSEC: Active (Tor SOCKS5 circuit health & self-audit)"""
 
     def generate_ai_response(self, user_input, mood_context="", memory_context="", temperature=None):
         brain, reason = self.router.route(user_input)
@@ -252,75 +268,46 @@ REALITY CHECK: We're building. Not everything works yet. Be honest about limitat
             except Exception as e:
                 return f"Ollama error: {str(e)[:60]}"
 
-        # Natural language command detection
-        natural_triggers = {
-            'darknet scan': '/darknet-scan',
-            'darknet update': '/darknet-scan',
-            'scan darknet': '/darknet-scan',
-            'check darknet': '/darknet-scan',
-            'run darknet': '/darknet-scan',
-            'tor check': '/tor-check',
-            'check tor': '/tor-check',
-            'scan bounty': '/bounty-scan',
-            'bounty scan': '/bounty-scan',
-            'check bounty': '/bounty-scan',
-            'security scan': '/security-scan',
-            'scan ports': '/port-scan',
-            'analyze myself': '/self-analyze',
-            'self analyze': '/self-analyze',
-            'check upgrades': '/upgrades',
-            'show upgrades': '/upgrades',
-            'market data': '/market-data',
-            'check market': '/market-data',
-            'ghost mode': '/ghost-mode',
-            'go ghost': '/ghost-mode',
-            'reality check': '/reality-check',
-            'status check': '/status',
-            'monetize plan': '/monetize-plan',
-            'money ops': '/money-ops',
-            'execute plan': '/execute-plan',
-            'next step': '/next-step',
-            'start tor': '/tor-check'
-        }
+        # Natural language command detection via intent router
+        if hasattr(self, 'intent_router') and self.intent_router:
+            intent, cmd = self.intent_router.classify(user_input)
+            if intent == 'COMMAND' and cmd:
+                return self.handle_command(cmd)
 
-        input_lower = user_input.lower()
-        for phrase, command in natural_triggers.items():
-            if phrase in input_lower:
-                return self.handle_command(command)
-
-        # Route to RunPod serverless via local proxy
+        # Route through Autonomous Action Agent
         if self.ai_enabled:
             try:
-                # Use your local proxy
-                proxy_url = "http://127.0.0.1:5001/v1/chat/completions"
-        
-                # Build messages
-                messages = [
-                    {"role": "system", "content": "You are Ciph, the Operator's personal AI. Talk short and direct."},
-                    {"role": "user", "content": user_input}
-                ]
-        
-                payload = {
-                    "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": 500
-                }
-        
-                response = requests.post(proxy_url, json=payload, timeout=180)
-                if response.status_code == 200:
-                    data = response.json()
-                    raw = data['choices'][0]['message']['content']
-                    # Apply personality if available
-                    if hasattr(self, 'conversation') and hasattr(self.conversation, 'personality'):
-                        return self.conversation.personality.inject_personality(raw)
-                    return raw
-                else:
-                    return f"Proxy error: {response.status_code}"
-            
-            except requests.exceptions.ConnectionError:
-                return "‖ RunPod proxy not running. Start with: python ciph_proxy.py ‖"
+                if hasattr(self, 'agent') and self.agent:
+                    return self.agent.evaluate_and_execute(
+                        user_input,
+                        mood_context=mood_context,
+                        memory_context=memory_context,
+                        book_context=book_context
+                    )
+                elif hasattr(self, 'conversation') and self.conversation:
+                    return self.conversation.process_input(
+                        user_input,
+                        temperature=temperature or 0.3,
+                        mood_context=mood_context,
+                        memory_context=memory_context,
+                        book_context=book_context
+                    )
+                # Fallback to router directly
+                router = getattr(self, 'ciph_router', None) or CiphRouter()
+                prompt = self.build_system_prompt()
+                return router.think(user_input, [], prompt, temperature=0.3)
             except Exception as e:
-                return f"‖ RunPod error: {str(e)[:60]} ‖"
+                return f"‖ DeepSeek V4 Pro error: {str(e)[:60]} ‖"
+
+        # [DEPRECATED RUNPOD PROXY CALL - KEPT FOR REFERENCE]
+        # try:
+        #     proxy_url = "http://127.0.0.1:5001/v1/chat/completions"
+        #     messages = [{"role": "system", "content": "..."}, {"role": "user", "content": user_input}]
+        #     payload = {"messages": messages, "temperature": 0.7, "max_tokens": 1024}
+        #     response = requests.post(proxy_url, json=payload, timeout=180)
+        #     ...
+        # except Exception as e:
+        #     ...
 
         return "‖ AI not available ‖"
     
@@ -348,6 +335,37 @@ REALITY CHECK: We're building. Not everything works yet. Be honest about limitat
         
         # Final fallback
         return "‖ Response format not recognized ‖"
+
+    def get_daily_briefing(self) -> str:
+        """Generate a complete, terminal-based encrypted executive briefing."""
+        # 1. OPSEC & Tor Check
+        tor_info = self.darknet.verify_tor() if hasattr(self, 'darknet') else {}
+        tor_status = f"✅ LIVE (Exit: {tor_info.get('exit_ip', 'unknown')})" if tor_info.get('tor_active') else "⚠️ DIRECT (Tor Inactive)"
+
+        # 2. Active Bounty Scopes
+        scopes = self.vault.get_active_bounty_scopes() if hasattr(self, 'vault') else []
+        scope_summary = f"{len(scopes)} active programs locked" if scopes else "None locked (Open audit mode)"
+
+        # 3. Latest Darknet Signals
+        clustered = self.darknet.cluster_threat_signals() if hasattr(self, 'darknet') else {}
+        t1_count = len(clustered.get("tier_1_actionable", []))
+
+        # 4. Narrative Timeline
+        milestones = self.vault.get_narrative_milestones(limit=1) if hasattr(self, 'vault') else []
+        last_milestone = milestones[0]['summary'] if milestones else "Initial session bootstrap."
+
+        lines = [
+            "═" * 60,
+            "🏛️ CIPH EXECUTIVE INTELLIGENCE BRIEFING",
+            "═" * 60,
+            f"• OPSEC / Tor Circuit   : {tor_status}",
+            f"• AI Core Engine        : DeepSeek V4 Pro (Sovereign)",
+            f"• Bug Bounty Workbench  : {scope_summary}",
+            f"• Tier-1 Threat Signals : {t1_count} critical/bounty alerts on record",
+            f"• Strategic Milestone   : {last_milestone}",
+            "═" * 60
+        ]
+        return "\n".join(lines)
 
     def is_chat_query(self, user_input: str) -> bool:
         """Detect if this is pure chat (greetings, opinions, follow-ups) that should go directly to LLM."""
@@ -399,7 +417,27 @@ REALITY CHECK: We're building. Not everything works yet. Be honest about limitat
 
     def handle_command(self, user_input):
         """Handle special commands - UPDATED WITH PROPER ORCHESTRATOR LOADING"""
-        if user_input == '/status':
+        if user_input in ['/model-status', '/engine-status', '/router-status']:
+            router = getattr(self, 'ciph_router', None) or (self.conversation.router if hasattr(self, 'conversation') else None) or CiphRouter()
+            return router.get_status_formatted()
+
+        elif user_input.startswith('/switch-model'):
+            # [FUTURE PLACEHOLDER: Model Switching - RunPod toggle commented out for reference]
+            # # if 'runpod' in user_input: ...
+            return "‖ Active Model: DeepSeek V4 Pro (deepseek-chat). Dual-engine toggling is disabled; V4 Pro is the unified primary engine. ‖"
+
+        elif user_input in ['/test-deepseek', '/ping-model', '/test-model']:
+            router = getattr(self, 'ciph_router', None) or (self.conversation.router if hasattr(self, 'conversation') else None) or CiphRouter()
+            ping_res = router.test_deepseek()
+            if ping_res.get('success'):
+                return f"✅ DeepSeek V4 Pro ping successful ({ping_res.get('latency_ms')} ms) - Model: {ping_res.get('model')}"
+            return f"❌ DeepSeek V4 Pro ping failed: {ping_res.get('error')}"
+
+        elif user_input in ['/test-runpod', '/runpod-test', '/testrunpod', '/ping-runpod'] or user_input.startswith('/test-runpod'):
+            # [DEPRECATED RUNPOD TEST ROUTE]
+            return "‖ RunPod is deprecated. CIPH is running on DeepSeek V4 Pro. Use /model-status or /test-deepseek. ‖"
+
+        elif user_input == '/status':
             ai_status = "Active" if self.ai_enabled else "Disabled"
             kg_stats = self.memory.get_knowledge_graph_stats() if self.memory else {}
             osint_status = self.osint.get_status() if self.osint else {}
@@ -518,7 +556,7 @@ REALITY CHECK: We're building. Not everything works yet. Be honest about limitat
             #return f"Mode: {status['mode']} | Configured: {status['configured']}"
         
         # OSINT COMMANDS
-        elif user_input == '/osint' or "darknet update" in user_input.lower() or "threat update" in user_input.lower():
+        elif user_input in ['/osint', 'darknet update', 'threat update']:
             # FORCE CLEARNET FOR INTEL SCAN
             was_ghost = self.tor_proxy is not None
             
@@ -1112,60 +1150,220 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             module = user_input.replace('/inspect ', '').strip()
             return self.awareness.get_module_report(module)
 
-        # BOUNTY HUNTING COMMANDS
-        elif user_input.startswith('/bounty-scan '):
-            url = user_input[13:].strip()
-            if not url.startswith(('http://', 'https://')):
-                url = 'http://' + url
-            if not url:
-                return "‖ Usage: /bounty-scan <url> ‖"
-            try:
-                bounty = self.module_manager.get_module('bounty')
-                if not bounty:
-                    return "‖ Bounty module not loaded. Use /load bounty ‖"
-                results = bounty.scan_website(url)
-                return f"‖ Bounty scan: {results['vulnerabilities_found']} vulnerabilities found ‖ Risk: {results['risk_level']} ‖"
-            except Exception as e:
-                return f"‖ Bounty scan error: {e} ‖"
+        # BOUNTY HUNTING & SCOPE SUITE
+        elif user_input.startswith('/bounty-scope') or user_input.startswith('/bounty-rules'):
+            args = user_input.split(maxsplit=1)
+            if len(args) < 2:
+                return "‖ Usage: /bounty-scope <policy text or URL> ‖"
+            res = self.bounty.ingest_scope(args[1])
+            if res.get("success"):
+                in_s = ", ".join(res.get("in_scope", []))
+                return f"✅ Bounty Scope Ingested: {res['program_name']}\n• In-Scope: {in_s}\n• Prohibited: {', '.join(res.get('prohibited_actions', []))}"
+            return f"❌ Failed to ingest scope: {res.get('error')}"
 
-        elif user_input.startswith('/bounty-report '):
-            url = user_input[15:].strip()
-            if not url:
-                return "‖ Usage: /bounty-report <url> ‖"
-            try:
-                bounty = self.module_manager.get_module('bounty')
-                if not bounty:
-                    return "‖ Bounty module not loaded. Use /load bounty ‖"
-                report = bounty.generate_bounty_report(url)
-                # Return first few lines of report
-                preview = '\n'.join(report.split('\n')[:8])
-                return f"‖ BOUNTY REPORT PREVIEW ‖\n{preview}\n‖ Use memory search for full report ‖"
-            except Exception as e:
-                return f"‖ Report error: {e} ‖"
+        elif user_input.startswith('/bounty-scan'):
+            args = user_input.split(maxsplit=1)
+            if len(args) < 2:
+                return "‖ Usage: /bounty-scan <target_url_or_domain> ‖"
+            target = args[1].strip()
+            res = self.bounty.deep_scan(target)
+            if not res.get("success"):
+                return f"❌ {res.get('error')}"
+            findings_str = "\n".join(f"  • [{f['severity']}] {f['type']}: {f['details']}" for f in res.get('findings', [])) or "  • Clean surface. No immediate vulnerabilities detected."
+            return (
+                f"🎯 BOUNTY SCAN: {res['domain']} (Risk: {res['risk_level']})\n"
+                f"• Scope Status: {res['scope_status']}\n"
+                f"• Server: {res['http_info'].get('server')}\n"
+                f"• Findings ({res['findings_count']}):\n{findings_str}\n"
+                f"💡 Run /bounty-report {res['domain']} to generate HackerOne report."
+            )
 
-        elif user_input == '/bounty-programs':
-            try:
-                bounty = self.module_manager.get_module('bounty')
-                if not bounty:
-                    return "‖ Bounty module not loaded. Use /load bounty ‖"
-                programs = bounty.monitor_bounty_programs()
-                return f"‖ Bounty Programs: {len(programs)} active programs monitored ‖"
-            except Exception as e:
-                return f"‖ Programs error: {e} ‖"
+        elif user_input.startswith('/bounty-report'):
+            args = user_input.split(maxsplit=1)
+            target = args[1].strip() if len(args) > 1 else self.bounty.last_scan_target
+            if not target:
+                return "‖ Usage: /bounty-report <target_domain> (or run /bounty-scan first) ‖"
+            rep_res = self.bounty.generate_elite_report(target)
+            if not rep_res.get("success"):
+                return f"❌ {rep_res.get('error')}"
+            return "\n".join([
+                f"📄 BUG BOUNTY REPORT GENERATED (ID: #{rep_res['report_id']})",
+                f"• Target   : {rep_res['target']}",
+                f"• CVSS 3.1 : {rep_res['cvss_score']} ({rep_res['severity']})",
+                f"• Vector   : {rep_res['vector_string']}",
+                f"• Saved To : {rep_res['report_path']}",
+                "═" * 60,
+                rep_res['report_content']
+            ])
 
-        elif user_input.startswith('/auto-bounty '):
-            targets = user_input[13:].strip().split(',')
-            if not targets:
-                return "‖ Usage: /auto-bounty <url1,url2,url3> ‖"
-            try:
-                bounty = self.module_manager.get_module('bounty')
-                if not bounty:
-                    return "‖ Bounty module not loaded. Use /load bounty ‖"
-                results = bounty.automated_bounty_hunt(targets)
-                summary = results['summary']
-                return f"‖ Auto-bounty: {summary['total_vulnerabilities']} vulns across {summary['total_targets']} targets ‖ Risk: {summary['highest_risk']} ‖"
-            except Exception as e:
-                return f"‖ Auto-bounty error: {e} ‖"
+        elif user_input in ['/bounty-list', '/bounties', '/bounty-status', '/bounty-programs']:
+            return self.bounty.list_bounties_summary()
+
+        # RECON CHANGE DETECTION, HIT LIST & ATTACK PATHS
+        elif user_input.startswith('/what-changed') or user_input.startswith('/recon-diff'):
+            args = user_input.split(maxsplit=1)
+            target = args[1].strip() if len(args) > 1 else None
+            diff = self.bounty.get_historical_diffs(target)
+            if not diff.get("success"):
+                return diff.get("error", "Failed to compute diffs.")
+            
+            lines = [
+                "═" * 60,
+                f"🔄 HISTORICAL ASSET DIFF ENGINE: {diff['target']}",
+                "═" * 60,
+                f"• Total Delta Alterations: {diff['total_changes']}"
+            ]
+            if diff.get('new_subdomains'):
+                lines.append("\n[ 🆕 NEW SUBDOMAINS DETECTED (HIGH PRIORITY) ]")
+                for s in diff['new_subdomains']:
+                    lines.append(f"  • {s}")
+            if diff.get('new_endpoints'):
+                lines.append("\n[ ⚡ NEW ENDPOINTS DETECTED ]")
+                for ep in diff['new_endpoints']:
+                    lines.append(f"  • {ep}")
+            if diff.get('header_changes'):
+                lines.append("\n[ 🛡️ HEADER & INFRASTRUCTURE CHANGES ]")
+                for hc in diff['header_changes']:
+                    lines.append(f"  • {hc}")
+            if diff.get('removed_subdomains'):
+                lines.append(f"\n• Removed / Offline Subdomains: {', '.join(diff['removed_subdomains'][:5])}")
+            if diff['total_changes'] == 0:
+                lines.append("\n• Surface is identical to previous scan. No asset drift detected.")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        elif user_input.startswith('/hit-list') or user_input.startswith('/top-targets'):
+            args = user_input.split(maxsplit=1)
+            target = args[1].strip() if len(args) > 1 else None
+            hit_list = self.bounty.generate_hit_list(target)
+            if not hit_list:
+                return "🎯 No active hit list generated. Run /bounty-scan <target> first."
+            
+            lines = [
+                "═" * 60,
+                "🎯 CIPH SMART PRIORITIZATION: TOP 5 HIT LIST",
+                "═" * 60
+            ]
+            for i, h in enumerate(hit_list, 1):
+                lines.append(f"{i}. [{h['severity']}] Score: {h['score']} | Asset: {h['asset']}")
+                lines.append(f"   • Vector: {h['title']}")
+                lines.append(f"   • Action: {h['action']}\n")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        elif user_input.startswith('/chain-reaction') or user_input.startswith('/attack-path'):
+            args = user_input.split(maxsplit=1)
+            target = args[1].strip() if len(args) > 1 else None
+            chain_res = self.bounty.map_exploit_chains(target)
+            if not chain_res.get("success"):
+                return chain_res.get("error", "Failed to map exploit chains.")
+            
+            return "\n".join([
+                "═" * 60,
+                f"🧩 CIPH EXPLOIT PATH & ATTACK CHAIN MAP: {chain_res['target']}",
+                "═" * 60,
+                chain_res['analysis'],
+                "═" * 60
+            ])
+
+        elif user_input in ['/watchtower', '/watchtower-check', '/sentry']:
+            wt_res = self.bounty.run_watchtower_cycle()
+            if not wt_res.get("success"):
+                return wt_res.get("message", "Watchtower check completed.")
+            alerts_str = "\n".join(f"  • {a}" for a in wt_res.get('alerts_generated', [])) or "  • All assets quiet. Zero unexpected CT certificate drift."
+            return (
+                f"📡 WATCHTOWER PASSIVE SENTRY REPORT\n"
+                f"• Programs Monitored: {wt_res['programs_monitored']}\n"
+                f"• Active Alerts:\n{alerts_str}"
+            )
+
+        elif user_input in ['/ghost-rating', '/ghost-score', '/opsec', '/opsec-audit']:
+            opsec = self.bounty.audit_ghost_opsec()
+            lines = [
+                "═" * 60,
+                f"🔐 CIPH OPSEC GHOST AUDIT: {opsec['score']}/100 ({opsec['status']})",
+                "═" * 60,
+                f"• Exit IP      : {opsec['exit_ip']}",
+                f"• Jitter & Ping: {opsec['latency_ms']} ms",
+                "\n[ POSTURE VERIFICATION ]"
+            ]
+            for chk in opsec['checks']:
+                lines.append(f"• {chk}")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        elif user_input in ['/assets', '/asset-inventory', '/global-assets', '/inventory']:
+            inv = self.vault.get_global_assets_summary()
+            lines = [
+                "═" * 60,
+                "🗺️ CIPH GLOBAL ATTACK SURFACE & ASSET MATRIX",
+                "═" * 60,
+                f"• Tracked Targets      : {inv['targets_count']} ({', '.join(inv['targets']) if inv['targets'] else 'None'})",
+                f"• Total Subdomains     : {inv['subdomains_count']}",
+                f"• Exposed Endpoints    : {inv['exposed_endpoints_count']}",
+                f"• Client JS Routes     : {inv['js_routes_count']}"
+            ]
+            if inv['subdomains']:
+                lines.append("\n[ TOP DISCOVERED SUBDOMAINS ]")
+                for s in inv['subdomains'][:12]:
+                    lines.append(f"  • {s}")
+            if inv['exposed_endpoints']:
+                lines.append("\n[ EXPOSED ENDPOINTS ]")
+                for ep in inv['exposed_endpoints'][:8]:
+                    lines.append(f"  • {ep}")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        elif user_input in ['/opsec-history', '/opsec-trends', '/ghost-history']:
+            hist = self.vault.get_opsec_history(limit=10)
+            if not hist:
+                return "🔐 No OPSEC audit history found. Run /ghost-rating or speak to Ciph."
+            lines = [
+                "═" * 60,
+                "📊 CIPH OPSEC GHOST AUDIT HISTORY",
+                "═" * 60
+            ]
+            for h in hist:
+                t_str = datetime.fromtimestamp(h['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+                bar = "█" * int(h['score'] / 10)
+                lines.append(f"• {t_str} | {bar} {h['score']}/100 | IP: {h['exit_ip']} | {h['latency_ms']}ms | {h['status']}")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        # DEEP TOR SEARCH & THREAT INTELLIGENCE
+        elif user_input.startswith('/darknet-deep ') or user_input.startswith('/darknet-search '):
+            query = user_input.split(maxsplit=1)[1].strip()
+            results = self.darknet.search_darknet(query)
+            if not results:
+                return f"🌑 No darknet search results found for '{query}' across active Tor engines."
+            lines = [f"🌑 DARKNET TOR SEARCH RESULTS FOR: '{query}'", "═" * 56]
+            for i, r in enumerate(results, 1):
+                lines.append(f"{i:02d}. {r['title']} [{r.get('engine', 'Tor')}]\n    Link: {r['link']}\n    {r['snippet']}")
+            lines.append("═" * 56)
+            return "\n".join(lines)
+
+        # EXECUTIVE BRIEFING & WAR ROOM
+        elif user_input in ['/daily-brief', '/briefing', '/morning-brief']:
+            return self.get_daily_briefing()
+
+        elif user_input.startswith('/war-room ') or user_input.startswith('/red-team '):
+            plan = user_input.split(maxsplit=1)[1].strip()
+            res = self.war_room.stress_test(plan)
+            return "\n".join([
+                "═" * 60,
+                "⚔️ CIPH WAR ROOM ADVERSARIAL STRESS-TEST",
+                "═" * 60,
+                res['simulation_analysis']
+            ])
+
+        elif user_input in ['/timeline', '/narrative-timeline', '/memory-timeline']:
+            return self.smart_memory.get_narrative_timeline_formatted()
+
+        # DUAL-ENGINE ROUTER COMMANDS
+        elif user_input in ['/router-status', '/router']:
+            if hasattr(self, 'ciph_router') and self.ciph_router:
+                return self.ciph_router.get_status_formatted()
+            return "‖ Router not initialized ‖"
 
         # MODULE MANAGER COMMANDS
         elif user_input == '/modules':
@@ -1315,7 +1513,12 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         elif user_input == '/darknet-scan':
             # Define the scan function to run in background
             def run_scan():
-                return self.darknet.full_scan()
+                scan_res = self.darknet.full_scan()
+                if hasattr(self, 'smart_memory') and self.smart_memory:
+                    ctx = self.darknet.get_last_scan_context()
+                    if ctx:
+                        self.smart_memory.pin('last_darknet_scan', ctx)
+                return scan_res
     
             # Submit to job queue (non-blocking)
             job_id = self.job_queue.submit(run_scan)
@@ -1348,7 +1551,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
 
         elif user_input == '/darknet-status':
             status =self.darknet.get_status()
-            return f"Last scan: {status['Last_scan']} | Feeds: {status['feeds_monitored']} | Alerts: {status['total_alerts']}"
+            return f"Last scan: {status.get('last_scan', 'Never')} | Feeds: {status.get('feeds_monitored', 0)} | Alerts: {status.get('total_alerts', 0)}"
 
         elif user_input == '/tor-check':
             tor = self.darknet.verify_tor()
@@ -1370,51 +1573,45 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "‖ Security Scan: No critical issues found ‖"
 
         elif user_input == '/clean-footprints':
-            return self.security.footprint_cleaner()
+            cleaned = self.security.clean_shell_footprints()
+            return f"‖ Shell history wiped. {cleaned['history_files_cleared']} files cleared ‖"
 
         elif user_input == '/integrity-check':
-            integrity = self.security.integrity_check()
-            status = "ALL SYSTEMS OK" if integrity['all_critical_files_present'] else "SYSTEM COMPROMISED"
-            return f"‖ Integrity Check: {status} ‖ Files: {len(integrity['files_checked'])} checked ‖"
+            modified = self.security.verify_core_integrity()
+            if modified:
+                return f"‖ Core integrity ALERT: {len(modified)} files modified ‖"
+            return "‖ Core integrity: OK ‖"
 
         elif user_input == '/backup-now':
-            return self.security.encrypted_backup()
+            dest = self.security.create_encrypted_backup()
+            if dest:
+                return f"‖ Encrypted backup created: {dest} ‖"
+            return "‖ Backup failed ‖"
 
-        elif user_input.startswith('/emergency-wipe '):
-            confirmation = user_input[16:].strip()
-            return self.security.emergency_wipe(confirmation)
+        elif user_input == '/emergency-wipe':
+            print("‖ EMERGENCY WIPE INITIATED ‖")
+            return "‖ Emergency wipe not implemented for safety ‖"
 
         # FILE ANALYZER COMMANDS
         elif user_input == '/scan-project':
-            scan_results = self.file_analyzer.scan_project(".")
-            if 'error' in scan_results:
-                return f"‖ Project scan failed: {scan_results['error']} ‖"
-            
-            file_count = scan_results.get('file_count', 0)
-            total_size = scan_results.get('total_size', 0)
-            file_types = list(scan_results.get('files_by_type', {}).keys())
-            
-            return f"‖ Project scanned: {file_count} files ({total_size} bytes) ‖ Types: {file_types} ‖"
+            summary = self.file_analyzer.get_project_summary(".")
+            return f"‖ Project: {summary['total_files']} files, {summary['total_lines']} lines of code ‖\n" \
+                   f"Languages: {', '.join(summary['languages'].keys())}"
         
         elif user_input.startswith('/read-file '):
-            file_path = user_input[11:].strip()
-            if not file_path:
-                return "‖ Usage: /read-file <filename> ‖"
-            
-            content = self.file_analyzer.read_file_content(file_path, max_lines=20)
-            if 'error' in content:
-                return f"‖ File error: {content['error']} ‖"
-            
-            lines_preview = content['content'].split('\n')[:10]
-            preview = '\n'.join([f"{i+1}: {line}" for i, line in enumerate(lines_preview) if line.strip()])
-            
-            truncated = " (truncated)" if content.get('truncated', False) else ""
-            return f"‖ {file_path} - {content['total_lines']} lines{truncated} ‖\n{preview}"
+            filepath = user_input.replace('/read-file ', '').strip()
+            content = self.file_analyzer.read_file_safe(filepath)
+            if content:
+                # Truncate if too long
+                if len(content) > 1000:
+                    return f"‖ {filepath} ({len(content)} chars) ‖\n{content[:1000]}\n... [truncated]"
+                return f"‖ {filepath} ‖\n{content}"
+            return f"‖ Cannot read {filepath} ‖"
         
         elif user_input.startswith('/search-in-files '):
-            search_term = user_input[17:].strip()
+            search_term = user_input.replace('/search-in-files ', '').strip()
             if not search_term:
-                return "‖ Usage: /search-in-files <search_term> ‖"
+                return "‖ Usage: /search-in-files <term> ‖"
             
             results = self.file_analyzer.search_in_files(search_term, ".", ['.py', '.txt', '.md', '.js'])
             if results['results_found'] > 0:
@@ -1424,11 +1621,11 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 return response.strip()
             return f"‖ No results found for '{search_term}' ‖"
         
-        elif 'show report' in user_input.lower() or 'say d report' in user_input.lower() or 'full report' in user_input.lower() or user_input == '/darknet-report':
-            if hasattr(self, 'osint') and self.osint:
-                return self.osint.get_full_report()
-            elif hasattr(self, 'darknet') and self.darknet:
-                return str(self.darknet.get_status())
+        elif user_input in ['/darknet-report', '/detailed-darknet-scan', '/alerts', '/darknet-alerts', 'darknet report', 'darknet alerts']:
+            if hasattr(self, 'darknet') and self.darknet:
+                return self.darknet.get_detailed_report()
+            elif hasattr(self, 'osint') and self.osint:
+                return str(self.osint.get_status())
             return "No intel module loaded."
 
 
@@ -1536,7 +1733,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 return result['signal']
             return "Usage: /predict Arsenal vs Chelsea"
 
-        elif 'predictions today' in user_input.lower() or user_input == '/today':
+        elif user_input in ['predictions today', '/today', 'today predictions']:
             return self.sports.predict_today()
 
         elif user_input.startswith('/result '):
@@ -1624,6 +1821,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 self.sync_system_state()
                 self.formatter.print_ciph(response)
                 return response
+            else:
+                unknown_msg = f"‖ Unknown command: {user_input}. Type /help for available system commands. ‖"
+                self.formatter.print_ciph(unknown_msg)
+                return unknown_msg
     
         # 2. Handle natural language commands via intent router
         intent, cmd = self.intent_router.classify(user_input)
@@ -1648,14 +1849,22 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         mood_context = self.mood_engine.get_style_injection(mood)
         temperature = self.mood_engine.get_temperature(mood)
         memory_context = self.smart_memory.build_memory_context(user_input)
+
+        # Contextual darknet intelligence injection
+        if hasattr(self, 'darknet') and self.darknet:
+            input_lower = user_input.lower()
+            if any(kw in input_lower for kw in ['darknet', 'threat', 'alert', 'finding', 'scan', 'intel', 'bounty', 'vulnerability', 'cve']):
+                darknet_ctx = self.darknet.get_last_scan_context()
+                if darknet_ctx:
+                    memory_context = f"{memory_context}\n\n[LATEST DARKNET INTEL RESULTS]\n{darknet_ctx}"
+
         book_context = self.books.build_book_context(user_input)
     
-        # Use conversation directly (not kernel)
-        response = self.conversation.process_input(
+        # Use unified AI response generator (with Autonomous Agent)
+        response = self.generate_ai_response(
             user_input,
             mood_context=mood_context,
             memory_context=memory_context,
-            book_context=book_context,
             temperature=temperature
         )
     
@@ -1864,9 +2073,16 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "/exit"
 
     def graceful_shutdown(self):
-        """Cleanly stop background services and save states before exit"""
+        """Cleanly stop background services, compress episodic narrative, and save states before exit"""
         print("\nCiph: ‖ Performing graceful shutdown... ‖")
         try:
+            # Compress session narrative into episodic timeline node
+            if hasattr(self, 'conversation') and hasattr(self, 'smart_memory'):
+                print("Ciph: 🧠 Compressing session dialogue into episodic milestone...")
+                node = self.smart_memory.compress_session_narrative(self.conversation.history, self.ciph_router)
+                if node:
+                    print(f"Ciph: ✅ Milestone #{node.get('milestone_id', 1)} archived to vault timeline.")
+
             if hasattr(self, 'scheduler') and self.scheduler:
                 self.scheduler.stop_scheduler()
             if hasattr(self, 'sports') and self.sports:
@@ -1884,12 +2100,16 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
     def run_ssh_session(self):
         """Main SSH session loop"""
         self.print_banner()
+        # On-login executive briefing
+        try:
+            print(self.get_daily_briefing())
+        except Exception:
+            pass
         print("‖ Type /help for commands, /exit to quit ‖")
-        print("‖ /load orchestrator - Load autonomous agent system ‖")
-        print("‖ /auto-mode - Start all autonomous workflows ‖")
-        print("‖ /workflow-status - Check autonomous operations ‖")
-        print("‖ /start-workflow <name> - Start specific workflow ‖")
-        print("‖ /reality-check - See actual system status (not AI fantasy) ‖\n")
+        print("‖ /daily-brief - View encrypted executive briefing ‖")
+        print("‖ /bounty-scope <text/url> - Lock bug bounty rules of engagement ‖")
+        print("‖ /bounty-scan <target> - Execute Tor-routed passive surface audit ‖")
+        print("‖ /war-room <plan> - Conduct 3-perspective adversarial stress test ‖\n")
         
         while True:
             try:
@@ -1900,27 +2120,24 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                     break
                 elif user_input == '/help':
                     print("\nAGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
+                    print("BOUNTY RECON & TRIAGE: /bounty-scope <text/url>, /bounty-scan <target>, /bounty-report <target>, /bounty-list")
+                    print("INTELLIGENCE & SENTRY: /what-changed <target>, /hit-list <target>, /chain-reaction <target>, /watchtower, /ghost-rating")
+                    print("DARKNET & TOR INTEL: /darknet-deep <query>, /darknet-scan, /darknet-report, /ghost-mode, /tor-status")
+                    print("STRATEGY & WAR ROOM: /daily-brief, /war-room <plan>, /timeline")
                     print("PENTESTING: /port-scan, /web-scan, /security-audit, /network-discovery, /ssl-scan")
                     print("TRADING: /market-data, /arbitrage-scan, /market-trends, /wealth-strategy, /trading-signals, /portfolio-health")
-                    print("BOUNTY HUNTING: /bounty-scan, /bounty-report, /bounty-programs, /auto-bounty")
-                    print("DARKNET INTELLIGENCE: /osint, /darknet-dashboard, /crypto-monitor, /osint-status, /watch, /alerts")
                     print("FILES: /scan-project, /read-file <file>, /search-in-files <term>, /project-status")
                     print("SECURITY: /security-scan, /clean-footprints, /integrity-check, /backup-now, /emergency-wipe")
                     print("SCHEDULER: /schedule-start, /schedule-stop, /schedule-status, /schedule-update")
                     print("MODULES: /modules, /load <module>, /unload <module>")
-                    print("MEMORY: /search <query>, /memory, /tag <tag>")
+                    print("MEMORY: /search <query>, /memory, /timeline, /tag <tag>")
                     print("CONVERSATION: /talk-test, /convo-summary")
-                    print("DEBUGGING: /reality-check, /debug-on, /show-workflow-log, /module-status, /test-command, /test-command, /talk-test, /convo-summary")
-                    print("NOTIFICATIONS: /notifications, /clear-notifications")
-                    print("TOR/GHOST: /ghost-mode, /new-identity, /check-in, /tor-status")
-                    print("CORE: /exit, /help, /status, /ai, /setkey")
+                    print("CORE: /exit, /help, /status, /model-status, /test-deepseek, /reality-check, /ai, /setkey")
                     continue
                 elif user_input == '':
                     continue
                 
                 self.generate_response(user_input)
-                
-                # formatter already printed inside generate_response
                 
             except Exception as e:
                 print(f"\nCiph: ‖ Error: {e} ‖")
