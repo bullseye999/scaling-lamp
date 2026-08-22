@@ -9,7 +9,7 @@ from ciph_core import CiphCore
 def check_dependencies():
     """Check if all required dependencies are available"""
     try:
-        import anthropic
+        import openai
         import cryptography
         from cryptography.fernet import Fernet
         return True, "All dependencies available"
@@ -17,14 +17,14 @@ def check_dependencies():
         return False, f"Missing dependency: {e}"
 
 def main():
-    print("🕶️ Ciph v0.2 - Enhanced Memory System")
+    print("🕶️ CIPH 3.0 - Sovereign Autonomous Intelligence")
     print("🔒 Checking system compatibility...")
     
     # Check dependencies
     deps_ok, deps_msg = check_dependencies()
     if not deps_ok:
         print(f"\n⚠️  {deps_msg}")
-        print("   Basic memory system will work, AI requires: pip install anthropic cryptography")
+        print("   Basic memory system will work, AI requires: pip install openai cryptography")
     
     # Initialize Ciph
     try:
