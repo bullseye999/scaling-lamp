@@ -1,369 +1,262 @@
-
-
-markdown
 <div align="center">
-<h1>⚫️ Ciph Core</h1>
-<p><strong>Your sovereign AI agent – modular, encrypted, self‑evolving.</strong></p>
 
-<p>
-<img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
-<img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue" alt="Platforms">
-<img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
+# ⚫️ CIPH 3.0
+### Sovereign Autonomous Intelligence & Security Reconnaissance Platform
+
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Tor](https://img.shields.io/badge/Network-Tor%20SOCKS5h-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
+[![Storage](https://img.shields.io/badge/Storage-AES--256%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
+[![Intelligence](https://img.shields.io/badge/Engine-DeepSeek%20V4%20Pro-412991?style=flat-square)](https://api.deepseek.com)
+[![CVSS](https://img.shields.io/badge/Standard-CVSS%20v3.1-critical?style=flat-square)](https://www.first.org/cvss/)
+[![License](https://img.shields.io/badge/License-MIT-black?style=flat-square)](LICENSE)
+
+<p align="center">
+  <a href="#-what-is-ciph-30">Architecture</a> •
+  <a href="#-core-operational-modules">Core Modules</a> •
+  <a href="#-installation--quickstart">Quickstart</a> •
+  <a href="#-interactive-cli--dialogue-examples">CLI & Demos</a> •
+  <a href="#-system-architecture-map">System Map</a> •
+  <a href="#-security--opsec-guarantees">OPSEC</a>
 </p>
 
-<p>
-<a href="#-what-is-ciph-core">What is it?</a> •
-<a href="#-why-ciph--advantages">Advantages</a> •
-<a href="#-roadmap--where-im-going">Roadmap</a> •
-<a href="#-get-started">Get Started</a> •
-<a href="#-known-bugs">Bugs</a> •
-<a href="#-demo--screenshots">Demo</a>
-</p>
 </div>
 
+---
+
+## 🧠 What is CIPH 3.0?
+
+**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, darknet telemetry, bug bounty reconnaissance, and strategic scenario simulation.
+
+Unlike conventional AI wrappers, CIPH is directly wired to its host operating system, persistent encrypted databases, and an isolated SOCKS5h Tor transport layer. It operates under a strict **Fail-Closed** security architecture with zero third-party telemetry, local AES-256 encrypted vaults, and autonomous tool-dispatching capabilities that eliminate the need for rigid slash commands.
 
 ---
 
-## 🧠 What is Ciph Core?
+## ⚡ Key Capabilities at a Glance
 
-Ciph Core is your **personal, sovereign AI agent**.
-It's not another chatbot or a cloud API wrapper. It's a complete, modular system that you control 100%.
-
-- **Encrypted by default** – conversations, keys, and configurations live in a local SQLite vault (AES‑256 + quantum‑resistant fallback).
-- **Modular** – OSINT, pentesting, trading, darknet monitoring, sports prediction – each feature is a hot‑swappable module.
-- **Autonomous** – background orchestrator runs workflows, task scheduler handles daily jobs, and the agent can even propose its own upgrades.
-- **Sovereign** – no third‑party cloud required. Works with local LLMs (Ollama) or OpenAI, but you stay in control.
-
----
-
-## ✨ Why Ciph? (Advantages)
-
-| Advantage | What it means for you |
-|-----------|----------------------|
-| **🔐 Privacy by design** | Everything is encrypted locally. No telemetry, no "phone home". |
-| **🌐 Dark‑net ready** | Built‑in Tor proxy + control port for anonymous threat intelligence. |
-| **💰 Wealth ops** | Crypto arbitrage scans, trading signals, bug bounty automation, monetizable threat detection. |
-| **🧠 Self‑awareness** | `self_awareness.py` reads its own code, finds issues, and writes upgrade proposals. |
-| **⚽ Sports intelligence** | 5‑layer prediction engine (Poisson + xG + market + news + LLM). |
-| **🕹️ Complete CLI** | 50+ slash commands – from `/darknet-scan` to `/self-analyze`. |
-| **🛡️ Security layer** | Integrity checks, footprint cleaner, encrypted backups, emergency wipe. |
+* **🛡️ Fail-Closed Ghost Transport**: Persistent Tor SOCKS5h session pooling (`127.0.0.1:9050`), anti-fingerprint headers, timing jitter, and DoH remote DNS resolution over Tor (zero local ISP resolver leaks).
+* **🎯 Elite Bug Bounty Suite v3**: Multi-source passive subdomain discovery cascade (AlienVault, Wayback CDX, crt.sh), automated dangling CNAME subdomain takeover detection across 10+ cloud providers, GraphQL `__schema` introspection auditing, and Single Page Application (SPA) baseline calibration to eradicate soft-404 false positives.
+* **🤖 Autonomous Action Agent**: Natural-language tool dispatcher. Translates conversational intent into multi-step recon and intelligence workflows behind the scenes, synthesizing findings without raw command clutter.
+* **⚔️ Adversarial War Room**: 3-perspective strategic stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Strategic Synthesis).
+* **🗄️ Sovereign Hardened Vault**: Local SQLite database running in high-concurrency `WAL` mode with 5-second busy timeout locks, encrypted configuration tables, historical recon snapshot diffing, and watchtower event tracking.
+* **📊 Deterministic CVSS v3.1 Engine**: Mathematical FIRST.org vector scoring and automatic HackerOne-ready vulnerability report generation.
+* **⚽ 5-Layer Sports Intelligence**: Multi-factor probabilistic prediction engine (Poisson distribution + xG modeling + market odds variance + live sports context + LLM reasoning).
 
 ---
 
-## 🧭 Roadmap where I'm going
+## 🛠️ Core Operational Modules
 
-### 🔜 Next (short term)
-
-- [ ] **UI Control Panel** – web‑based dashboard to monitor modules, view logs, and trigger commands.
-- [ ] **Swarm intelligence** – multiple orchestrated agents working on different tasks simultaneously.
-- [ ] **Personal data lake** – all encrypted conversations, scans, trades in one queryable format.
-
-### 🚀 Long‑term vision
-
-- **Decentralized operation** – run Ciph across your own hardware, no cloud dependencies, no single point of failure.
-- **Proactive defense** – detect and respond to threats in real time, before they impact you.
-- **Augmented intelligence** – Ciph becomes a seamless extension of your own thinking, not just a tool you use.
-
-## 🐞 Known bugs
-
-| Bug | Status |
-|-----|--------|
-| Ollama timeouts on very long prompts | workaround: `/ai` switch to OpenAI; proper optimizer planned |
-| `smart_memory` can sometimes repeat old context | being refactored |
-| Command `/help` is overwhelming – too many commands | will be categorised in the UI release |
-| Filename typos (`ciph_verson.json`) already fixed | ✅ done |
-
-> If you find something else, please open an issue.
+| Module | Component File | Description |
+| :--- | :--- | :--- |
+| **Transport Layer** | `ghost_transport.py` | SOCKS5h Tor session pool with remote DNS resolution and strict fail-closed enforcement. |
+| **Bounty Suite** | `bounty_hunter.py` | Automated recon, takeover signatures, GraphQL auditing, and historical URL parameter mining. |
+| **Scoring Engine** | `cvss_calculator.py` | Standalone mathematical calculation of CVSS v3.1 base score and vector metrics. |
+| **Cognitive Router** | `ciph_router.py` | Direct integration with DeepSeek V4 Pro API with custom temperature and reasoning pipelines. |
+| **Action Dispatcher**| `ciph_autonomous_agent.py` | Conversational action dispatcher that triggers back-end recon tools dynamically. |
+| **War Room** | `war_room.py` | Multi-lens adversarial stress-testing and strategic scenario simulation. |
+| **OSINT Catalog** | `osint_catalog.py` | Anti-fragile threat intelligence directory with 3-tier self-healing failover. |
+| **Encrypted Vault** | `cipher_vault.py` | AES-256 SQLite storage with WAL journal mode, recon snapshots, and telemetry history. |
+| **Fast AST Router** | `query_router.py` | Deterministic factual and AST math parser that completely bypasses LLM latency. |
+| **Personality Mask**| `personality_engine.py` | Context sanitizer that protects technical code blocks, inline code, and JSON objects from formatting alterations. |
 
 ---
 
-## 📸 Demo & screenshots
+## 🚀 Installation & Quickstart
 
-Below you see exactly how Ciph looks and feels in the terminal.
+### 1. Prerequisites
+* **Operating System**: Linux (Ubuntu/Debian, Arch, Fedora), macOS, or WSL2.
+* **Python**: `Python 3.10+`
+* **Tor Daemon**: Required for anonymous threat intel and fail-closed recon.
 
-### 1. Startup banner
-When you launch Ciph:
-
-```bash
-python3 ciph_core.py
-
-AI: RunPod Serverless | llama3.1:8b | Sovereign
-Passing 2 modules to orchestrator: ['memory', 'osint']
-Orchestrator auto-loaded with all modules.
-[Auto] Running daily prediction resolution...
-Autonomous sports learning loop activated.
-Running integrity check...
-[Auto] Fetching result for Liverpool vs Chelsea on 2026-04-01
-Scanning project: .
-
-CIPH v1.0 - AUTONOMOUS AGENT ORCHESTRATION
-Encrypted • Sovereign • Adaptive • AI READY • SECURE • 2984 files • 5336 entities • 1.5 GB
-PENTEST OFF • TRADING OFF • BOUNTY OFF • ORCHESTRATOR READY • SCHEDULER OFF • PERSISTENT ACTIVITY
-
-Type /help for commands, /exit to quit
-/load orchestrator - Load autonomous agent system
-/auto-mode - Start all autonomous workflows
-/workflow-status - Check autonomous operations
-/start-workflow <name> - Start specific workflow
-/reality-check - See actual system status (not AI fantasy)
-```
-
-### 2. `/status` – overall system health
-*AI, security, project stats, memory entities, scheduled jobs.*
-
-```bash
-You: /status
-
-- Running integrity check...
-- Scanning project: .
-
-Operational AI: Active | Security: SECURE | Project: 2984 files | Entities: 5336 | Jobs: 0
-```
-
-### 3. `/darknet-scan` – live threat intelligence through Tor
-*Finds zero‑day mentions, ransomware alerts, credential leaks.*
-
-```bash
-You: /darknet-scan
-
-===========================================
-CIPH DARKNET SCAN INITIATED
-===========================================
-✓ Tor active. Exit IP: 192.42.116.18
-
-✓ Scanning threat intel via Tor...
-  → Threat intel: 13 findings
-
-✓ Scanning bug bounty leads via Tor...
-  → Bounty leads: 4 leads
-
-✓ Checking credential leaks via Tor...
-  → Credential check: complete
-
-✓ Scanning market trends via Tor...
-  → Market trends: 0 signals
-
-===========================================
-SCAN COMPLETE – 17 total alerts, 3 critical
-===========================================
-
-Darknet scan complete via Tor exit 192.42.116.18. 
-Threat intel: 13 findings. Top signal: CISA Adds Actively Exploited SolarWinds Serv-U DoS Flaw to KEV Catalog (MEDIUM, score 13). 
-Bug bounty leads: 4 found. CVEs detected: CVE-2026-20245, CVE-2026-28318, CVE-2026-20245. 
-Credential check: clean.
-```
-
-### 4. `/predict Arsenal vs Chelsea` – 5‑layer sports prediction
-*Poisson + market + news + LLM reasoning + arbiter. Shows conviction and contrarian signals.*
-
-```bash
-You: /predict Arsenal vs Chelsea
-
-[Ciph Sports] Analyzing: arsenal vs chelsea  
-[1/4] Math layer (Poisson + xG)...  
-[2/4] Market layer (Odds movement)...  
-[3/4] News layer (Context)...  
-[4/4] Ciph reasoning layer...  
-[5/5] Arbiter calculating conviction...  
-
----
-
-CIPH INTELLIGENCE - 06 Jun 2026  
-
----
-
-arsenal vs chelsea  
-- **PREDICTION**: DRAW  
-- **CONVICTION**: 63% [MEDIUM]  
-- **PROBABILITIES**:  
-  - Home Win : 18.2%  
-  - Draw : 63.3%  
-  - Away Win : 18.5%  
-- **MARKETS**:  
-  - Over 2.5 Goals : 10.0%  
-  - Both Teams Score : 8.0%  
-  - Top Scoreline : 0-0  
-- **LAYER VERDICTS**:  
-  - MATH: DRAW  
-  - CIPH: DRAW  
-- **KEY FACTORS**:  
-  - No key factors  
-- **CIPH REASONING**:  
-  - N/A  
-
----
-
-Powered by Ciph Intelligence Engine
-```
-
-### 5. `/self-analyze` – Ciph reads its own code and proposes upgrades
-*Generates `system_proposals/` files with actual code changes.*
-
-```bash
-You: /self-analyze
-
-Ciph analyzing own architecture...
-
-PROPOSAL UP-010: Ollama query optimizer - reduce timeouts
-Priority: HIGH | Target: enhanced_conversation.py
-File: ciph_proposals/UP-010_ollama_optimizer.py
-Review: cat ciph_proposals/UP-010_ollama_optimizer.py
-Apply: /apply-upgrade UP-010
-Reject: /reject-upgrade UP-010
-
-PROPOSAL UP-011: Hallucination guard - verify claims against real scan data
-Priority: HIGH | Target: enhanced_conversation.py
-File: ciph_proposals/UP-011_hallucination_guard.py
-Review: cat ciph_proposals/UP-011_hallucination_guard.py
-Apply: /apply-upgrade UP-011
-Reject: /reject-upgrade UP-011
-
-PROPOSAL UP-012: Expand brain router trigger list
-Priority: MEDIUM | Target: brain_router.py
-File: ciph_proposals/UP-012_brain_router_expansion.py
-Review: cat ciph_proposals/UP-012_brain_router_expansion.py
-Apply: /apply-upgrade UP-012
-Reject: /reject-upgrade UP-012
-
-Analysis complete. 3 proposals generated.
-Analysis complete. 3 upgrade proposals generated. Use /upgrades to review.
-```
-
-### 🧱 Architecture – how the files link together
-
-```
-run_ciph.py
-└── ciph_core.py # main orchestrator, command router
-    ├── handle_command() → calls modules via ModuleManager
-    └── generate_response() → mood + memory + AI (Ollama / OpenAI)
-
-ModuleManager (module_manager.py)
-├── loads/unloads: osint, pentest, trading, bounty, orchestrator, memory, …
-└── passes modules to AgentOrchestrator
-
-CipherVault (cipher_vault.py + quantum_vault.py)
-└── encrypted SQLite storage for conversations, config, knowledge graph
-
-Darknet / OSINT chain
-darknet_monitor.py + osint_miner.py → RSS + Tor + X → threat scoring → monetization
-
-Trading / Wealth
-trading_engine.py → market data, arbitrage, signals
-
-Sports
-sports_predictor.py + sports_performance.py → 5‑layer predictions + email reports
-
-Self‑awareness
-self_awareness.py → scans code, detects stubs, writes upgrade proposals via Ollama
-
-Security & OPSEC
-security_layer.py + dead_mans_switch.py + tor_proxy.py
-```
-
-All modules communicate through the vault, the module manager, and the core event loop. No spaghetti.
-
----
-
-## 🚀 Installation & running
-
-### 1. Clone the repository
-
+### 2. Clone the Repository
 ```bash
 git clone https://github.com/pendragon360/scaling-lamp.git
-```
-
-Expected output:
-
-```bash
-Cloning into 'scaling-lamp'...
-remote: Enumerating objects: 40, done.
-remote: Counting objects: 100% (40/40), done.
-remote: Compressing objects: 100% (39/39), done.
-remote: Total 40 (delta 2), reused 36 (delta 1), pack-reused 0 (from 0)
-Receiving objects: 100% (40/40), 106.99 KiB | 4.65 MiB/s, done.
-Resolving deltas: 100% (2/2), done.
-```
-
-### 2. Enter the directory
-
-```bash
 cd scaling-lamp
 ```
 
-### 3. Install dependencies
-
+### 3. Install Dependencies
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Expected output:
-
+### 4. Configure Environment
+Copy the example environment file and add your credentials:
 ```bash
-Defaulting to user installation because normal site-packages is not writeable
-Collecting cryptography>=41.0.0 (from -r requirements.txt (line 2))
-  Downloading cryptography-48.0.0-cp311-abi3-win_amd64.whl.metadata (4.3 kB)
-Collecting pymupdf>=1.23.0 (from -r requirements.txt (line 3))
-  Downloading pymupdf-1.27.2.3-cp310-abi3-win_amd64.whl.metadata (24 kB)
-Requirement already satisfied: requests>=2.31.0 in c:\users\arthu\appdata\roaming\python\python313\site-packages (from -r requirements.txt (line 6)) (2.32.5)
-Collecting feedparser>=6.0.10 (from -r requirements.txt (line 7))
-  Downloading feedparser-6.0.12-py3-none-any.whl.metadata (2.7 kB)
-Collecting schedule>=1.2.0 (from -r requirements.txt (line 8))
-  Downloading schedule-1.2.2-py3-none-any.whl.metadata (3.8 kB)
-Collecting stem>=1.8.2 (from -r requirements.txt (line 9))
-  Downloading stem-1.8.2.tar.gz (2.9 MB)
+cp .env.example .env
+```
+Edit `.env` with your preferred API keys:
+```ini
+# DeepSeek V4 Pro API Configuration (PRIMARY)
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+
+# Optional API Integrations
+FOOTBALL_DATA_API_KEY=your_football_data_api_key_here
+ODDS_API_KEY=your_odds_api_key_here
 ```
 
-### 4. Run Ciph
-
+### 5. Start Tor Daemon
 ```bash
-python ciph_core.py
+# Ubuntu / Debian
+sudo apt update && sudo apt install tor -y
+sudo systemctl start tor
+
+# macOS (Homebrew)
+brew install tor
+brew services start tor
 ```
 
-Expected output on first run:
-
+### 6. Run System Verification
+Verify all cryptographic vault operations, AST math evaluation, Tor headers, and scope enforcement:
 ```bash
-AI: No API key found. Options:
-1. Set OPENAI_API_KEY environment variable
-2. Enter key now (stored encrypted locally)
-3. Use /setkey command later
+python3 test_auth.py
+```
+*Expected Output: `Ran 5 tests in ~0.15s - OK`*
 
-Enter API key (or press Enter to skip):
-AI disabled. Use /setkey to add API key later.
-
-Running integrity check...
-Scanning project: .
-
-AUTONOMOUS AGENT SYSTEM v1.0
-
-Encrypted • Adaptive • BASIC MODE • SECURE • 1826 files • 0 entities • 
-OSINT OFF • PENTEST OFF • TRADING OFF • BOUNTY OFF • ORCHESTRATOR OFF • 
-SCHEDULER OFF • PERSONALITY ACTIVE
-
-Type /help for commands, /exit to quit
-/load orchestrator - Load autonomous agent system
-/auto-mode - Start all autonomous workflows
-/workflow-status - Check autonomous operations
-/start-workflow <name> - Start specific workflow
-/reality-check - See actual system status (not AI fantasy)
+### 7. Launch CIPH
+```bash
+python3 run_ciph.py
 ```
 
 ---
 
-### 🔧 Optional: Tor Setup (for darknet features)
+## 📸 Interactive CLI & Dialogue Examples
+
+### 1. System Boot & Autonomous Initialization
+```text
+🕶️ CIPH 3.0 - Sovereign Autonomous Intelligence
+🔒 Checking system compatibility...
+📚 Code index loaded from cache.
+✅ AI: DeepSeek V4 Pro | deepseek-chat | Sovereign
+🔧 Passing 2 modules to orchestrator: ['memory', 'osint']
+✅ Orchestrator auto-loaded with all modules.
+✅ Autonomous sports learning loop activated.
+
+======================================================================
+  CIPH 3.0 — SOVEREIGN AGENT SYSTEM
+  Encrypted • Sovereign • Fail-Closed Tor • CVSS v3.1 Engine
+======================================================================
+```
+
+### 2. Autonomous Recon & Bug Bounty Audit
+Communicate naturally with CIPH—the autonomous agent parses your intent, triggers the recon engine over Tor, and returns prioritized findings without command overhead.
+
+```text
+Operator: scan target.com and check if there are any takeover or graphql issues
+
+[GhostTransport] Initializing pooled Tor SOCKS5h session (127.0.0.1:9050)...
+[BountyHunter] Calibrating SPA baseline on target.com (Status: 404, Length: 162)...
+[BountyHunter] Querying passive subdomains via AlienVault OTX & Wayback CDX...
+[BountyHunter] 18 subdomains discovered.
+[BountyHunter] Checking CNAME records for dangling provider signatures...
+[BountyHunter] Probing GraphQL endpoints (/graphql, /v1/graphql, /api/graphql)...
+
+CIPH: Recon completed for target.com over Tor. Operational breakdown:
+
+1. 🔴 Dangling CNAME (Subdomain Takeover Vector):
+   - Subdomain: docs.target.com
+   - CNAME Target: target-docs.s3-website-us-east-1.amazonaws.com
+   - Signature Match: AWS S3 ('NoSuchBucket' response)
+   - Status: Unclaimed cloud asset detected.
+
+2. 🟡 GraphQL Introspection Exposed:
+   - Endpoint: https://api.target.com/graphql
+   - Sensitive Models Discovered: User, AdminRole, PaymentMethod, AuthToken
+   - Status: Schema introspection is enabled in production.
+
+3. 🛡️ SPA Baseline Calibration:
+   - Filtered soft-404 false positives across 12 default endpoints.
+
+Tactical Next Steps:
+- Run `/bounty-report target.com` to compile a submission-ready Markdown report.
+- Run `/war-room` to stress-test your disclosure timeline and response scenario.
+```
+
+### 3. Automated CVSS v3.1 Report Generation
+Generate deterministic, professional vulnerability disclosure reports directly into `bounty_reports/`:
+
+```text
+Operator: /bounty-report target.com
+
+[BountyHunter] Generating submission report for target.com...
+[CVSSCalculator] Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+[CVSSCalculator] Base Score: 9.1 [CRITICAL]
+✅ Report generated: bounty_reports/report_target.com_20260823.md
+```
+
+### 4. Adversarial War Room Simulation
+Stress-test strategies or operational moves through 3 opposing analytical lenses:
+
+```text
+Operator: /war-room "Responsible disclosure of GraphQL exposure on major fintech platform"
+
+[WarRoom] Running 3-perspective adversarial stress test via DeepSeek V4 Pro...
+
+🔴 THE HUNTER (RED TEAM / ADVERSARIAL LENS):
+- Platform triage may classify introspection as informative unless sensitive query paths are mapped.
+- Disclosure timing must ensure zero exposure to public search scrapers during remediation.
+
+🔵 THE STOIC (BLUE TEAM / RISK AUDIT):
+- Scope boundary check required: Confirm if api.target.com is explicitly listed in program policy.
+- Ensure proof-of-concept remains strictly read-only to prevent policy invalidation.
+
+⚖️ THE ARBITER (CIPH STRATEGIC SYNTHESIS):
+- 1. Provide exact remediation steps (disabling introspection in production config).
+- 2. Reference FIRST.org CVSS vector for deterministic severity alignment.
+- 3. Maintain secure communication channels exclusively through the coordinated disclosure program.
+```
+
+---
+
+## 🧱 System Architecture Map
+
+```text
+run_ciph.py (Bootstrap & Dependency Verification)
+  └── ciph_core.py (Session Core & Event Loop)
+        ├── ciph_router.py ─────────► DeepSeek V4 Pro Engine (Direct Cognitive API)
+        ├── ciph_autonomous_agent.py ► Natural Language Tool Dispatcher
+        ├── ghost_transport.py ─────► Fail-Closed Tor SOCKS5h & DoH DNS Resolver
+        ├── bounty_hunter.py ───────► Takeover, GraphQL, Parameter & SPA Recon
+        │     └── cvss_calculator.py  ► Deterministic FIRST.org CVSS v3.1 Engine
+        ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
+        ├── osint_catalog.py ───────► Multi-Tier Failover Threat Intelligence
+        ├── cipher_vault.py ────────► High-Concurrency WAL SQLite & Recon Diffs
+        └── query_router.py ────────► Deterministic AST Math (LLM-Bypass)
+```
+
+---
+
+## 🛡️ Security & OPSEC Guarantees
+
+1. **Zero Clearnet Leakage**: `GhostTransport` uses SOCKS5h connection pooling. Requests strictly fail-closed if the Tor circuit drops; no clearnet fallbacks are permitted.
+2. **Leak-Proof Remote DNS**: Hostnames are resolved through DNS-over-HTTPS (DoH) over the Tor circuit, preventing local OS DNS queries from leaking to your ISP.
+3. **Local Encryption**: All conversation logs, system states, and configuration tokens are encrypted with AES-256 before storage in SQLite `WAL` databases.
+4. **Code & Payload Masking**: `personality_engine.py` isolates fenced code blocks, inline code, and JSON dictionaries before applying conversational formatting, preventing corruption of technical payloads.
+
+---
+
+## 🧪 Running Verification Tests
+
+To verify vault encryption, AST math evaluation, Tor headers, and scope enforcement:
 
 ```bash
-sudo apt install tor
+python3 test_auth.py
+```
+
+```text
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.150s
+
+OK
 ```
 
 ---
 
-## 📄 License
+## 📄 License & Responsible Use
 
-MIT – free for educational and research use.  
-The author assumes no liability for misuse of the security or darknet features.
+Distributed under the **MIT License**.
 
----
-
-**Built to be sovereign.**
-```
+> **Notice**: CIPH is designed for authorized security research, educational purposes, and bug bounty programs operating within explicit scope rules. Users are strictly responsible for adhering to applicable laws and program guidelines.
