@@ -1,89 +1,56 @@
 #!/usr/bin/env python3
-# ciph_proxy.py - Working with your RunPod endpoint
-
-import requests
-import time
-import json
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
+# test_auth.py - CIPH 3.0 Verification & Core Integration Test Suite
 
 import os
+import unittest
+from cipher_vault import CipherVault
+from personality_engine import CiphPersonality
+from query_router import QueryRouter
+from state_manager import StateManager
+from bounty_hunter import BountyHunter
+from ghost_transport import GhostTransport
 
-ENDPOINT_ID = os.environ.get("RUNPOD_ENDPOINT_ID", "")
-RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY", "")
 
-@app.route('/v1/chat/completions', methods=['POST'])
-def proxy_to_runpod():
-    try:
-        data = request.get_json()
-        
-        # Extract user message
-        messages = data.get('messages', [])
-        user_message = ""
-        for msg in messages:
-            if msg.get('role') == 'user':
-                user_message = msg.get('content', '')
-                break
-        
-        if not user_message:
-            user_message = messages[-1].get('content', 'Hello') if messages else "Hello"
-        
-        print(f"[Proxy] Message: {user_message[:80]}")
-        
-        headers = {
-            "Authorization": f"Bearer {RUNPOD_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "input": {
-                "prompt": user_message
-            }
-        }
-        
-        url = f"https://api.runpod.ai/v2/{ENDPOINT_ID}/runsync"
-        
-        resp = requests.post(url, json=payload, headers=headers, timeout=120)
-        
-        if resp.status_code != 200:
-            return jsonify({"error": f"RunPod error: {resp.status_code}"}), resp.status_code
-        
-        result = resp.json()
-        
-        # Parse the actual response format
-        output = result.get('output', [])
-        response_text = ""
-        
-        if isinstance(output, list) and len(output) > 0:
-            # Check for choices format
-            if 'choices' in output[0]:
-                response_text = output[0]['choices'][0].get('text', '')
-            else:
-                response_text = output[0].get('response', '')
-        
-        if not response_text:
-            response_text = "No response from model"
-        
-        print(f"[Proxy] Response: {response_text[:100]}")
-        
-        return jsonify({
-            "choices": [{
-                "message": {
-                    "content": response_text,
-                    "role": "assistant"
-                }
-            }]
-        })
-        
-    except Exception as e:
-        print(f"[Proxy] Error: {e}")
-        return jsonify({"error": str(e)}), 500
+class TestCiphCore(unittest.TestCase):
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({"status": "ok"})
+    def setUp(self):
+        self.vault = CipherVault()
+        self.personality = CiphPersonality()
+        self.state = StateManager()
+        self.query_router = QueryRouter(self.state, self.vault)
+        self.bounty = BountyHunter(self.vault)
+        self.transport = GhostTransport()
 
-if __name__ == '__main__':
-    print("🚀 Ciph Proxy Ready")
-    app.run(host='127.0.0.1', port=5001, debug=False)
+    def test_vault_wal_and_encryption(self):
+        """Test vault encryption and config persistence under WAL mode."""
+        self.vault.set_config("test_ciph_key", "ciph_secret_value_123")
+        val = self.vault.get_config("test_ciph_key")
+        self.assertEqual(val, "ciph_secret_value_123")
+
+    def test_personality_code_masking(self):
+        """Test that code blocks and JSON payloads are untouched by slang filters."""
+        sample_code = '```json\n{\n  "name": "Operator",\n  "system": "CIPH"\n}\n```'
+        input_text = f"Certainly! Here is your code:\n{sample_code}\nLet me know if you need more."
+        output = self.personality.inject_personality(input_text)
+        self.assertIn(sample_code, output)
+        self.assertNotIn("Certainly", output)
+
+    def test_safe_ast_math(self):
+        """Test safe AST math calculation in QueryRouter without eval."""
+        res = self.query_router.answer_calculation("calc (10 + 5) * 4 / 2")
+        self.assertIn("30", res)
+
+    def test_bounty_scope_checking(self):
+        """Test scope boundary logic in BountyHunter."""
+        in_scope, reason = self.bounty.is_in_scope("example.com")
+        self.assertIsInstance(in_scope, bool)
+
+    def test_ghost_transport_fail_closed(self):
+        """Test GhostTransport fail-closed header and session generation."""
+        headers = self.transport.get_random_headers()
+        self.assertIn("User-Agent", headers)
+        self.assertIn("Accept", headers)
+
+
+if __name__ == "__main__":
+    unittest.main()
