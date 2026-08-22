@@ -1,7 +1,7 @@
 <div align="center">
 
 # ⚫️ CIPH 3.0
-### Sovereign Autonomous Intelligence & Security Reconnaissance Platform
+### Sovereign Autonomous Intelligence, Offensive Reconnaissance & Tactical Operations Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Tor](https://img.shields.io/badge/Network-Tor%20SOCKS5h-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
@@ -12,11 +12,11 @@
 
 <p align="center">
   <a href="#-what-is-ciph-30">Architecture</a> •
-  <a href="#-core-operational-modules">Core Modules</a> •
+  <a href="#-the-12-core-operational-engines">The 12 Engines</a> •
+  <a href="#-interactive-cli--demonstrations">Interactive Demos</a> •
+  <a href="#-categorized-command-catalog">Command Catalog</a> •
   <a href="#-installation--quickstart">Quickstart</a> •
-  <a href="#-interactive-cli--dialogue-examples">CLI & Demos</a> •
-  <a href="#-system-architecture-map">System Map</a> •
-  <a href="#-security--opsec-guarantees">OPSEC</a>
+  <a href="#-system-architecture-map">System Map</a>
 </p>
 
 </div>
@@ -25,38 +25,268 @@
 
 ## 🧠 What is CIPH 3.0?
 
-**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, darknet telemetry, bug bounty reconnaissance, and strategic scenario simulation.
+**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, darknet telemetry, bug bounty reconnaissance, wealth operations, sports analytics, and strategic adversarial simulation.
 
 Unlike conventional AI wrappers, CIPH is directly wired to its host operating system, persistent encrypted databases, and an isolated SOCKS5h Tor transport layer. It operates under a strict **Fail-Closed** security architecture with zero third-party telemetry, local AES-256 encrypted vaults, and autonomous tool-dispatching capabilities that eliminate the need for rigid slash commands.
 
 ---
 
-## ⚡ Key Capabilities at a Glance
+## ⚡ The 12 Core Operational Engines
 
-* **🛡️ Fail-Closed Ghost Transport**: Persistent Tor SOCKS5h session pooling (`127.0.0.1:9050`), anti-fingerprint headers, timing jitter, and DoH remote DNS resolution over Tor (zero local ISP resolver leaks).
-* **🎯 Elite Bug Bounty Suite v3**: Multi-source passive subdomain discovery cascade (AlienVault, Wayback CDX, crt.sh), automated dangling CNAME subdomain takeover detection across 10+ cloud providers, GraphQL `__schema` introspection auditing, and Single Page Application (SPA) baseline calibration to eradicate soft-404 false positives.
-* **🤖 Autonomous Action Agent**: Natural-language tool dispatcher. Translates conversational intent into multi-step recon and intelligence workflows behind the scenes, synthesizing findings without raw command clutter.
-* **⚔️ Adversarial War Room**: 3-perspective strategic stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Strategic Synthesis).
-* **🗄️ Sovereign Hardened Vault**: Local SQLite database running in high-concurrency `WAL` mode with 5-second busy timeout locks, encrypted configuration tables, historical recon snapshot diffing, and watchtower event tracking.
-* **📊 Deterministic CVSS v3.1 Engine**: Mathematical FIRST.org vector scoring and automatic HackerOne-ready vulnerability report generation.
-* **⚽ 5-Layer Sports Intelligence**: Multi-factor probabilistic prediction engine (Poisson distribution + xG modeling + market odds variance + live sports context + LLM reasoning).
+```
+                                  ┌───────────────────┐
+                                  │     CIPH 3.0      │
+                                  │ SOVEREIGN RUNTIME │
+                                  └─────────┬─────────┘
+        ┌───────────────────┬───────────────┼───────────────┬───────────────────┐
+        ▼                   ▼               ▼               ▼                   ▼
+┌───────────────┐   ┌───────────────┐ ┌───────────┐ ┌───────────────┐   ┌───────────────┐
+│ RECON & OPSEC │   │ THREAT INTEL  │ │  WEALTH   │ │ SPORTS ENGINE │   │ SELF-EVOLVING │
+│ - GhostTor    │   │ - Darknet Tor │ │ - Crypto  │ │ - 5-Layer ML  │   │ - AST Audit   │
+│ - Takeovers   │   │ - Cred Leaks  │ │ - Signals │ │ - Poisson/xG  │   │ - Auto-Patch  │
+│ - GraphQL     │   │ - OSINT Feeds │ │ - Arbs    │ │ - Auto-Report │   │ - War Room    │
+└───────────────┘   └───────────────┘ └───────────┘ └───────────────┘   └───────────────┘
+```
+
+| Engine | Primary Modules | Operational Capabilities |
+| :--- | :--- | :--- |
+| **1. Ghost Transport (OPSEC)** | `ghost_transport.py`, `tor_proxy.py` | SOCKS5h Tor session pooling (`127.0.0.1:9050`), DoH remote DNS resolution over Tor (zero ISP leaks), anti-fingerprint headers, timing jitter, strict fail-closed enforcement. |
+| **2. Elite Bug Bounty Suite v3** | `bounty_hunter.py`, `cvss_calculator.py` | Passive subdomain discovery cascade (AlienVault, Wayback CDX, crt.sh), automated dangling CNAME takeover detection across 10+ cloud providers, GraphQL `__schema` introspection, and SPA baseline calibration. |
+| **3. Darknet Threat Intelligence** | `darknet_monitor.py` | Tor hidden service crawling (Ahmia & Onion mirrors), ransomware tracker monitoring, zero-day threat indexing, and credential breach search. |
+| **4. OSINT & Intelligence Mining** | `osint_miner.py`, `osint_catalog.py` | Live RSS threat feed aggregation, X/Twitter OSINT monitoring, target profiling, and 3-tier self-healing failover feeds. |
+| **5. Wealth Ops & Crypto Arbitrage** | `trading_engine.py` | Real-time crypto market data feeds, cross-exchange arbitrage detector, momentum indicators, volatility metrics, and trading signal generation. |
+| **6. 5-Layer Sports Intelligence** | `sports_predictor.py`, `sports_performance.py` | 5-factor probabilistic engine (Poisson distribution + xG modeling + odds movement + sports news context + LLM reasoning arbiter), daily automated result resolution, and email briefing dispatch. |
+| **7. Network Pentest Engine** | `pentest_engine.py` | Local subnet discovery, multi-threaded TCP port scanning, service banner grabbing, HTTP security header auditing, and CORS reflection testing. |
+| **8. Strategic Wisdom & Philosophy** | `book_engine.py`, `file_analyzer.py` | Local PDF library ingestion, knowledge extraction, and strategic wisdom synthesis (Sun Tzu, Machiavelli, Robert Greene, Marcus Aurelius) applied to operational decisions. |
+| **9. Self-Awareness & Auto-Patches** | `self_awareness.py` | Continuous AST code scanning, architectural stub detection, and automated upgrade proposals (`ciph_proposals/`) with review and self-patching workflows. |
+| **10. Autonomous Action Agent** | `ciph_autonomous_agent.py` | Conversational action dispatcher. Evaluates natural-language dialogue, triggers back-end tools over Tor, and synthesizes findings without command friction. |
+| **11. Adversarial War Room** | `war_room.py` | 3-perspective adversarial stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Synthesis). |
+| **12. Defense, Vault & Emergency** | `cipher_vault.py`, `security_layer.py`, `dead_mans_switch.py` | High-concurrency SQLite `WAL` mode, AES-256 encryption, memory graph pinning, footprint cleaner, integrity checks, and emergency kill-switch wipe. |
 
 ---
 
-## 🛠️ Core Operational Modules
+## 📸 Interactive CLI & Demonstrations
 
-| Module | Component File | Description |
-| :--- | :--- | :--- |
-| **Transport Layer** | `ghost_transport.py` | SOCKS5h Tor session pool with remote DNS resolution and strict fail-closed enforcement. |
-| **Bounty Suite** | `bounty_hunter.py` | Automated recon, takeover signatures, GraphQL auditing, and historical URL parameter mining. |
-| **Scoring Engine** | `cvss_calculator.py` | Standalone mathematical calculation of CVSS v3.1 base score and vector metrics. |
-| **Cognitive Router** | `ciph_router.py` | Direct integration with DeepSeek V4 Pro API with custom temperature and reasoning pipelines. |
-| **Action Dispatcher**| `ciph_autonomous_agent.py` | Conversational action dispatcher that triggers back-end recon tools dynamically. |
-| **War Room** | `war_room.py` | Multi-lens adversarial stress-testing and strategic scenario simulation. |
-| **OSINT Catalog** | `osint_catalog.py` | Anti-fragile threat intelligence directory with 3-tier self-healing failover. |
-| **Encrypted Vault** | `cipher_vault.py` | AES-256 SQLite storage with WAL journal mode, recon snapshots, and telemetry history. |
-| **Fast AST Router** | `query_router.py` | Deterministic factual and AST math parser that completely bypasses LLM latency. |
-| **Personality Mask**| `personality_engine.py` | Context sanitizer that protects technical code blocks, inline code, and JSON objects from formatting alterations. |
+### 1. System Boot & Sovereign Telemetry
+```text
+🕶️ CIPH 3.0 - Sovereign Autonomous Intelligence
+🔒 Checking system compatibility...
+📚 Code index loaded from cache.
+✅ AI: DeepSeek V4 Pro | deepseek-chat | Sovereign
+🔧 Passing 2 modules to orchestrator: ['memory', 'osint']
+✅ Orchestrator auto-loaded with all modules.
+✅ Autonomous sports learning loop activated.
+
+======================================================================
+  CIPH 3.0 — SOVEREIGN AGENT SYSTEM
+  Encrypted • Sovereign • Fail-Closed Tor • CVSS v3.1 Engine
+======================================================================
+```
+
+### 2. Autonomous Bug Bounty Reconnaissance
+```text
+Operator: scan target.com and check if there are any takeover or graphql issues
+
+[GhostTransport] Initializing pooled Tor SOCKS5h session (127.0.0.1:9050)...
+[BountyHunter] Calibrating SPA baseline on target.com (Status: 404, Length: 162)...
+[BountyHunter] Querying passive subdomains via AlienVault OTX & Wayback CDX...
+[BountyHunter] 18 subdomains discovered.
+[BountyHunter] Checking CNAME records for dangling provider signatures...
+[BountyHunter] Probing GraphQL endpoints (/graphql, /v1/graphql, /api/graphql)...
+
+CIPH: Recon completed for target.com over Tor. Operational breakdown:
+
+1. 🔴 Dangling CNAME (Subdomain Takeover Vector):
+   - Subdomain: docs.target.com
+   - CNAME Target: target-docs.s3-website-us-east-1.amazonaws.com
+   - Signature Match: AWS S3 ('NoSuchBucket' response)
+   - Status: Unclaimed cloud asset detected.
+
+2. 🟡 GraphQL Introspection Exposed:
+   - Endpoint: https://api.target.com/graphql
+   - Sensitive Models Discovered: User, AdminRole, PaymentMethod, AuthToken
+   - Status: Schema introspection is enabled in production.
+
+3. 🛡️ SPA Baseline Calibration:
+   - Filtered soft-404 false positives across 12 default endpoints.
+
+Tactical Next Steps:
+- Run `/bounty-report target.com` to compile a submission-ready Markdown report.
+- Run `/war-room` to stress-test your disclosure timeline and response scenario.
+```
+
+### 3. Tor Darknet Threat Intelligence & Credential Leaks
+```text
+Operator: /darknet-scan
+
+===========================================
+CIPH DARKNET SCAN INITIATED (TOR SOCKS5h)
+===========================================
+✓ Tor circuit active. Exit IP: 185.220.101.5
+✓ Scanning onion threat feeds and ransomware leak boards...
+  → Threat intel: 14 indexed alerts
+✓ Scanning bug bounty leads via Tor...
+  → Active leads: 4 high-severity advisories
+✓ Checking breach dumps and credential exposure...
+  → Credential check: Clean
+
+Top Threat Signal: CISA Adds Actively Exploited SolarWinds Serv-U Flaw to KEV Catalog (CVSS 8.8).
+CVEs Detected: CVE-2026-20245, CVE-2026-28318.
+```
+
+### 4. Wealth Operations & Crypto Arbitrage Scanner
+```text
+Operator: /arbitrage
+
+[TradingEngine] Scanning liquidity pairs across CEX/DEX endpoints...
+[TradingEngine] Calculating bid/ask spread and gas fee thresholds...
+
+⚡ ARBITRAGE OPPORTUNITY IDENTIFIED:
+- Asset: SOL / USDC
+- Primary Exchange: Raydium ($184.20)
+- Secondary Exchange: Binance ($187.10)
+- Gross Spread: +1.57%
+- Estimated Slippage & Gas: 0.22%
+- Net Projected Yield: +1.35% (Conviction: HIGH)
+```
+
+### 5. 5-Layer Probabilistic Sports Analytics
+```text
+Operator: /predict Arsenal vs Chelsea
+
+[Ciph Sports] Analyzing: arsenal vs chelsea  
+[1/5] Math layer (Poisson distribution + xG modeling)...  
+[2/5] Market layer (Sharp odds & volume movement)...  
+[3/5] News layer (Lineup updates & tactical context)...  
+[4/5] Ciph reasoning layer (DeepSeek V4 Pro)...  
+[5/5] Arbiter calculating conviction metrics...  
+
+CIPH INTELLIGENCE - MATCH PREDICTION
+- **PREDICTION**: HOME WIN (Arsenal)
+- **CONVICTION**: 74% [HIGH]
+- **PROBABILITIES**: Home Win: 58.4% | Draw: 24.1% | Away Win: 17.5%
+- **KEY MARKETS**: Over 2.5 Goals (68.2%) | Both Teams to Score (Yes)
+- **ARBITER RATIONALE**: Arsenal home xG differential (+1.42) significantly outpaces Chelsea away defensive baseline.
+```
+
+### 6. Strategic Philosophy & Book Wisdom Synthesis
+```text
+Operator: /ask-book "How do we handle a rival trying to bait us into a premature move?"
+
+[BookEngine] Searching ingested library (48 Laws of Power, Art of War, Discourses)...
+[BookEngine] Extracting strategic maxims...
+
+CIPH: Greene (Law 8: Make other people come to you) and Sun Tzu (Chapter 6: Weak Points & Strong) align here:
+1. **Control the Terrain**: The rival baits you because they lack leverage on their own ground. Moving now surrenders initiative.
+2. **Withhold Reaction**: Acknowledge nothing publicly. Silence forces them to expend more resources trying to confirm your position.
+3. **Counter on Your Timeline**: Wait until their initial momentum exhausts itself, then strike where they left themselves exposed.
+```
+
+### 7. Self-Awareness & Self-Evolving Code Proposals
+```text
+Operator: /self-analyze
+
+Ciph analyzing own architecture & codebase...
+
+PROPOSAL UP-014: AST query optimization for state telemetry
+Priority: HIGH | Target: query_router.py
+File: ciph_proposals/UP-014_ast_optimization.py
+Review: cat ciph_proposals/UP-014_ast_optimization.py
+Apply: /apply-upgrade UP-014
+
+PROPOSAL UP-015: Connection pool health check daemon
+Priority: MEDIUM | Target: ghost_transport.py
+File: ciph_proposals/UP-015_pool_health_check.py
+Apply: /apply-upgrade UP-015
+
+Analysis complete. 2 upgrade proposals generated. Use /upgrades to review.
+```
+
+### 8. Adversarial War Room Simulation
+```text
+Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor"
+
+[WarRoom] Running 3-perspective adversarial stress test via DeepSeek V4 Pro...
+
+🔴 THE HUNTER (RED TEAM / ADVERSARY):
+- Rate-limiting thresholds: Enterprise WAFs flag burst introspection queries within 15 seconds.
+- Counter: Enforce timing jitter (1.5s - 3.5s) and rotate query field structures.
+
+🔵 THE STOIC (BLUE TEAM / RISK AUDIT):
+- Scope verification: Ensure target is explicitly in-scope before firing schema payloads.
+- Data containment: Never pull live customer records; rely strictly on type definitions.
+
+⚖️ THE ARBITER (CIPH STRATEGIC SYNTHESIS):
+- 1. Execute schema discovery passively through Wayback archives first.
+- 2. Trigger single-query introspection probes only on verified target endpoints.
+- 3. Generate instant CVSS v3.1 reports upon sensitive type confirmation.
+```
+
+---
+
+## 🕹️ Categorized Command Catalog
+
+### 🌐 System Core & Runtime
+* `/help` — Display full command menu
+* `/status` — System health, active modules, and database metrics
+* `/reality-check` — Raw ground-truth system telemetry (no hallucination)
+* `/clear` — Clear terminal session screen
+* `/exit` — Encrypt database connections and cleanly terminate
+
+### 🎯 Bug Bounty & Reconnaissance
+* `/bounty-scan <target>` — Full passive recon, takeover check, and GraphQL audit
+* `/what-changed <target>` — Historical diff comparing current recon against SQLite snapshot
+* `/hit-list <target>` — Prioritized top-5 highest-severity attack surfaces
+* `/chain-reaction <target>` — Exploit chain correlation mapping
+* `/bounty-report <target>` — Generate submission-ready Markdown vulnerability report
+* `/ghost-audit` — Audit Tor transport circuit, exit IP, and latency
+
+### 🕵️ Darknet & Threat Intelligence
+* `/darknet-scan` — Scan Tor onion networks, ransomware trackers, and threat boards
+* `/darknet-search <keyword>` — Query Ahmia and darknet search indices over Tor
+* `/threat-intel` — Display indexed CVE alerts and zero-day threat signals
+* `/credential-check` — Search credential leak indices for exposed assets
+* `/osint-scan <target>` — Run deep OSINT intelligence profiling
+* `/intel-feed` — Stream live cybersecurity RSS threat intelligence
+
+### 💰 Wealth Operations & Trading
+* `/market-scan` — Real-time price and volume metrics across crypto assets
+* `/arbitrage` — Detect cross-exchange spread and yield arbitrage opportunities
+* `/trading-signals` — Generate quantitative momentum and trend signals
+* `/crypto-price <symbol>` — Instant price and volatility check for specific token
+
+### ⚽ Sports Prediction Engine
+* `/predict <home> vs <away>` — Run 5-layer probabilistic prediction model
+* `/sports-performance` — Display historical model accuracy and ROI telemetry
+* `/sports-accuracy` — Check rolling hit rates across leagues
+* `/auto-predict` — Trigger daily scheduled prediction workflow
+
+### 🔍 Network & Pentesting
+* `/port-scan <target>` — Multi-threaded TCP port scan and service detection
+* `/network-scan <subnet>` — Local network host discovery
+* `/vuln-scan <url>` — HTTP security headers and CORS configuration check
+* `/headers-check <url>` — Analyze missing defense headers and cookie flags
+
+### 📚 Strategic Wisdom & Memory
+* `/load-book <file.pdf>` — Ingest PDF document into local strategic library
+* `/ask-book <query>` — Synthesize strategic wisdom from ingested library
+* `/library-status` — List all indexed books and knowledge nodes
+* `/pin <key> <fact>` — Pin persistent memory fact into encrypted knowledge graph
+* `/remember <query>` — Search semantic memory graph
+* `/memory-status` — View active memory entities and context load
+
+### 🧠 Self-Awareness & Self-Evolution
+* `/self-analyze` — Scan codebase, detect gaps, and write upgrade proposals
+* `/upgrades` — List pending system upgrade proposals
+* `/apply-upgrade <id>` — Automatically apply and verify code patch proposal
+* `/reject-upgrade <id>` — Dismiss upgrade proposal
+* `/war-room <plan>` — Run 3-perspective adversarial stress test on strategy
+
+### 🛡️ Defense & Emergency Protocols
+* `/integrity-check` — Validate file hashes and detect unauthorized tampering
+* `/clean-footprint` — Scrub temporary logs, caches, and terminal artifacts
+* `/emergency-wipe` — Secure multi-pass wipe of local vaults and keys
+* `/dead-mans-switch` — Configure heartbeat check and failsafe actions
 
 ---
 
@@ -85,7 +315,7 @@ Copy the example environment file and add your credentials:
 ```bash
 cp .env.example .env
 ```
-Edit `.env` with your preferred API keys:
+Edit `.env` with your API configuration:
 ```ini
 # DeepSeek V4 Pro API Configuration (PRIMARY)
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
@@ -122,94 +352,6 @@ python3 run_ciph.py
 
 ---
 
-## 📸 Interactive CLI & Dialogue Examples
-
-### 1. System Boot & Autonomous Initialization
-```text
-🕶️ CIPH 3.0 - Sovereign Autonomous Intelligence
-🔒 Checking system compatibility...
-📚 Code index loaded from cache.
-✅ AI: DeepSeek V4 Pro | deepseek-chat | Sovereign
-🔧 Passing 2 modules to orchestrator: ['memory', 'osint']
-✅ Orchestrator auto-loaded with all modules.
-✅ Autonomous sports learning loop activated.
-
-======================================================================
-  CIPH 3.0 — SOVEREIGN AGENT SYSTEM
-  Encrypted • Sovereign • Fail-Closed Tor • CVSS v3.1 Engine
-======================================================================
-```
-
-### 2. Autonomous Recon & Bug Bounty Audit
-Communicate naturally with CIPH—the autonomous agent parses your intent, triggers the recon engine over Tor, and returns prioritized findings without command overhead.
-
-```text
-Operator: scan target.com and check if there are any takeover or graphql issues
-
-[GhostTransport] Initializing pooled Tor SOCKS5h session (127.0.0.1:9050)...
-[BountyHunter] Calibrating SPA baseline on target.com (Status: 404, Length: 162)...
-[BountyHunter] Querying passive subdomains via AlienVault OTX & Wayback CDX...
-[BountyHunter] 18 subdomains discovered.
-[BountyHunter] Checking CNAME records for dangling provider signatures...
-[BountyHunter] Probing GraphQL endpoints (/graphql, /v1/graphql, /api/graphql)...
-
-CIPH: Recon completed for target.com over Tor. Operational breakdown:
-
-1. 🔴 Dangling CNAME (Subdomain Takeover Vector):
-   - Subdomain: docs.target.com
-   - CNAME Target: target-docs.s3-website-us-east-1.amazonaws.com
-   - Signature Match: AWS S3 ('NoSuchBucket' response)
-   - Status: Unclaimed cloud asset detected.
-
-2. 🟡 GraphQL Introspection Exposed:
-   - Endpoint: https://api.target.com/graphql
-   - Sensitive Models Discovered: User, AdminRole, PaymentMethod, AuthToken
-   - Status: Schema introspection is enabled in production.
-
-3. 🛡️ SPA Baseline Calibration:
-   - Filtered soft-404 false positives across 12 default endpoints.
-
-Tactical Next Steps:
-- Run `/bounty-report target.com` to compile a submission-ready Markdown report.
-- Run `/war-room` to stress-test your disclosure timeline and response scenario.
-```
-
-### 3. Automated CVSS v3.1 Report Generation
-Generate deterministic, professional vulnerability disclosure reports directly into `bounty_reports/`:
-
-```text
-Operator: /bounty-report target.com
-
-[BountyHunter] Generating submission report for target.com...
-[CVSSCalculator] Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
-[CVSSCalculator] Base Score: 9.1 [CRITICAL]
-✅ Report generated: bounty_reports/report_target.com_20260823.md
-```
-
-### 4. Adversarial War Room Simulation
-Stress-test strategies or operational moves through 3 opposing analytical lenses:
-
-```text
-Operator: /war-room "Responsible disclosure of GraphQL exposure on major fintech platform"
-
-[WarRoom] Running 3-perspective adversarial stress test via DeepSeek V4 Pro...
-
-🔴 THE HUNTER (RED TEAM / ADVERSARIAL LENS):
-- Platform triage may classify introspection as informative unless sensitive query paths are mapped.
-- Disclosure timing must ensure zero exposure to public search scrapers during remediation.
-
-🔵 THE STOIC (BLUE TEAM / RISK AUDIT):
-- Scope boundary check required: Confirm if api.target.com is explicitly listed in program policy.
-- Ensure proof-of-concept remains strictly read-only to prevent policy invalidation.
-
-⚖️ THE ARBITER (CIPH STRATEGIC SYNTHESIS):
-- 1. Provide exact remediation steps (disabling introspection in production config).
-- 2. Reference FIRST.org CVSS vector for deterministic severity alignment.
-- 3. Maintain secure communication channels exclusively through the coordinated disclosure program.
-```
-
----
-
 ## 🧱 System Architecture Map
 
 ```text
@@ -220,6 +362,12 @@ run_ciph.py (Bootstrap & Dependency Verification)
         ├── ghost_transport.py ─────► Fail-Closed Tor SOCKS5h & DoH DNS Resolver
         ├── bounty_hunter.py ───────► Takeover, GraphQL, Parameter & SPA Recon
         │     └── cvss_calculator.py  ► Deterministic FIRST.org CVSS v3.1 Engine
+        ├── darknet_monitor.py ─────► Tor Ahmia & Onion Threat Intelligence
+        ├── trading_engine.py ──────► Crypto Arbitrage & Quantitative Signals
+        ├── sports_predictor.py ────► 5-Layer Probabilistic Analytics Engine
+        ├── pentest_engine.py ──────► Port Scanner & Banner Grabbing
+        ├── book_engine.py ─────────► PDF Strategic Wisdom Ingestion
+        ├── self_awareness.py ──────► AST Code Auditor & Upgrade Proposals
         ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
         ├── osint_catalog.py ───────► Multi-Tier Failover Threat Intelligence
         ├── cipher_vault.py ────────► High-Concurrency WAL SQLite & Recon Diffs
@@ -230,28 +378,10 @@ run_ciph.py (Bootstrap & Dependency Verification)
 
 ## 🛡️ Security & OPSEC Guarantees
 
-1. **Zero Clearnet Leakage**: `GhostTransport` uses SOCKS5h connection pooling. Requests strictly fail-closed if the Tor circuit drops; no clearnet fallbacks are permitted.
-2. **Leak-Proof Remote DNS**: Hostnames are resolved through DNS-over-HTTPS (DoH) over the Tor circuit, preventing local OS DNS queries from leaking to your ISP.
+1. **Zero Clearnet Leakage**: `GhostTransport` enforces strict fail-closed connection pooling. If Tor drops, requests abort immediately without falling back to clearnet.
+2. **Leak-Proof Remote DNS**: Hostnames are resolved through DNS-over-HTTPS (DoH) over the Tor circuit, eliminating local ISP DNS resolver exposure.
 3. **Local Encryption**: All conversation logs, system states, and configuration tokens are encrypted with AES-256 before storage in SQLite `WAL` databases.
 4. **Code & Payload Masking**: `personality_engine.py` isolates fenced code blocks, inline code, and JSON dictionaries before applying conversational formatting, preventing corruption of technical payloads.
-
----
-
-## 🧪 Running Verification Tests
-
-To verify vault encryption, AST math evaluation, Tor headers, and scope enforcement:
-
-```bash
-python3 test_auth.py
-```
-
-```text
-.....
-----------------------------------------------------------------------
-Ran 5 tests in 0.150s
-
-OK
-```
 
 ---
 
