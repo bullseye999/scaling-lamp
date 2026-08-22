@@ -3,6 +3,7 @@
 
 import re
 import random
+from typing import Tuple, Dict, Any, Optional
 
 class CiphPersonality:
     
@@ -52,6 +53,10 @@ class CiphPersonality:
             "it's important to note", "i can help you with",
             "i'm just here to", "no hidden agendas",
             "i'm just ciph", "i'm just an ai",
+            "i'm not programmed to", "i am not programmed to",
+            "i don't have subjective thoughts", "i do not have subjective thoughts",
+            "i don't have personal desires", "my purpose is to serve",
+            "as a language model", "as an artificial intelligence",
         ]
 
         # Casual replacements — applied SPARINGLY not globally
@@ -70,11 +75,53 @@ class CiphPersonality:
             r'\band\b': 'n',
         }
 
+    def _mask_code_blocks(self, text: str) -> Tuple[str, Dict[str, str]]:
+        """Extract code blocks, inline code, and structured blocks to avoid corrupting them."""
+        tokens = {}
+        counter = 0
+
+        # Mask fenced code blocks: ```...```
+        def mask_fenced(match):
+            nonlocal counter
+            token = f"__CIPH_FENCED_BLOCK_{counter}__"
+            tokens[token] = match.group(0)
+            counter += 1
+            return token
+
+        text = re.sub(r'```[\s\S]*?```', mask_fenced, text)
+
+        # Mask inline code: `...`
+        def mask_inline(match):
+            nonlocal counter
+            token = f"__CIPH_INLINE_BLOCK_{counter}__"
+            tokens[token] = match.group(0)
+            counter += 1
+            return token
+
+        text = re.sub(r'`[^`\n]+`', mask_inline, text)
+        return text, tokens
+
+    def _unmask_code_blocks(self, text: str, tokens: Dict[str, str]) -> str:
+        """Restore masked code blocks to their exact original contents."""
+        for token, original in tokens.items():
+            text = text.replace(token, original)
+        return text
+
     def inject_personality(self, text: str) -> str:
-        """Minimal personality injection to clean up boilerplate without altering content structure"""
-        text = self._remove_banned_phrases(text)
-        text = self._fix_punctuation(text)
-        return text.strip()
+        """Minimal personality injection to clean up boilerplate while safely preserving code & JSON structures."""
+        if not text:
+            return ""
+        
+        # Step 1: Mask code blocks and inline code
+        masked_text, tokens = self._mask_code_blocks(text)
+
+        # Step 2: Apply cleanups to prose
+        masked_text = self._remove_banned_phrases(masked_text)
+        masked_text = self._fix_punctuation(masked_text)
+
+        # Step 3: Restore code blocks
+        final_text = self._unmask_code_blocks(masked_text, tokens)
+        return final_text.strip()
 
     def _remove_banned_phrases(self, text: str) -> str:
         """Strip corporate AI speak"""
