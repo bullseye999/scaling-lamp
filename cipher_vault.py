@@ -54,9 +54,17 @@ class CipherVault:
         except Exception:
             return None
 
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get database connection configured with WAL mode and busy timeout."""
+        conn = sqlite3.connect(self.db_path, timeout=10.0)
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
+        return conn
+
     def _init_db(self):
         """Initialize the encrypted database schema."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         # Conversations table
         c.execute('''
@@ -75,6 +83,73 @@ class CipherVault:
                 encrypted_value TEXT
             )
         ''')
+        # Narrative Timeline table (Episodic memory milestones)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS narrative_timeline (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                encrypted_summary TEXT,
+                encrypted_targets TEXT,
+                encrypted_decisions TEXT,
+                context_tag TEXT
+            )
+        ''')
+        # Bounty Scopes table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS bounty_scopes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                program_name TEXT,
+                encrypted_scope_json TEXT,
+                is_active INTEGER DEFAULT 1
+            )
+        ''')
+        # Bounty Reports Index table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS bounty_reports_index (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                target TEXT,
+                vuln_type TEXT,
+                cvss_score REAL,
+                severity TEXT,
+                report_path TEXT,
+                status TEXT DEFAULT 'DRAFT'
+            )
+        ''')
+        # Historical Recon Snapshots table (for diffing & change detection)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS recon_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                target TEXT,
+                encrypted_snapshot_json TEXT,
+                asset_count INTEGER
+            )
+        ''')
+        # Watchtower Events table (for passive sensor alerts)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS watchtower_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                target TEXT,
+                event_type TEXT,
+                details TEXT,
+                severity TEXT DEFAULT 'INFO'
+            )
+        ''')
+        # OPSEC Score History table (for tracking anonymity trends over time)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS opsec_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL,
+                score INTEGER,
+                exit_ip TEXT,
+                latency_ms REAL,
+                status TEXT,
+                details TEXT
+            )
+        ''')
         conn.commit()
         conn.close()
 
@@ -86,7 +161,7 @@ class CipherVault:
         
         import time
         timestamp = time.time()
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         try:
             c = conn.cursor()
             c.execute('BEGIN TRANSACTION')
@@ -103,7 +178,7 @@ class CipherVault:
 
     def get_recent_conversations(self, limit: int = 10, context_tag: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve recent conversations, decrypted."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
 
         if context_tag:
@@ -138,7 +213,7 @@ class CipherVault:
         key = key or ""
         value = value or ""
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         c.execute('''
             INSERT OR REPLACE INTO config (key, encrypted_value)
@@ -151,7 +226,7 @@ class CipherVault:
         """Retrieve a decrypted configuration value."""
         key = key or ""
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         c.execute('SELECT encrypted_value FROM config WHERE key = ?', (key,))
         row = c.fetchone()
@@ -179,7 +254,7 @@ class CipherVault:
 
     def get_database_stats(self) -> Dict[str, Any]:
         """Get database statistics and health info."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         
         # Get conversation count
@@ -205,12 +280,296 @@ class CipherVault:
             'vault_status': 'OPERATIONAL'
         }
 
+    def store_narrative_milestone(self, summary: str, targets: str = "", decisions: str = "", tag: str = "strategic") -> int:
+        """Store an episodic narrative milestone."""
+        import time
+        t = time.time()
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO narrative_timeline (timestamp, encrypted_summary, encrypted_targets, encrypted_decisions, context_tag)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (t, self._encrypt(summary), self._encrypt(targets), self._encrypt(decisions), tag))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_narrative_milestones(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Retrieve recent narrative milestones."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, encrypted_summary, encrypted_targets, encrypted_decisions, context_tag
+            FROM narrative_timeline
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = c.fetchall()
+        conn.close()
+        milestones = []
+        for r in rows:
+            milestones.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'summary': self._decrypt(r[2]) or "",
+                'targets': self._decrypt(r[3]) or "",
+                'decisions': self._decrypt(r[4]) or "",
+                'tag': r[5]
+            })
+        return milestones
+
+    def store_bounty_scope(self, program_name: str, scope_dict: Dict[str, Any]) -> int:
+        """Store an ingested bounty scope."""
+        import time
+        t = time.time()
+        scope_json = json.dumps(scope_dict)
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO bounty_scopes (timestamp, program_name, encrypted_scope_json, is_active)
+            VALUES (?, ?, ?, 1)
+        ''', (t, program_name, self._encrypt(scope_json)))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_active_bounty_scopes(self) -> List[Dict[str, Any]]:
+        """Get all active bug bounty scopes."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, program_name, encrypted_scope_json
+            FROM bounty_scopes WHERE is_active = 1
+            ORDER BY timestamp DESC
+        ''')
+        rows = c.fetchall()
+        conn.close()
+        scopes = []
+        for r in rows:
+            raw_json = self._decrypt(r[3]) or "{}"
+            try:
+                data = json.loads(raw_json)
+            except Exception:
+                data = {}
+            scopes.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'program_name': r[2],
+                'scope': data
+            })
+        return scopes
+
+    def store_bounty_report_index(self, target: str, vuln_type: str, cvss_score: float, severity: str, report_path: str, status: str = "DRAFT") -> int:
+        """Index a generated bounty report."""
+        import time
+        t = time.time()
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO bounty_reports_index (timestamp, target, vuln_type, cvss_score, severity, report_path, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (t, target, vuln_type, cvss_score, severity, report_path, status))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_bounty_reports_index(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """List all indexed bug bounty reports."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, target, vuln_type, cvss_score, severity, report_path, status
+            FROM bounty_reports_index
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = c.fetchall()
+        conn.close()
+        reports = []
+        for r in rows:
+            reports.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'target': r[2],
+                'vuln_type': r[3],
+                'cvss_score': r[4],
+                'severity': r[5],
+                'report_path': r[6],
+                'status': r[7]
+            })
+        return reports
+
+    def store_recon_snapshot(self, target: str, snapshot_dict: Dict[str, Any]) -> int:
+        """Store a recon snapshot for historical diffing."""
+        import time
+        t = time.time()
+        snapshot_json = json.dumps(snapshot_dict)
+        asset_count = len(snapshot_dict.get("subdomains", [])) + len(snapshot_dict.get("exposed_endpoints", [])) + len(snapshot_dict.get("js_endpoints", []))
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO recon_snapshots (timestamp, target, encrypted_snapshot_json, asset_count)
+            VALUES (?, ?, ?, ?)
+        ''', (t, target.lower(), self._encrypt(snapshot_json), asset_count))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_recent_recon_snapshots(self, target: str, limit: int = 3) -> List[Dict[str, Any]]:
+        """Retrieve recent recon snapshots for a target domain."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, target, encrypted_snapshot_json, asset_count
+            FROM recon_snapshots
+            WHERE target = ?
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (target.lower(), limit))
+        rows = c.fetchall()
+        conn.close()
+        snapshots = []
+        for r in rows:
+            raw_json = self._decrypt(r[3]) or "{}"
+            try:
+                data = json.loads(raw_json)
+            except Exception:
+                data = {}
+            snapshots.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'target': r[2],
+                'snapshot': data,
+                'asset_count': r[4]
+            })
+        return snapshots
+
+    def store_watchtower_event(self, target: str, event_type: str, details: str, severity: str = "INFO") -> int:
+        """Store a passive sensor alert or change detection event."""
+        import time
+        t = time.time()
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO watchtower_events (timestamp, target, event_type, details, severity)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (t, target.lower(), event_type, details, severity))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_recent_watchtower_events(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve recent watchtower events."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, target, event_type, details, severity
+            FROM watchtower_events
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = c.fetchall()
+        conn.close()
+        events = []
+        for r in rows:
+            events.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'target': r[2],
+                'event_type': r[3],
+                'details': r[4],
+                'severity': r[5]
+            })
+        return events
+
+    def store_opsec_audit(self, score: int, exit_ip: str, latency_ms: float, status: str, details: str = "") -> int:
+        """Store an OPSEC score snapshot in history."""
+        import time
+        t = time.time()
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO opsec_history (timestamp, score, exit_ip, latency_ms, status, details)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (t, score, exit_ip, latency_ms, status, details))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+
+    def get_opsec_history(self, limit: int = 15) -> List[Dict[str, Any]]:
+        """Retrieve historical OPSEC audit snapshots."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, timestamp, score, exit_ip, latency_ms, status, details
+            FROM opsec_history
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = c.fetchall()
+        conn.close()
+        history = []
+        for r in rows:
+            history.append({
+                'id': r[0],
+                'timestamp': r[1],
+                'score': r[2],
+                'exit_ip': r[3],
+                'latency_ms': r[4],
+                'status': r[5],
+                'details': r[6]
+            })
+        return history
+
+    def get_global_assets_summary(self) -> Dict[str, Any]:
+        """Aggregate all unique assets discovered across all targets."""
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute('''
+            SELECT target, encrypted_snapshot_json, timestamp
+            FROM recon_snapshots
+            ORDER BY timestamp DESC
+        ''')
+        rows = c.fetchall()
+        conn.close()
+
+        all_subdomains = set()
+        all_endpoints = set()
+        all_js_routes = set()
+        targets_tracked = set()
+
+        for target, enc_json, ts in rows:
+            raw_json = self._decrypt(enc_json) or "{}"
+            try:
+                data = json.loads(raw_json)
+                targets_tracked.add(target)
+                for s in data.get("subdomains", []):
+                    all_subdomains.add(s)
+                for ep in data.get("exposed_endpoints", []):
+                    all_endpoints.add(f"{target}{ep.get('path', '')}")
+                for js_r in data.get("js_endpoints", []):
+                    all_js_routes.add(js_r.get("endpoint", ""))
+            except Exception:
+                pass
+
+        return {
+            "targets_count": len(targets_tracked),
+            "targets": sorted(list(targets_tracked)),
+            "subdomains_count": len(all_subdomains),
+            "subdomains": sorted(list(all_subdomains)),
+            "exposed_endpoints_count": len(all_endpoints),
+            "exposed_endpoints": sorted(list(all_endpoints)),
+            "js_routes_count": len(all_js_routes),
+            "js_routes": sorted(list(all_js_routes))
+        }
+
     def cleanup_old_conversations(self, days_old: int = 30) -> int:
         """Clean up conversations older than specified days."""
         import time
         cutoff_time = time.time() - (days_old * 24 * 60 * 60)
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM conversations WHERE timestamp < ?', (cutoff_time,))
         count_before = c.fetchone()[0]
@@ -242,10 +601,6 @@ class CipherVault:
         except Exception as e:
             print(f"Export failed: {e}")
             return False
-
-    def _get_connection(self):
-        """Internal method to get database connection - for advanced operations."""
-        return sqlite3.connect(self.db_path)
 
 # Enhanced example usage with new features
 if __name__ == "__main__":
