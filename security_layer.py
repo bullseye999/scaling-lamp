@@ -2,6 +2,8 @@
 # security_layer.py - Advanced OPSEC and security tools
 
 import os
+import glob
+import shutil
 import hashlib
 import subprocess
 import tempfile
@@ -83,8 +85,18 @@ class SecurityLayer:
         
         # Clear temporary files
         try:
-            subprocess.run(["rm", "-rf", "/tmp/*"], capture_output=True)
-            cleaned.append("Temp files cleared")
+            temp_cleaned_count = 0
+            for item in glob.glob(os.path.join(tempfile.gettempdir(), "*")):
+                try:
+                    if os.path.isfile(item) or os.path.islink(item):
+                        os.remove(item)
+                        temp_cleaned_count += 1
+                    elif os.path.isdir(item):
+                        shutil.rmtree(item, ignore_errors=True)
+                        temp_cleaned_count += 1
+                except Exception:
+                    pass
+            cleaned.append(f"Temp files cleared ({temp_cleaned_count} items)")
         except Exception:
             pass
         
@@ -99,7 +111,14 @@ class SecurityLayer:
             expanded_dir = os.path.expanduser(cache_dir)
             if os.path.exists(expanded_dir):
                 try:
-                    subprocess.run(["rm", "-rf", expanded_dir + "*"], capture_output=True)
+                    for item in glob.glob(os.path.join(expanded_dir, "*")):
+                        try:
+                            if os.path.isfile(item) or os.path.islink(item):
+                                os.remove(item)
+                            elif os.path.isdir(item):
+                                shutil.rmtree(item, ignore_errors=True)
+                        except Exception:
+                            pass
                     cleaned.append(f"Cleared {cache_dir}")
                 except Exception:
                     pass
