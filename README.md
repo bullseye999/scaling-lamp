@@ -13,9 +13,9 @@
 <p align="center">
   <a href="#-what-is-ciph-30">Architecture</a> •
   <a href="#-the-12-core-operational-engines">The 12 Engines</a> •
+  <a href="#-installation--quickstart">Quickstart & Installation</a> •
   <a href="#-interactive-cli--demonstrations">Interactive Demos</a> •
   <a href="#-categorized-command-catalog">Command Catalog</a> •
-  <a href="#-installation--quickstart">Quickstart</a> •
   <a href="#-system-architecture-map">System Map</a>
 </p>
 
@@ -62,6 +62,166 @@ Unlike conventional AI wrappers, CIPH is directly wired to its host operating sy
 | **10. Autonomous Action Agent** | `ciph_autonomous_agent.py` | Conversational action dispatcher. Evaluates natural-language dialogue, triggers back-end tools over Tor, and synthesizes findings without command friction. |
 | **11. Adversarial War Room** | `war_room.py` | 3-perspective adversarial stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Synthesis). |
 | **12. Defense, Vault & Emergency** | `cipher_vault.py`, `security_layer.py`, `dead_mans_switch.py` | High-concurrency SQLite `WAL` mode, AES-256 encryption, memory graph pinning, footprint cleaner, integrity checks, and emergency kill-switch wipe. |
+
+---
+
+## 🚀 Installation & Quickstart
+
+CIPH 3.0 runs seamlessly across **Windows**, **Linux**, **macOS**, and **WSL2**. Choose your platform below.
+
+---
+
+### 🪟 Option A: Windows Installation (Native PowerShell / Command Prompt)
+
+#### 1. Prerequisites on Windows
+* **Python 3.10+**: Download from [python.org](https://www.python.org/downloads/) *(Ensure **"Add python.exe to PATH"** is checked)* or install via Windows Package Manager:
+  ```powershell
+  winget install Python.Python.3.11 Git.Git TorProject.Tor
+  ```
+* **Tor on Windows**: You can install the Tor Expert Bundle via `winget` above or launch the [Tor Browser](https://www.torproject.org/download/) in the background (which provides a local SOCKS5 proxy on `127.0.0.1:9150` or `127.0.0.1:9050`).
+
+#### 2. Clone the Repository
+Open **PowerShell** or **Command Prompt** and clone the repo:
+```powershell
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+```
+
+#### 3. Create & Activate Virtual Environment
+* **PowerShell**:
+  ```powershell
+  # If script execution is restricted, enable process bypass once:
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+  python -m venv venv
+  .\venv\Scripts\Activate.ps1
+  ```
+* **Command Prompt (CMD)**:
+  ```cmd
+  python -m venv venv
+  venv\Scripts\activate.bat
+  ```
+
+#### 4. Install Dependencies
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 5. Configure Environment Variables
+Copy the template configuration file:
+```powershell
+# In PowerShell or CMD:
+copy .env.example .env
+```
+Open `.env` in Notepad or VS Code and set your API keys:
+```ini
+# DeepSeek V4 Pro API Configuration (PRIMARY)
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+
+# Optional API Integrations
+FOOTBALL_DATA_API_KEY=your_football_data_api_key_here
+ODDS_API_KEY=your_odds_api_key_here
+```
+
+#### 6. Start Tor Daemon
+* If installed via `winget` / Tor Expert Bundle, start the service in a separate terminal:
+  ```powershell
+  tor
+  ```
+* *Alternatively*, simply keep the Tor Browser open in the background.
+
+#### 7. Verify & Launch CIPH
+```powershell
+# Run self-test
+python test_auth.py
+
+# Launch CIPH interactive terminal
+python run_ciph.py
+```
+
+---
+
+### 🐧 Option B: Windows via WSL2 (Windows Subsystem for Linux - Recommended)
+
+For the closest parity with production cloud environments and native Tor daemon systemd management:
+
+1. Open PowerShell as Administrator and install WSL2:
+   ```powershell
+   wsl --install
+   ```
+2. Restart your computer if prompted, then open the **Ubuntu** app from the Start menu.
+3. Follow the standard **Linux instructions** below inside your WSL2 terminal.
+
+---
+
+### 🐧 Option C: Linux (Ubuntu / Debian / Arch / Fedora)
+
+#### 1. Install System Prerequisites & Tor Daemon
+```bash
+# Ubuntu / Debian
+sudo apt update && sudo apt install python3 python3-pip python3-venv git tor -y
+sudo systemctl enable --now tor
+
+# Arch Linux
+sudo pacman -S python python-pip git tor
+sudo systemctl enable --now tor
+
+# Fedora
+sudo dnf install python3 python3-pip git tor -y
+sudo systemctl enable --now tor
+```
+
+#### 2. Clone & Setup Virtual Environment
+```bash
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 3. Configure `.env`
+```bash
+cp .env.example .env
+nano .env  # Enter your DEEPSEEK_API_KEY
+```
+
+#### 4. Verify & Launch
+```bash
+python3 test_auth.py
+python3 run_ciph.py
+```
+
+---
+
+### 🍏 Option D: macOS (Homebrew)
+
+#### 1. Install Prerequisites & Start Tor
+```bash
+brew install python git tor
+brew services start tor
+```
+
+#### 2. Clone & Setup
+```bash
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+cp .env.example .env
+# Edit .env with your favorite editor
+python3 test_auth.py
+python3 run_ciph.py
+```
 
 ---
 
@@ -287,68 +447,6 @@ Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor
 * `/clean-footprint` — Scrub temporary logs, caches, and terminal artifacts
 * `/emergency-wipe` — Secure multi-pass wipe of local vaults and keys
 * `/dead-mans-switch` — Configure heartbeat check and failsafe actions
-
----
-
-## 🚀 Installation & Quickstart
-
-### 1. Prerequisites
-* **Operating System**: Linux (Ubuntu/Debian, Arch, Fedora), macOS, or WSL2.
-* **Python**: `Python 3.10+`
-* **Tor Daemon**: Required for anonymous threat intel and fail-closed recon.
-
-### 2. Clone the Repository
-```bash
-git clone https://github.com/pendragon360/scaling-lamp.git
-cd scaling-lamp
-```
-
-### 3. Install Dependencies
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment
-Copy the example environment file and add your credentials:
-```bash
-cp .env.example .env
-```
-Edit `.env` with your API configuration:
-```ini
-# DeepSeek V4 Pro API Configuration (PRIMARY)
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
-
-# Optional API Integrations
-FOOTBALL_DATA_API_KEY=your_football_data_api_key_here
-ODDS_API_KEY=your_odds_api_key_here
-```
-
-### 5. Start Tor Daemon
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install tor -y
-sudo systemctl start tor
-
-# macOS (Homebrew)
-brew install tor
-brew services start tor
-```
-
-### 6. Run System Verification
-Verify all cryptographic vault operations, AST math evaluation, Tor headers, and scope enforcement:
-```bash
-python3 test_auth.py
-```
-*Expected Output: `Ran 5 tests in ~0.15s - OK`*
-
-### 7. Launch CIPH
-```bash
-python3 run_ciph.py
-```
 
 ---
 
