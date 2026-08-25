@@ -3,6 +3,8 @@
 
 import time
 import requests
+from typing import Optional
+from ciph_router import CiphRouter
 from personality_engine import CiphPersonality
 from ciph_worldview import get_worldview
 
@@ -46,11 +48,12 @@ class OllamaBrain:
 
 
 class CiphConversation:
-    def __init__(self, vault):
+    def __init__(self, vault, router: Optional[CiphRouter] = None):
         self.vault = vault
         self.personality = CiphPersonality()
         self.history = []
         self.context_window = 6
+        self.router = router or CiphRouter()
         self.brain = OllamaBrain()
 
     def _build_system_prompt(self, mood_context="", memory_context="", book_context="") -> str:

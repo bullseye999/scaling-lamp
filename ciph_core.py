@@ -93,6 +93,7 @@ class CiphCore:
         self.smart_memory = SmartMemory(self.vault)
         # Initialize state manager (single source of truth)
         self.state = StateManager()
+        self.query_router = QueryRouter(self.state, self.vault)
         
         # Initialize with current system state (safe attribute checks)
         tor_active = False

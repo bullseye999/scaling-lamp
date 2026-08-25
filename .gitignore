@@ -42,6 +42,7 @@ sports_predictions/
 sports_logs/
 system_proposals/
 *.json  # (but keep example configs)
+code_index.json
 !requirements.txt
 !ciph_version.json   # optional, you may keep
 
