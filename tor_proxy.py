@@ -12,6 +12,7 @@ class TorProxy:
     """Route all traffic through Tor network WITH CONTROL PORT"""
     
     def __init__(self):
+        self._orig_socket = socket.socket
         self.tor_port = 9050
         self.control_port = 9051
         self.current_ip = None
@@ -138,11 +139,13 @@ class TorProxy:
     def disable_tor(self) -> str:
         """Disable Tor proxy – restore normal routing"""
         try:
-            import socket
-            import socks
             # Restore default socket
-            socket.socket = socket._socketobject  # Original socket
-            socks.setdefaultproxy()  # Clear proxy
+            if hasattr(self, '_orig_socket') and self._orig_socket:
+                socket.socket = self._orig_socket
+            else:
+                import _socket
+                socket.socket = _socket.socket
+            socks.set_default_proxy()  # Clear proxy
             self.current_ip = None
             return "‖ Tor disabled. Back on clearnet ‖"
         except Exception as e:
