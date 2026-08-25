@@ -39,7 +39,10 @@ class SmartMemory:
 
     def pin(self, key: str, value: str, tags: list = None):
         """Pin a fact for long-term recall with optional category tags"""
-        self.pinned_facts[key.lower()] = {
+        k = key.lower()
+        if k in self.pinned_facts and self.pinned_facts[k].get('value') == value:
+            return
+        self.pinned_facts[k] = {
             'value': value,
             'tags': tags or ['general'],
             'pinned_at': datetime.now().isoformat()
