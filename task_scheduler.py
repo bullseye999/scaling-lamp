@@ -86,6 +86,7 @@ class TaskScheduler:
 
         # In task_scheduler.py, add to _schedule_default_tasks:
             schedule.every(4).hours.do(self._run_autonomous_osint)
+            schedule.every(45).minutes.do(self._run_autonomous_world_telemetry)
         
         # Backup vault every 12 hours
         if self.default_schedule['backup_vault']['enabled']:
@@ -181,6 +182,16 @@ class TaskScheduler:
                 print(f"🤖 AUTO-OSINT: {result['threats_analyzed']} threats, {len(opportunities)} money ops")
         except Exception as e:
             print(f"‖ AUTO-OSINT Error: {e} ‖")
+
+    def _run_autonomous_world_telemetry(self):
+        """24/7 autonomous Clearnet and Tor Darknet sensory sweep"""
+        try:
+            from world_telemetry import WorldTelemetry
+            wt = WorldTelemetry(self.vault)
+            digest = wt.sync_full_spectrum()
+            print(f"🤖 AUTO-TELEMETRY: {digest['total_cyber_alerts']} CVE/exploit alerts, {digest['darknet_threat_nodes']} darknet nodes synced.")
+        except Exception as e:
+            print(f"‖ AUTO-TELEMETRY Error: {e} ‖")
     
     def get_scheduler_status(self) -> Dict[str, Any]:
         """Get scheduler status"""
