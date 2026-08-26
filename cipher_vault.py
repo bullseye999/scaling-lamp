@@ -602,6 +602,73 @@ class CipherVault:
             print(f"Export failed: {e}")
             return False
 
+    # ─────────────────────────────────────────────
+    # SESSION & TELEMETRY LIFECYCLE TRACKING
+    # ─────────────────────────────────────────────
+
+    def record_session_start(self) -> Dict[str, Any]:
+        """
+        Record session start timestamp and calculate elapsed time away since last session.
+        """
+        import time
+        now = datetime.now()
+        now_iso = now.isoformat()
+        last_end_iso = self.get_config("SESSION_LAST_END")
+        
+        elapsed_seconds = 0.0
+        elapsed_formatted = "First session today"
+        is_first_session = True
+        
+        if last_end_iso:
+            try:
+                last_end_dt = datetime.fromisoformat(last_end_iso)
+                elapsed_seconds = max(0.0, (now - last_end_dt).total_seconds())
+                is_first_session = False
+                
+                hours = int(elapsed_seconds // 3600)
+                minutes = int((elapsed_seconds % 3600) // 60)
+                if hours > 24:
+                    days = hours // 24
+                    rem_hours = hours % 24
+                    elapsed_formatted = f"{days}d {rem_hours}h {minutes}m"
+                elif hours > 0:
+                    elapsed_formatted = f"{hours}h {minutes}m"
+                elif minutes > 0:
+                    elapsed_formatted = f"{minutes} minutes"
+                else:
+                    elapsed_formatted = f"{int(elapsed_seconds)} seconds"
+            except Exception:
+                is_first_session = True
+                elapsed_formatted = "Recent session"
+
+        self.set_config("SESSION_CURRENT_START", now_iso)
+        return {
+            "is_first_session": is_first_session,
+            "elapsed_seconds": elapsed_seconds,
+            "elapsed_formatted": elapsed_formatted,
+            "last_end_time": last_end_iso,
+            "current_start_time": now_iso
+        }
+
+    def record_session_end(self):
+        """Record session shutdown timestamp."""
+        now_iso = datetime.now().isoformat()
+        self.set_config("SESSION_LAST_END", now_iso)
+
+    def save_telemetry_digest(self, digest: Dict[str, Any]):
+        """Store the latest real-world & darknet telemetry digest in encrypted vault config."""
+        self.set_config("LATEST_TELEMETRY_DIGEST", json.dumps(digest))
+
+    def get_telemetry_digest(self) -> Optional[Dict[str, Any]]:
+        """Retrieve the latest real-world & darknet telemetry digest from encrypted vault config."""
+        raw = self.get_config("LATEST_TELEMETRY_DIGEST")
+        if raw:
+            try:
+                return json.loads(raw)
+            except Exception:
+                return None
+        return None
+
 # Enhanced example usage with new features
 if __name__ == "__main__":
     vault = CipherVault()
