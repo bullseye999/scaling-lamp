@@ -13,11 +13,12 @@
 <p align="center">
   <a href="#-what-is-ciph-30">Architecture</a> •
   <a href="#-the-14-core-operational-engines">The 14 Engines</a> •
-  <a href="#-proactive-session-intelligence--zero-day-radar">Proactive Intelligence</a> •
-  <a href="#-installation--quickstart">Quickstart</a> •
+  <a href="#-installation--quickstart">Quickstart & Installation</a> •
+  <a href="#-interactive-cli--demonstrations">Interactive Demos</a> •
   <a href="#-categorized-command-catalog">Command Catalog</a> •
+  <a href="#-system-architecture-map">System Map</a> •
   <a href="#-fuel-the-build--support-ciph">Donate</a> •
-  <a href="#-sovereign-contact--security-disclosure">Contact</a>
+  <a href="#-sovereign-contact">Contact</a>
 </p>
 
 </div>
@@ -26,11 +27,11 @@
 
 ## 🧠 What is CIPH 3.0?
 
-**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, real-world sensory telemetry, darknet mapping, bug bounty reconnaissance, wealth operations, sports analytics, and strategic adversarial simulation.
+**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, 24/7 real-world sensory telemetry, darknet mapping, bug bounty reconnaissance, wealth operations, sports analytics, and strategic adversarial simulation.
 
-Unlike conventional AI wrappers, CIPH is directly wired to its host operating system, persistent encrypted databases, and an isolated SOCKS5h Tor transport layer. It operates under a strict **Fail-Closed** security architecture with zero third-party telemetry, local AES-256 encrypted vaults, and continuous 24/7 background radar that indexes live CVEs, zero-days, and macro technological shifts while offline.
+Unlike conventional AI wrappers, CIPH is directly wired to its host operating system, persistent encrypted databases, and an isolated SOCKS5h Tor transport layer. It operates under a strict **Fail-Closed** security architecture with zero third-party telemetry, local AES-256 encrypted vaults, and continuous 24/7 background radar that monitors live CVEs, zero-days, and macro technological shifts while offline.
 
-When you log in, CIPH takes the initiative—greeting you with exact offline durations, synthesizing named vulnerabilities and breaches, and formulating proactive tactical questions rather than passively waiting for user input.
+When you log in, CIPH takes the initiative—greeting you with exact offline durations, synthesizing named vulnerabilities and breaches, and formulating proactive tactical questions rather than passively waiting for user input. All slash commands and tool outputs are automatically bridged into conversational working context, eliminating AI hallucinations on multi-turn technical follow-ups.
 
 ---
 
@@ -70,10 +71,182 @@ When you log in, CIPH takes the initiative—greeting you with exact offline dur
 
 ---
 
-## 🖥️ Proactive Session Intelligence & Zero-Day Radar
+## 🚀 Installation & Quickstart
 
-CIPH does not act like a passive chatbot. When you start an interactive session, it calculates the exact time you have been away, summarizes what the 24/7 background telemetry caught on the wire, and challenges you with proactive tactical questions:
+CIPH 3.0 runs seamlessly across **Windows**, **Linux**, **macOS**, and **WSL2**. Choose your platform below.
 
+---
+
+### 🪟 Option A: Windows Installation (Native PowerShell / Command Prompt)
+
+#### 1. Prerequisites on Windows
+* **Python 3.10+**: Download from [python.org](https://www.python.org/downloads/) *(Ensure **"Add python.exe to PATH"** is checked)* or install via Windows Package Manager:
+  ```powershell
+  winget install Python.Python.3.11 Git.Git TorProject.Tor
+  ```
+* **Tor on Windows**: You can install the Tor Expert Bundle via `winget` above or launch the [Tor Browser](https://www.torproject.org/download/) in the background (which provides a local SOCKS5 proxy on `127.0.0.1:9150` or `127.0.0.1:9050`).
+
+#### 2. Clone the Repository
+Open **PowerShell** or **Command Prompt** and clone the repo:
+```powershell
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+```
+
+#### 3. Create & Activate Virtual Environment
+* **PowerShell**:
+  ```powershell
+  # If script execution is restricted, enable process bypass once:
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+  python -m venv venv
+  .\venv\Scripts\Activate.ps1
+  ```
+* **Command Prompt (CMD)**:
+  ```cmd
+  python -m venv venv
+  venv\Scripts\activate.bat
+  ```
+
+#### 4. Install Dependencies
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 5. Configure Environment Variables
+Copy the template configuration file:
+```powershell
+copy .env.example .env
+```
+Open `.env` in Notepad or VS Code and set your API keys:
+```ini
+# DeepSeek V4 Pro API Configuration (PRIMARY)
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+
+# Optional API Integrations
+FOOTBALL_DATA_API_KEY=your_football_data_api_key_here
+ODDS_API_KEY=your_odds_api_key_here
+```
+
+#### 6. Start Tor Daemon
+* If installed via `winget` / Tor Expert Bundle, start the service in a separate terminal:
+  ```powershell
+  tor
+  ```
+* *Alternatively*, simply keep the Tor Browser open in the background.
+
+#### 7. Verify & Launch CIPH
+```powershell
+# Run self-test
+python test_auth.py
+
+# Launch CIPH interactive terminal
+python run_ciph.py
+```
+
+---
+
+### 🐧 Option B: Windows via WSL2 (Windows Subsystem for Linux - Recommended)
+
+For the closest parity with production cloud environments and native Tor daemon systemd management:
+
+#### 1. Enable WSL2 & Install Ubuntu
+```powershell
+wsl --install -d Ubuntu
+```
+*(Restart your machine if prompted, then open Ubuntu terminal)*.
+
+#### 2. Install Dependencies & Native Tor Daemon
+```bash
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv git tor curl
+
+# Start & enable Tor daemon
+sudo systemctl enable --now tor
+```
+
+#### 3. Clone & Setup CIPH
+```bash
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+#### 4. Launch CIPH in WSL2
+```bash
+python run_ciph.py
+```
+
+---
+
+### 🐧 Option C: Linux / VPS (Debian, Ubuntu, Arch, Kali)
+
+#### 1. System Requirements & Tor Setup
+```bash
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv git tor curl
+
+# Verify Tor service is running
+sudo systemctl enable --now tor
+curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
+```
+
+#### 2. Clone & Setup Virtual Environment
+```bash
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+#### 3. Configure API Keys & Launch
+```bash
+nano .env
+python run_ciph.py
+```
+
+---
+
+### 🍎 Option D: macOS (Homebrew)
+
+#### 1. Install Prerequisites via Homebrew
+```bash
+brew install python git tor
+brew services start tor
+```
+
+#### 2. Clone & Setup
+```bash
+git clone https://github.com/pendragon360/scaling-lamp.git
+cd scaling-lamp
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+#### 3. Launch
+```bash
+python run_ciph.py
+```
+
+---
+
+## 🖥️ Interactive CLI & Demonstrations
+
+### 1. Proactive Session Intelligence & Real-World CVE Radar
 ```text
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                  CIPH v1.0 - AUTONOMOUS AGENT ORCHESTRATION                  ║
@@ -98,75 +271,165 @@ Ciph: The first one — Microsoft SharePoint RCE chain with a public PoC.
       hit in the wild, not just theoretically vulnerable.
 ```
 
----
+### 2. Autonomous Dialogue & Intent Routing
+```text
+Operator: "audit gitlab.target.com and tell me if they left anything open"
 
-## 🚀 Installation & Quickstart
+[IntentRouter] Autonomous dispatch: /bounty-scan gitlab.target.com
+[GhostTransport] Routing via Tor SOCKS5h circuit [Exit IP: 185.220.101.5]
+[BountyHunter] Discovering subdomains across AlienVault + Wayback CDX...
+[BountyHunter] Passive recon complete. 18 subdomains discovered.
+[BountyHunter] Testing dangling CNAME records against AWS S3, Azure, CloudFront...
+[BountyHunter] Probing GraphQL endpoints for introspection exposure...
 
-CIPH 3.0 runs seamlessly across **Linux**, **WSL2**, **macOS**, and **Windows**.
+🎯 Recon Results for gitlab.target.com:
+- Status: Active (HTTP 200)
+- Dangling DNS: dev-staging.gitlab.target.com -> target-staging.s3-website.amazonaws.com (S3 Bucket Unclaimed!)
+- Vulnerability: Subdomain Takeover (High - CVSS 7.5)
+- GraphQL: /api/graphql introspection ENABLED (__schema exported)
 
----
-
-### 🐧 Linux / VPS Installation (Recommended)
-
-#### 1. System Requirements & Tor Setup
-```bash
-# Update and install system dependencies + Tor
-sudo apt update && sudo apt install -y python3 python3-pip python3-venv git tor curl
-
-# Verify Tor service is running
-sudo systemctl enable --now tor
-curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
+Ciph: Found an unclaimed AWS S3 bucket on dev-staging.gitlab.target.com. 
+      Full takeover is possible. GraphQL introspection is also open. 
+      Report generated at bounty_reports/gitlab.target.com_report.md.
 ```
 
-#### 2. Clone & Setup Virtual Environment
-```bash
-git clone https://github.com/pendragon360/scaling-lamp.git
-cd scaling-lamp
+### 3. Elite Bug Bounty Recon Cascade
+```text
+Operator: /bounty-scan stripe-sandbox.com
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+[BountyHunter] Scanning target: stripe-sandbox.com
+[GhostTransport] Tor SOCKS5 active. Identity: 104.244.76.13
+[Phase 1] Passive Subdomain Cascade (AlienVault, Wayback, crt.sh):
+  • api-dev.stripe-sandbox.com (200 OK)
+  • static-assets.stripe-sandbox.com (404 Not Found - Azure Blob CNAME)
+  • graphql.stripe-sandbox.com (200 OK)
+
+[Phase 2] Subdomain Takeover Verification:
+  [CRITICAL] static-assets.stripe-sandbox.com points to unclaimed Azure Blob container!
+  [CVSS Calculator] Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N (Score: 9.1 CRITICAL)
+
+[Phase 3] GraphQL Introspection Probe:
+  • Querying __schema { types { name } }...
+  • Introspection response: 242 types exposed (Sensitive mutations: resetPassword, elevateRole)
+
+[Phase 4] Report Synthesis:
+  • Markdown report compiled: bounty_reports/stripe-sandbox.com_report.md
 ```
 
-#### 3. Configure API Keys
-```bash
-cp .env.example .env
-nano .env
-```
-Set your DeepSeek V4 Pro API key:
-```ini
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
-```
+### 4. Historical Recon Diffing & What-Changed
+```text
+Operator: /what-changed stripe-sandbox.com
 
-#### 4. Launch CIPH
-```bash
-python run_ciph.py
+[BountyHunter] Comparing current surface against SQLite baseline (2026-08-20)...
+
+🔄 RECON HISTORICAL DIFF:
+  [+] NEW ASSET: admin-internal.stripe-sandbox.com (First observed 2 hours ago)
+  [+] NEW PORT: api-dev.stripe-sandbox.com:8443 (HTTP/2 Alt-Svc)
+  [-] REMOVED: legacy-portal.stripe-sandbox.com (DNS NXDOMAIN)
+  [!] CHANGE: static-assets.stripe-sandbox.com CNAME updated to CloudFront
+
+Top Recommendation: Focus on newly spawned admin-internal.stripe-sandbox.com.
 ```
 
----
+### 5. Tor-Routed Darknet Threat Hunting
+```text
+Operator: /darknet-scan
 
-### 🪟 Windows Installation (Native PowerShell)
+[DarknetMonitor] Querying Ahmia hidden service index over Tor SOCKS5...
+[DarknetMonitor] Crawling active ransomware tracker leak sites...
 
-#### 1. Prerequisites on Windows
-* **Python 3.10+**: Install via winget:
-  ```powershell
-  winget install Python.Python.3.11 Git.Git TorProject.Tor
-  ```
-* **Tor on Windows**: Start the Tor service or run the [Tor Browser](https://www.torproject.org/download/) in the background (provides SOCKS5 on `127.0.0.1:9050` or `127.0.0.1:9150`).
+🌑 DARKNET THREAT INTEL:
+  • LockBit 3.0 Mirror: 4 new victim announcements in past 24h
+  • BreachForums RSS: Database dump posted matching keyword "FinTech API Keys"
+  • Ahmia Index: 12 new .onion endpoints indexed under "0day exploit"
 
-#### 2. Clone & Setup
-```powershell
-git clone https://github.com/pendragon360/scaling-lamp.git
-cd scaling-lamp
+Threat Context saved to encrypted SQLite vault.
+```
 
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-python run_ciph.py
+### 6. 5-Layer Sports Analytics Simulation
+```text
+Operator: /predict "Arsenal vs Chelsea"
+
+[SportsPredictor] Running 5-layer probabilistic model...
+  • Layer 1 (Poisson Distribution): Arsenal Expected Goals (xG) 2.14, Chelsea xG 1.05
+  • Layer 2 (Historical Form & H2H): Arsenal home win rate 78% in last 10 derbies
+  • Layer 3 (Market Odds Movement): Asian Handicap line shifted from -0.75 to -1.0
+  • Layer 4 (Live Context & Injuries): Key Chelsea defender sidelined (hamstring)
+  • Layer 5 (LLM Reasoning Arbiter): DeepSeek V4 Pro evaluates game dynamics
+
+📊 PREDICTION SYNTHESIS:
+  • Primary Pick: Arsenal Win (-1 Handicap)
+  • Win Probability: 68.4%
+  • Expected Value (+EV): +8.2%
+  • Recommended Stake: 2.5% Bankroll
+```
+
+### 7. Internal Network Pentest & Header Audit
+```text
+Operator: /vuln-scan https://api.internal-target.com
+
+[PentestEngine] Auditing HTTP security headers...
+  [MISSING] Content-Security-Policy (CSP)
+  [MISSING] Strict-Transport-Security (HSTS)
+  [VULNERABLE] Access-Control-Allow-Origin: * (Wildcard with Credentials)
+  [EXPOSED] Server: Apache/2.4.41 (Ubuntu) mod_ssl/2.4.41 OpenSSL/1.1.1f
+
+Security Score: 42/100 (HIGH RISK)
+```
+
+### 8. Strategic Wisdom Ingestion
+```text
+Operator: "our competitor is aggressively lowering prices to squeeze our margin what is our counter move"
+
+[BookEngine] Searching strategic library (Sun Tzu - Art of War, Greene - 48 Laws of Power)...
+[Worldview] Applying strategic principles directly to operational problem...
+
+Ciph: Greene's Law 21: Play a sucker to catch a sucker. Do not enter a direct price race to the bottom. 
+Let them bleed their operating capital on low margins. 
+
+1. **Shift the Battleground**: Differentiate on speed and custom integration, where price elasticity is lower.
+2. **Conceal Your Real Reserves**: Maintain high-tier pricing while bundling value invisibly.
+3. **Counter on Your Timeline**: Wait until their initial momentum exhausts itself, then strike where they left themselves exposed.
+```
+
+### 9. Self-Awareness & Self-Evolving Code Proposals
+```text
+Operator: /self-analyze
+
+Ciph analyzing own architecture & codebase...
+
+PROPOSAL UP-014: AST query optimization for state telemetry
+Priority: HIGH | Target: query_router.py
+File: ciph_proposals/UP-014_ast_optimization.py
+Review: cat ciph_proposals/UP-014_ast_optimization.py
+Apply: /apply-upgrade UP-014
+
+PROPOSAL UP-015: Connection pool health check daemon
+Priority: MEDIUM | Target: ghost_transport.py
+File: ciph_proposals/UP-015_pool_health_check.py
+Apply: /apply-upgrade UP-015
+
+Analysis complete. 2 upgrade proposals generated. Use /upgrades to review.
+```
+
+### 10. Adversarial War Room Simulation
+```text
+Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor"
+
+[WarRoom] Running 3-perspective adversarial stress test via DeepSeek V4 Pro...
+
+🔴 THE HUNTER (RED TEAM / ADVERSARY):
+- Rate-limiting thresholds: Enterprise WAFs flag burst introspection queries within 15 seconds.
+- Counter: Enforce timing jitter (1.5s - 3.5s) and rotate query field structures.
+
+🔵 THE STOIC (BLUE TEAM / RISK AUDIT):
+- Scope verification: Ensure target is explicitly in-scope before firing schema payloads.
+- Data containment: Never pull live customer records; rely strictly on type definitions.
+
+⚖️ THE ARBITER (CIPH STRATEGIC SYNTHESIS):
+- 1. Execute schema discovery passively through Wayback archives first.
+- 2. Trigger single-query introspection probes only on verified target endpoints.
+- 3. Generate instant CVSS v3.1 reports upon sensitive type confirmation.
 ```
 
 ---
@@ -174,12 +437,13 @@ python run_ciph.py
 ## 🕹️ Categorized Command Catalog
 
 ### 🌐 System Core & Real-World Telemetry
-* `/world-brief` — Comprehensive real-world threat radar (Clearnet CVEs, macro tech, Tor Darknet)
-* `/sync-reality` — Force immediate full-spectrum Clearnet + Tor intelligence sweep
+* `/world-brief` — Comprehensive situational report (Clearnet CVEs, macro tech, Tor Darknet)
+* `/sync-reality` — Force immediate real-time Clearnet + Tor intelligence sweep
 * `/world-map` — Visual sensory topology map of active feeds and onion hubs
 * `/help` — Display full command menu
 * `/status` — System health, active modules, and database metrics
 * `/reality-check` — Raw ground-truth system telemetry (no hallucination)
+* `/clear` — Clear terminal session screen
 * `/exit` — Encrypt database connections and cleanly terminate
 
 ### 🎯 Bug Bounty & Reconnaissance
@@ -196,9 +460,10 @@ python run_ciph.py
 * `/threat-intel` — Display indexed CVE alerts and zero-day threat signals
 * `/credential-check` — Search credential leak indices for exposed assets
 * `/osint-scan <target>` — Run deep OSINT intelligence profiling
+* `/intel-feed` — Stream live cybersecurity RSS threat intelligence
 
 ### 💰 Wealth Operations & Trading
-* `/market-data` — Real-time price, 24h change, and volume metrics across crypto assets
+* `/market-data` — Real-time price and volume metrics across crypto assets
 * `/arbitrage-scan` — Detect cross-exchange spread and yield arbitrage opportunities
 * `/trading-signals` — Generate quantitative momentum and trend signals
 * `/market-trends` — Multi-asset market trend evaluation
@@ -251,6 +516,7 @@ run_ciph.py (Bootstrap & Dependency Verification)
         ├── book_engine.py ─────────► PDF Strategic Wisdom Ingestion
         ├── self_awareness.py ──────► AST Code Auditor & Upgrade Proposals
         ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
+        ├── osint_catalog.py ───────► Multi-Tier Failover Threat Intelligence
         ├── cipher_vault.py ────────► High-Concurrency WAL SQLite, Session & Diffs
         └── query_router.py ────────► Deterministic AST Math (LLM-Bypass)
 ```
@@ -276,13 +542,12 @@ CIPH is an open-source sovereign intelligence and autonomous security research p
 
 ---
 
-## 📡 Sovereign Contact & Security Disclosure
+## 📡 Sovereign Contact
 
-For vulnerability coordination, strategic research collaboration, or operator inquiries:
+For research collaboration, operational feedback, or direct operator communication:
 
 * **Encrypted Mail**: `ciphcontact.ranger783@passinbox.com`
 * **Anonymous Session ID**: `05fa17d37438cb789700327416962eaa8649a582f66d06be63ef1b7f8b85b8fd09`
-* **Security Advisories**: Open a confidential [GitHub Security Advisory](https://github.com/pendragon360/scaling-lamp/security/advisories/new)
 
 ---
 
