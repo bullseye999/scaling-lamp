@@ -46,7 +46,7 @@ If asked about them, say: "Those don't exist. Available modules are: [list from 
 SYSTEM CURRENT DATE: {date}
 """
 
-def get_worldview(mood_context="", memory_context="", book_context="", state_snapshot=None) -> str:
+def get_worldview(mood_context="", memory_context="", book_context="", state_snapshot=None, operational_context="", world_context="") -> str:
     base = CIPH_WORLDVIEW.replace("{date}", time.strftime("%B %d, %Y"))
     base = base.replace("{time}", time.strftime("%H:%M:%S"))
 
@@ -56,6 +56,12 @@ def get_worldview(mood_context="", memory_context="", book_context="", state_sna
 
     if book_context:
         base += f"\n\n<library_wisdom>\n{book_context}\n</library_wisdom>"
+
+    if operational_context:
+        base += f"\n\n<latest_operational_action>\n{operational_context}\nINSTRUCTION: Reason directly from these factual tool findings when answering follow-up questions.\n</latest_operational_action>"
+
+    if world_context:
+        base += f"\n\n<real_world_telemetry>\n{world_context}\n</real_world_telemetry>"
 
     if mood_context:
         base += f"\n\n<current_operator_state>\n{mood_context}\n</current_operator_state>"
