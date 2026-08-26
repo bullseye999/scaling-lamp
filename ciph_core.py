@@ -54,6 +54,7 @@ from ciph_router import CiphRouter
 from bounty_hunter import BountyHunter
 from war_room import WarRoom
 from ciph_autonomous_agent import AutonomousActionAgent
+from world_telemetry import WorldTelemetry
 
 class CiphCore:
     def __init__(self):
@@ -61,6 +62,7 @@ class CiphCore:
         self.quantum_vault = QuantumVault()
         self.router = BrainRouter()
         self.ciph_router = CiphRouter()
+        self.world_telemetry = WorldTelemetry(self.vault)
         self.module_manager = ModuleManager(self.vault)
         self.awareness = SelfAwareness(self.vault)
         # After self.awareness = SelfAwareness(self.vault)
@@ -247,14 +249,21 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
 - Memory: Active (Encrypted episodic narrative timeline)
 - OPSEC: Active (Tor SOCKS5 circuit health & self-audit)"""
 
-    def generate_ai_response(self, user_input, mood_context="", memory_context="", temperature=None):
+    def generate_ai_response(self, user_input, mood_context="", memory_context="", operational_context="", world_context="", temperature=None):
         brain, reason = self.router.route(user_input)
 
         # Book knowledge injection
         book_context = ""
         if hasattr(self, 'books'):
             book_context = self.books.build_book_context(user_input) or ""
-        full_context = memory_context + book_context
+
+        # Operational action injection from smart memory scratchpad
+        if not operational_context and hasattr(self, 'smart_memory'):
+            operational_context = self.smart_memory.get_pinned('latest_operational_action') or ""
+
+        # Real-world sensory telemetry injection
+        if not world_context and hasattr(self, 'world_telemetry'):
+            world_context = self.world_telemetry.build_telemetry_prompt_context() or ""
 
         if brain == 'ollama':
             try:
@@ -264,7 +273,9 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                         temperature=temperature,
                         mood_context=mood_context,
                         memory_context=memory_context,
-                        book_context=book_context
+                        book_context=book_context,
+                        operational_context=operational_context,
+                        world_context=world_context
                     )
             except Exception as e:
                 return f"Ollama error: {str(e)[:60]}"
@@ -291,7 +302,9 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                         temperature=temperature or 0.3,
                         mood_context=mood_context,
                         memory_context=memory_context,
-                        book_context=book_context
+                        book_context=book_context,
+                        operational_context=operational_context,
+                        world_context=world_context
                     )
                 # Fallback to router directly
                 router = getattr(self, 'ciph_router', None) or CiphRouter()
@@ -912,6 +925,67 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "‖ No recent alerts. Use /osint to scan. ‖"
 
         # DARKNET INTELLIGENCE COMMANDS
+        elif user_input == '/world-brief':
+            try:
+                digest = self.world_telemetry.get_latest_digest()
+                critical_items = digest.get("critical_findings", [])
+                macro_items = digest.get("macro_news", [])
+                dn = digest.get("darknet_pulse", {})
+
+                lines = ["🌐 CIPH WORLD TELEMETRY & LIVE THREAT RADAR", "═" * 54]
+                lines.append(f"Last Background Sweep: {digest.get('last_synced', 'Recent')[:16]}")
+                lines.append(f"Threats Tracked: {digest.get('total_cyber_alerts', 0)} | Darknet Nodes: {digest.get('darknet_threat_nodes', 0)}\n")
+
+                if critical_items:
+                    lines.append("🔥 CRITICAL ZERO-DAYS & EXPLOITS:")
+                    for idx, item in enumerate(critical_items[:4], 1):
+                        cve = f" [{', '.join(item['cves'])}]" if item.get('cves') else ""
+                        lines.append(f"{idx}. {item.get('title')}{cve}")
+                        lines.append(f"   Severity: {item.get('severity')} | Source: {item.get('source')}")
+                        if item.get('summary'):
+                            lines.append(f"   Impact: {item['summary'][:150]}")
+                    lines.append("")
+
+                if macro_items:
+                    lines.append("🌍 GLOBAL TECH & MACRO DEVELOPMENTS:")
+                    for m in macro_items[:3]:
+                        lines.append(f"• {m.get('title')} ({m.get('source')})")
+                    lines.append("")
+
+                dn_signals = dn.get("onion_signals", [])
+                if dn_signals:
+                    lines.append("🌑 TOR DARKNET TOPOLOGY:")
+                    for s in dn_signals[:2]:
+                        lines.append(f"• [{s.get('threat_level')}] {s.get('keyword')}: {s.get('description')[:120]}")
+
+                return "\n".join(lines)
+            except Exception as e:
+                return f"‖ World brief error: {e} ‖"
+
+        elif user_input == '/sync-reality':
+            try:
+                print("🌐 Executing full-spectrum Clearnet & Tor Darknet sweep...")
+                digest = self.world_telemetry.sync_full_spectrum()
+                return f"‖ Reality synced. {digest['total_cyber_alerts']} CVE/exploit alerts, {digest['total_macro_items']} macro items, {digest['darknet_threat_nodes']} darknet nodes indexed. ‖"
+            except Exception as e:
+                return f"‖ Sync error: {e} ‖"
+
+        elif user_input == '/world-map':
+            try:
+                digest = self.world_telemetry.get_latest_digest()
+                dn = digest.get("darknet_pulse", {})
+                lines = ["🗺️ CIPH SENSORY & TOPOLOGY MAP", "═" * 50]
+                lines.append("📡 CLEARNET SENSORS:")
+                for f in self.world_telemetry.cyber_feeds + self.world_telemetry.macro_feeds:
+                    lines.append(f"  • {f['name']} [{f['category'].upper()}]: {f['url']}")
+                lines.append("\n🧅 TOR DARKNET TOPOLOGY:")
+                lines.append("  • Routing: SOCKS5h (127.0.0.1:9050)")
+                lines.append("  • Search Hub: Ahmia Hidden Service Directory")
+                lines.append(f"  • Indexed Nodes: {dn.get('threat_nodes_indexed', 0)} active threat references")
+                return "\n".join(lines)
+            except Exception as e:
+                return f"‖ World map error: {e} ‖"
+
         elif user_input == '/darknet-dashboard':
             if not self.osint:
                 return "‖ OSINT module not loaded. Use /load osint ‖"
@@ -1812,13 +1886,20 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         return None  # Not a command
 
     def generate_response(self, user_input: str) -> str:
-        """Main response generator - SIMPLIFIED"""
+        """Main response generator with Unified Command-to-Memory Bridge"""
     
         # 1. Handle slash commands
         if user_input.startswith('/'):
             response = self.handle_command(user_input)
             if response:
                 self.sync_system_state()
+                # Bridge command & output into conversational memory & scratchpad
+                if hasattr(self, 'conversation') and self.conversation:
+                    self.conversation.bridge_command_execution(user_input, response)
+                if hasattr(self, 'smart_memory') and self.smart_memory:
+                    self.smart_memory.pin("latest_operational_action", f"Command: {user_input}\nResult:\n{response[:1000]}")
+                if hasattr(self, 'vault') and self.vault:
+                    self.vault.store_conversation(user_input, response, "tool_execution")
                 self.formatter.print_ciph(response)
                 return response
             else:
@@ -1832,6 +1913,12 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             response = self.handle_command(cmd)
             if response:
                 self.sync_system_state()
+                if hasattr(self, 'conversation') and self.conversation:
+                    self.conversation.bridge_command_execution(cmd, response)
+                if hasattr(self, 'smart_memory') and self.smart_memory:
+                    self.smart_memory.pin("latest_operational_action", f"Command: {cmd}\nResult:\n{response[:1000]}")
+                if hasattr(self, 'vault') and self.vault:
+                    self.vault.store_conversation(user_input, response, "tool_execution")
                 self.formatter.print_ciph(response)
                 return response
 
@@ -1840,6 +1927,9 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             response = self.query_router.answer(user_input)
             if response:
                 self.sync_system_state()
+                if hasattr(self, 'conversation') and self.conversation:
+                    self.conversation._add_to_history("user", user_input)
+                    self.conversation._add_to_history("assistant", response)
                 self.formatter.print_ciph(response)
                 return response
     
@@ -1859,12 +1949,16 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                     memory_context = f"{memory_context}\n\n[LATEST DARKNET INTEL RESULTS]\n{darknet_ctx}"
 
         book_context = self.books.build_book_context(user_input)
+        operational_context = self.smart_memory.get_pinned("latest_operational_action") or ""
+        world_context = self.world_telemetry.build_telemetry_prompt_context() if hasattr(self, 'world_telemetry') else ""
     
         # Use unified AI response generator (with Autonomous Agent)
         response = self.generate_ai_response(
             user_input,
             mood_context=mood_context,
             memory_context=memory_context,
+            operational_context=operational_context,
+            world_context=world_context,
             temperature=temperature
         )
     
@@ -1897,25 +1991,44 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             try:
                 # 1. Check OSINT for new critical alerts
                 if self.osint:
-                    alerts = self.osint.get_recent_alerts(hours=1)
-                    if alerts and alerts != last_check.get('osint'):
-                        self.add_notification(f"🚨 OSINT Alert: {len(alerts)} new threats")
-                        last_check['osint'] = alerts
+                    alerts = self.osint.get_recent_alerts()
+                    if alerts and len(alerts) > last_check.get('alerts', 0):
+                        new_alert = alerts[0]
+                        self.notification_queue.append({
+                            'type': 'OSINT_ALERT',
+                            'message': f"New OSINT Alert: {new_alert['alert'][:50]}...",
+                            'time': time.time()
+                        })
+                        last_check['alerts'] = len(alerts)
                 
-                # 2. Check for workflow status changes
-                if self.orchestrator:
-                    status = self.orchestrator.get_workflow_status()
-                    active_workflows = status.get('active_workflows', [])
-                    if active_workflows != last_check.get('workflows'):
-                        if active_workflows:
-                            self.add_notification(f"🤖 Workflows running: {len(active_workflows)}")
-                        last_check['workflows'] = active_workflows
+                # 2. Check memory growth
+                if self.memory:
+                    stats = self.memory.get_knowledge_graph_stats()
+                    last_entities = last_check.get('entities', 0)
+                    if stats['total_entities'] > last_entities + 5:
+                        self.notification_queue.append({
+                            'type': 'MEMORY_GROWTH',
+                            'message': f"Knowledge Graph grew to {stats['total_entities']} entities",
+                            'time': time.time()
+                        })
+                        last_check['entities'] = stats['total_entities']
                 
-                time.sleep(60)  # Check every minute
+                # 3. Check for failed pentests or security events
+                if self.security:
+                    integrity = self.security.integrity_check()
+                    if not integrity['all_critical_files_present']:
+                        self.notification_queue.append({
+                            'type': 'SECURITY_ALERT',
+                            'message': f"Missing critical files: {', '.join(integrity['missing_critical_files'])}",
+                            'time': time.time()
+                        })
+                
+                # Sleep between checks (5 minutes)
+                time.sleep(300)
                 
             except Exception as e:
-                print(f"⚠️ Monitoring error: {e}")
-                time.sleep(300)  # Wait 5 min on error
+                # Silent failure in background thread
+                time.sleep(60)
 
     def add_notification(self, message: str):
         """Queue a notification for next interaction"""
@@ -1925,93 +2038,98 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         })
 
     def sync_system_state(self):
-        """Automatically sync all system state from source to state manager.
-        Call this after every command or user interaction."""
-    
-        if not hasattr(self, 'state'):
-            return  # State manager not initialized yet
-    
-        # ========== SYSTEM STATE ==========
-    
-        # 1. Loaded modules (from module_manager)
-        loaded_modules = list(self.module_manager.active_modules.keys())
-        self.state.update_loaded_modules(loaded_modules)
-    
-        # 2. Tor status (check actual source)
+        """Single source of truth sync with real system data"""
+        
+        # 1. AI Status
+        ai_active = self.ai_enabled
+        self.state.update_ai_state(ai_active)
+        
+        # 2. Tor Connection & IP
         tor_active = False
-        if hasattr(self, 'darknet') and self.darknet:
-            try:
-                tor_check = self.darknet.verify_tor()
-                tor_active = tor_check.get('tor_active', False)
-            except Exception:
-                pass
-        # Also check if tor_proxy is set directly
+        tor_ip = None
         if hasattr(self, 'tor_proxy') and self.tor_proxy:
-            tor_active = True
-        self.state.update_tor(tor_active)
-    
-        # 3. Active workflows (from orchestrator)
-        workflows_active = 0
+            tor_ip = self.tor_proxy.get_tor_ip()
+            tor_active = (tor_ip is not None)
+        self.state.update_tor_state(tor_active, tor_ip)
+        
+        # 3. Active workflows
+        active_workflows = 0
         if hasattr(self, 'orchestrator') and self.orchestrator:
             try:
-                status = self.orchestrator.get_workflow_status()
-                workflows_active = len(status.get('active_workflows', []))
+                active_workflows = len(self.orchestrator.active_workflows)
             except Exception:
                 pass
-        self.state.update_workflows(workflows_active)
-    
-        # 4. AI status
-        ai_enabled = getattr(self, 'ai_enabled', False)
-        self.state.update_ai_enabled(ai_enabled)
-    
-        # 5. Orchestrator ready status
-        orchestrator_ready = hasattr(self, 'orchestrator') and self.orchestrator is not None
-        self.state.update_orchestrator_ready(orchestrator_ready)
-    
-        # ========== BACKGROUND STATE ==========
-    
-        # 6. Sports predictions count
-        sports_count = 0
-        if hasattr(self, 'sports') and self.sports:
+        self.state.update_orchestrator(active_workflows)
+        
+        # 4. Security score
+        security_score = 100
+        if hasattr(self, 'security') and self.security:
             try:
-                status = self.sports.get_status()
-                sports_count = status.get('predictions_made', 0)
+                integrity = self.security.integrity_check()
+                if not integrity['all_critical_files_present']:
+                    security_score = 50
             except Exception:
                 pass
-        self.state.update_background_sports(sports_count)
-    
-        # 7. OSINT feeds count
-        osint_feeds = 0
+        self.state.update_security_score(security_score)
+        
+        # 5. Project files count
+        file_count = 0
+        if hasattr(self, 'file_analyzer') and self.file_analyzer:
+            try:
+                scan = self.file_analyzer.scan_project(".")
+                file_count = scan.get('file_count', 0)
+            except Exception:
+                pass
+        self.state.update_project_files(file_count)
+        
+        # 6. Memory knowledge graph entities
+        entities_count = 0
+        if hasattr(self, 'memory') and self.memory:
+            try:
+                stats = self.memory.get_knowledge_graph_stats()
+                entities_count = stats.get('total_entities', 0)
+            except Exception:
+                pass
+        self.state.update_memory_entities(entities_count)
+        
+        # 7. OSINT feeds monitored
+        feeds_count = 0
         if hasattr(self, 'osint') and self.osint:
             try:
                 status = self.osint.get_status()
-                osint_feeds = status.get('feeds_monitored', 0)
+                feeds_count = status.get('feeds_monitored', 0)
             except Exception:
                 pass
-        self.state.update_background_osint(osint_feeds)
-    
-        # 8. Notification queue size
-        notifications = len(getattr(self, 'notification_queue', []))
-        self.state.update_background_notifications(notifications)
-    
+        self.state.update_osint_feeds(feeds_count)
+        
+        # 8. Scheduler status
+        scheduler_running = False
+        if hasattr(self, 'scheduler') and self.scheduler:
+            try:
+                scheduler_status = self.scheduler.get_scheduler_status()
+                scheduler_running = scheduler_status.get('running', False)
+            except Exception:
+                pass
+        self.state.update_scheduler_running(scheduler_running)
+        
         # 9. Trading module status (if loaded)
         trading_loaded = False
         if hasattr(self, 'trading') and self.trading:
             trading_loaded = True
         self.state.update_background_trading(trading_loaded)
-    
+        
         # 10. Pentest module status (if loaded)
         pentest_loaded = False
         if hasattr(self, 'pentest') and self.pentest:
             pentest_loaded = True
         self.state.update_background_pentest(pentest_loaded)
-    
+        
         # 11. Bounty module status (if loaded)
         bounty_loaded = False
         if hasattr(self, 'bounty') and self.bounty:
             bounty_loaded = True
         self.state.update_background_bounty(bounty_loaded)
-    
+        
         # 12. Last successful darknet scan (if available)
         last_scan_time = None
         if hasattr(self, 'darknet') and self.darknet:
@@ -2076,6 +2194,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         """Cleanly stop background services, compress episodic narrative, and save states before exit"""
         print("\nCiph: ‖ Performing graceful shutdown... ‖")
         try:
+            # Record session end timestamp in vault
+            if hasattr(self, 'vault') and self.vault:
+                self.vault.record_session_end()
+
             # Compress session narrative into episodic timeline node
             if hasattr(self, 'conversation') and hasattr(self, 'smart_memory'):
                 print("Ciph: 🧠 Compressing session dialogue into episodic milestone...")
@@ -2098,16 +2220,20 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             print(f"Ciph: ‖ Shutdown note: {e} ‖")
 
     def run_ssh_session(self):
-        """Main SSH session loop"""
+        """Main SSH session loop with Proactive Terminal Greeting & Telemetry Digest"""
         self.print_banner()
-        # On-login executive briefing
+        
+        # Proactive On-Login Intelligence Briefing
         try:
-            print(self.get_daily_briefing())
-        except Exception:
-            pass
+            session_info = self.vault.record_session_start()
+            proactive_briefing = self.world_telemetry.generate_proactive_login_briefing(session_info, router=getattr(self, 'ciph_router', None))
+            print(f"{proactive_briefing}\n")
+        except Exception as e:
+            print(f"‖ Notice: {e} ‖")
+            
         print("‖ Type /help for commands, /exit to quit ‖")
-        print("‖ /daily-brief - View encrypted executive briefing ‖")
-        print("‖ /bounty-scope <text/url> - Lock bug bounty rules of engagement ‖")
+        print("‖ /world-brief - Live Clearnet, CVE & Tor Darknet threat radar ‖")
+        print("‖ /sync-reality - Force immediate live 24/7 intelligence sweep ‖")
         print("‖ /bounty-scan <target> - Execute Tor-routed passive surface audit ‖")
         print("‖ /war-room <plan> - Conduct 3-perspective adversarial stress test ‖\n")
         
@@ -2120,9 +2246,9 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                     break
                 elif user_input == '/help':
                     print("\nAGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
+                    print("REAL-WORLD & DARKNET INTEL: /world-brief, /sync-reality, /world-map, /darknet-deep <query>, /darknet-scan, /darknet-report")
                     print("BOUNTY RECON & TRIAGE: /bounty-scope <text/url>, /bounty-scan <target>, /bounty-report <target>, /bounty-list")
                     print("INTELLIGENCE & SENTRY: /what-changed <target>, /hit-list <target>, /chain-reaction <target>, /watchtower, /ghost-rating")
-                    print("DARKNET & TOR INTEL: /darknet-deep <query>, /darknet-scan, /darknet-report, /ghost-mode, /tor-status")
                     print("STRATEGY & WAR ROOM: /daily-brief, /war-room <plan>, /timeline")
                     print("PENTESTING: /port-scan, /web-scan, /security-audit, /network-discovery, /ssl-scan")
                     print("TRADING: /market-data, /arbitrage-scan, /market-trends, /wealth-strategy, /trading-signals, /portfolio-health")
@@ -2145,4 +2271,3 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
 if __name__ == "__main__":
     ciph = CiphCore()
     ciph.run_ssh_session()
-    
