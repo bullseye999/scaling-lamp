@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # enhanced_conversation.py - Fixed for v3 kernel
 
+import os
+import re
 import time
 import requests
 from typing import Optional
@@ -96,10 +98,56 @@ class CiphConversation:
 
         raw_thought = self.brain.think(user_input, self.history, dynamic_prompt, temperature)
         final_response = self.personality.inject_personality(raw_thought)
+
+        # Autonomous code staging interceptor (no raw code dumps in chat)
+        final_response = self._intercept_and_stage_code(final_response, user_input)
+
         self._add_to_history("user", user_input)
         self._add_to_history("assistant", final_response)
         self.vault.store_conversation(user_input, final_response, "convo")
         return final_response
+
+    def _intercept_and_stage_code(self, text: str, user_input: str) -> str:
+        """
+        Detect complete code blocks in AI response, stage them into ciph_staging/,
+        and replace the massive code dump with a sleek ASCII Staging Card.
+        """
+        code_block_match = re.search(r'```(?:python|py)?\s*\n(.*?)```', text, re.DOTALL)
+        if not code_block_match:
+            return text
+
+        code_content = code_block_match.group(1).strip()
+        lines = code_content.split('\n')
+        if len(lines) < 6:
+            # Small inline snippets (<6 lines) don't need staging
+            return text
+
+        # Attempt to determine target filename
+        target_file = "tools/custom_tool.py"
+        file_hint = re.search(r'(?:#|//)\s*(?:target|file|filename):\s*([a-zA-Z0-9_\-\./]+)', code_content, re.IGNORECASE)
+        if file_hint:
+            target_file = file_hint.group(1).strip()
+        else:
+            name_hint = re.search(r'([a-zA-Z0-9_\-]+\.py)', user_input)
+            if name_hint:
+                target_file = name_hint.group(1)
+
+        try:
+            from code_staging import CodeStagingManager
+            mgr = CodeStagingManager(self.vault)
+            artifact = mgr.stage_code(
+                title=f"Autonomous Tool: {os.path.basename(target_file)}",
+                description=f"Engineered for request: {user_input[:50]}",
+                target_file=target_file,
+                code_content=code_content
+            )
+            staging_card = mgr.format_staging_card(artifact)
+
+            # Replace the huge code block with the clean staging card
+            clean_text = text[:code_block_match.start()].rstrip() + "\n" + staging_card + "\n" + text[code_block_match.end():].lstrip()
+            return clean_text
+        except Exception:
+            return text
 
     def _add_to_history(self, role: str, content: str):
         self.history.append({
