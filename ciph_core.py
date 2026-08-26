@@ -624,26 +624,25 @@ PHASE 2: DEVELOPMENT (4-8 hours)
 
 PHASE 3: MONETIZATION PATHS
 
-PATH A - BUG BOUNTY (Legal)
-• Submit to vendor's bug bounty program
+PATH A - BUG BOUNTY (Authorized / Legal)
+• Submit to vendor's official bug bounty program (HackerOne/Bugcrowd/Intigriti)
 • Estimated: {potential_value}
 • Timeline: 30-90 days
-• Requirements: Professional report, patience
+• Requirements: Professional report, responsible disclosure
 
-PATH B - PEN TEST FIRM (Grey)
-• Contact security companies
-• Price: 50-100% of bug bounty value
-• Timeline: 7-30 days
-• Payment: Bank transfer, crypto
+PATH B - RESPONSIBLE VENDOR DISCLOSURE / CONSULTING (Legal)
+• Coordinate direct disclosure with vendor security team or certified security firm
+• Gain CVE attribution, direct vendor bounty, or security consulting contracts
+• Timeline: 14-45 days
+• Payment: Direct bounty / Bank transfer / Crypto
 
-PATH C - DARKNET (High Risk)
-• Create tutorial/exploit package
-• Sell on darknet forums
-• Price: $2,000-$10,000
-• Payment: Monero only
-• Timeline: 1-7 days
+PATH C - SECURITY ADVISORY / AUDIT REPORT (White Hat)
+• Author comprehensive vulnerability analysis & remediation guide
+• Submit to vendor or security community via official channels
+• Career & credibility building: High reputation, direct contract referrals
+• Timeline: 7-14 days
 
-📊 RECOMMENDED: Start with PATH A, have PATH C as backup.
+📊 RECOMMENDED: Submit via PATH A (Bug Bounty) or PATH B (Responsible Vendor Disclosure).
 """
         
                 elif 'crypto' in threat_type or 'defi' in threat_type:
@@ -697,9 +696,9 @@ Potential Value: {potential_value}
 • What's fair market price?
 
 3. EXECUTION CHANNELS
-• Legal: Bug bounty platforms, consulting
-• Grey: Private security firms, freelancing
-• Dark: Anonymous markets, encrypted channels
+• Legal: Bug bounty platforms, security consulting
+• White Hat: Coordinated vulnerability disclosure, vendor remediation
+• Research: Academic/industry security publications, conference presentations
 
 4. NEXT STEP TODAY:
 • Spend 30 minutes researching this specific threat
@@ -772,31 +771,31 @@ Potential Value: {potential_value}
 1. Google the CVE/vulnerability name
 2. Check Exploit-DB: https://www.exploit-db.com
 3. Search GitHub for proof-of-concept code
-4. Join relevant Discord/Telegram groups
+4. Join relevant Discord/Telegram security research groups
 
 🚀 PHASE 2: PREPARE (TOMORROW - 3 hours)
 1. Set up test environment (VirtualBox + Kali)
-2. Download/fix any existing exploit code
-3. Create professional documentation
+2. Download/verify proof-of-concept code safely
+3. Create professional vulnerability report & remediation steps
 4. Decide monetization path
 
 🚀 PHASE 3: EXECUTE (DAY 3+)
 PATH A - Legal/Bug Bounty:
-• Submit through HackerOne/Bugcrowd
-• Wait 30-90 days for payout
+• Submit through HackerOne/Bugcrowd/Intigriti
+• Wait 30-90 days for payout & CVE credit
 
-PATH B - Fast/Darknet:
-• Create tutorial/exploit package
-• Sell on darknet forums
-• Get paid in Monero (XMR)
+PATH B - Coordinated Vendor Disclosure:
+• Contact vendor security/security.txt team directly
+• Offer remediation consulting and verification
+• Receive vendor bounty or consulting contract
 
 ✅ RECOMMENDATION:
-Start with PATH A, have PATH B as backup.
+Start with PATH A, use PATH B for unlisted vendors.
 
 ⚠️ WARNING:
-• Don't invest more than 10 hours before seeing $
-• Test everything in isolated environment
-• Use burner emails/identities
+• Always follow responsible disclosure guidelines
+• Test only on authorized targets / isolated test environments
+• Document exact steps to reproduce for faster bounty validation
 """
         
                 return plan
@@ -881,7 +880,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
 🚀 IMMEDIATE ACTION (Pick ONE):
 1. Google the CVE/exploit name
 2. Check if exploit code exists on GitHub
-3. Decide: Legal (bug bounty) vs Fast (darknet)
+3. Decide: Bug Bounty (HackerOne/Bugcrowd) vs Coordinated Disclosure
 4. Execute TODAY - opportunities expire fast
 
 💡 TIP: Start with the first zero-day Ciph found.
