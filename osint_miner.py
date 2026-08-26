@@ -360,7 +360,7 @@ Top signals:
                 'channels': [
                     'Bug Bounty Submission (Legal)',
                     'Sell to Pen Test Firm (Grey)',
-                    'Darknet Tutorial Sale (High Risk)'
+                    'Coordinated Vendor Disclosure (White Hat)'
                 ],
                 'timeline': '1-4 weeks',
                 'success_rate': '70%'
@@ -385,7 +385,7 @@ Top signals:
                     'Prepare execution scripts',
                     'Execute with small amounts first'
                 ],
-                'channels': ['Legal Trading', 'Grey Market', 'Darknet'],
+                'channels': ['Legal Trading / Arbitrage', 'Protocol Bug Bounty (e.g. Immunefi)', 'Security Audit Reporting'],
                 'timeline': '1-7 days',
                 'success_rate': '30% (but high reward)'
             }
