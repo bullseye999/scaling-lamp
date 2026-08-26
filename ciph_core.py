@@ -55,6 +55,7 @@ from bounty_hunter import BountyHunter
 from war_room import WarRoom
 from ciph_autonomous_agent import AutonomousActionAgent
 from world_telemetry import WorldTelemetry
+from code_staging import CodeStagingManager
 
 class CiphCore:
     def __init__(self):
@@ -63,6 +64,7 @@ class CiphCore:
         self.router = BrainRouter()
         self.ciph_router = CiphRouter()
         self.world_telemetry = WorldTelemetry(self.vault)
+        self.code_staging = CodeStagingManager(self.vault)
         self.module_manager = ModuleManager(self.vault)
         self.awareness = SelfAwareness(self.vault)
         # After self.awareness = SelfAwareness(self.vault)
@@ -1201,18 +1203,43 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             count = self.awareness.analyze_and_propose()
             return f"Analysis complete. {count} upgrade proposals generated. Use /upgrades to review."
 
-        elif user_input == '/upgrades':
-            return self.awareness.list_pending()
+        elif user_input == '/upgrades' or user_input == '/staged' or user_input == '/code':
+            return self.code_staging.list_staged()
 
-        elif user_input.startswith('/reject-upgrade '):
-            parts = user_input.replace('/reject-upgrade ', '').strip().split(' ', 1)
-            uid    = parts[0].lower()
-            reason = parts[1] if len(parts) > 1 else ''
-            return self.awareness.reject_upgrade(uid, reason)
+        elif user_input.startswith('/apply ') or user_input.startswith('/approve ') or user_input.startswith('/apply-code ') or user_input.startswith('/apply-upgrade '):
+            raw_cmd = user_input.split(' ', 1)[1].strip()
+            # If user passes UP-XXX or STG-XXX or number
+            success, msg = self.code_staging.apply(raw_cmd)
+            if success:
+                # Trigger self-awareness rescan if it touched a Python file
+                self.awareness._scan_self()
+                return f"‖ {msg} ‖"
+            else:
+                # Fallback to self_awareness if older proposal
+                return self.awareness.apply_upgrade(raw_cmd)
 
-        elif user_input.startswith('/apply-upgrade '):
-            uid = user_input.replace('/apply-upgrade ', '').strip().lower()
-            return self.awareness.apply_upgrade(uid)
+        elif user_input.startswith('/review ') or user_input.startswith('/review-code '):
+            target_id = user_input.split(' ', 1)[1].strip()
+            return self.code_staging.review(target_id)
+
+        elif user_input.startswith('/reject ') or user_input.startswith('/reject-upgrade '):
+            parts = user_input.split(' ', 2)
+            uid = parts[1].strip() if len(parts) > 1 else ''
+            reason = parts[2].strip() if len(parts) > 2 else ''
+            res = self.code_staging.reject(uid, reason)
+            if "not found" in res.lower():
+                return self.awareness.reject_upgrade(uid, reason)
+            return f"‖ {res} ‖"
+
+        elif user_input.startswith('/rollback '):
+            target_file = user_input.replace('/rollback ', '').strip()
+            success, msg = self.code_staging.rollback(target_file)
+            if success:
+                self.awareness._scan_self()
+            return f"‖ {msg} ‖"
+
+        elif user_input == '/changelog':
+            return self.code_staging.get_changelog()
 
         elif user_input == '/evolution':
             history = self.awareness.get_evolution_history()
