@@ -53,12 +53,17 @@ class IntentRouter:
             r'\bauto\s+mode\b': '/auto-mode',
             r'\bstop\s+all\s+workflows?\b': '/stop-all-workflows',
 
-            # Self-awareness / upgrades
+            # Self-awareness / upgrades / code staging
             r'\bself\s+report\b': '/self-report',
             r'\bself\s+analyze\b': '/self-analyze',
-            r'\bshow\s+upgrades?\b': '/upgrades',
-            r'\bapply\s+upgrade\s+(\w+)\b': '/apply-upgrade {1}',
-            r'\breject\s+upgrade\s+(\w+)\b': '/reject-upgrade {1}',
+            r'\bshow\s+(?:upgrades?|staged|code)\b': '/staged',
+            r'^\s*(?:staged|code\s+artifacts?)\s*$': '/staged',
+            r'\b(?:apply|approve)\s+(?:upgrade|code|patch|artifact)?\s*([a-zA-Z0-9_\-]+)\b': '/apply {1}',
+            r'^\s*(?:apply|approve)\s+it\s*$': '/apply STG-001',
+            r'\breview\s+(?:code|patch|artifact)?\s*([a-zA-Z0-9_\-]+)\b': '/review {1}',
+            r'\breject\s+(?:upgrade|code|patch|artifact)?\s*([a-zA-Z0-9_\-]+)\b': '/reject {1}',
+            r'\brollback\s+(\S+)\b': '/rollback {1}',
+            r'^\s*(?:show\s+)?changelog\s*$': '/changelog',
 
             # Status / meta
             r'\bsystem\s+status\b': '/status',
