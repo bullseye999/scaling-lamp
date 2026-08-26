@@ -56,11 +56,26 @@ class CiphConversation:
         self.router = router or CiphRouter()
         self.brain = OllamaBrain()
 
-    def _build_system_prompt(self, mood_context="", memory_context="", book_context="") -> str:
-        """Build system prompt with worldview and context."""
-        return get_worldview(mood_context, memory_context, book_context)
+    def _build_system_prompt(self, mood_context="", memory_context="", book_context="", operational_context="", world_context="") -> str:
+        """Build system prompt with worldview, real-world telemetry, and command findings."""
+        return get_worldview(
+            mood_context=mood_context,
+            memory_context=memory_context,
+            book_context=book_context,
+            operational_context=operational_context,
+            world_context=world_context
+        )
 
-    def process_input(self, user_input: str, mood_context: str = "", memory_context: str = "", book_context="", temperature: float = 0.3) -> str:
+    def bridge_command_execution(self, command: str, output: str):
+        """Bridge a slash command and its structured output into conversation history."""
+        # Add user invocation
+        self._add_to_history("user", f"[OPERATIONAL COMMAND] {command}")
+        # Clean & condense tool output to fit memory window
+        clean_out = output.strip()
+        condensed = clean_out[:1200] + "..." if len(clean_out) > 1200 else clean_out
+        self._add_to_history("assistant", f"[TOOL OUTPUT FOR {command}]\n{condensed}")
+
+    def process_input(self, user_input: str, mood_context: str = "", memory_context: str = "", book_context="", operational_context="", world_context="", temperature: float = 0.3) -> str:
         # Live data triggers
         live_data_triggers = [
             'btc price', 'bitcoin price', 'eth price', 'ethereum price',
@@ -71,7 +86,13 @@ class CiphConversation:
         if any(trigger in user_input.lower() for trigger in live_data_triggers):
             return "use /market-data for live crypto prices — I don't guess numbers."
 
-        dynamic_prompt = self._build_system_prompt(mood_context, memory_context, book_context)
+        dynamic_prompt = self._build_system_prompt(
+            mood_context=mood_context,
+            memory_context=memory_context,
+            book_context=book_context,
+            operational_context=operational_context,
+            world_context=world_context
+        )
 
         raw_thought = self.brain.think(user_input, self.history, dynamic_prompt, temperature)
         final_response = self.personality.inject_personality(raw_thought)
