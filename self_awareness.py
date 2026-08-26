@@ -585,66 +585,37 @@ class SelfAwareness:
 
     def apply_upgrade(self, proposal_id: str) -> str:
         """
-        the Operator approved. Apply the upgrade.
-        For new files: creates the file in project directory.
-        For existing file modifications: the Operator still manually applies
-        the diff — we just mark it approved and show instructions.
+        Operator approved. Apply the upgrade using CodeStagingManager's safe pipeline:
+        - Creates safety backup in ciph_backups/
+        - Verifies AST syntax
+        - Atomically writes file
+        - Appends to ciph_changelog.json
+        - Rescans module in self-awareness
         """
         proposal = self._find_proposal(proposal_id)
         if not proposal:
             return f"Proposal {proposal_id} not found."
 
-        proposal_file = proposal.get('proposal_file', '')
-        target_file   = proposal.get('target_file', '')
-        is_new_file   = proposal.get('is_new_file', True)
-
-        if is_new_file:
-            # Read the proposal file content (skip header comments)
-            try:
-                with open(proposal_file, 'r') as f:
-                    lines = f.readlines()
-                # Skip header comment lines
-                code_lines = []
-                in_header  = True
-                for line in lines:
-                    if in_header and line.startswith('#'):
-                        continue
-                    in_header = False
-                    code_lines.append(line)
-                code = ''.join(code_lines).strip()
-
-                # Write to project directory
-                with open(target_file, 'w') as f:
-                    f.write(code)
-
-                proposal['status']      = 'APPLIED'
-                proposal['applied_at']  = datetime.now().isoformat()
+        try:
+            from code_staging import CodeStagingManager
+            mgr = CodeStagingManager(self.vault)
+            success, msg = mgr.apply(proposal_id)
+            if success:
+                target_file = proposal.get('target_file', proposal.get('module', ''))
+                proposal['status'] = 'APPLIED'
+                proposal['applied_at'] = datetime.now().isoformat()
                 self.approved_history.append(proposal)
-                self.pending_upgrades   = [p for p in self.pending_upgrades if p['id'] != proposal_id]
+                self.pending_upgrades = [p for p in self.pending_upgrades if p['id'] != proposal_id]
                 self._save_pending()
                 self._record_evolution(proposal['module'], proposal['title'])
 
-                # Rescan after applying
                 if os.path.exists(target_file):
                     self.module_snapshots[target_file] = self._analyze_module(target_file)
-
-                return f"Upgrade {proposal_id} applied. {target_file} created in project directory."
-
-            except Exception as e:
-                return f"Apply failed: {str(e)[:80]}"
-        else:
-            # Existing file modification — show instructions
-            proposal['status']     = 'APPROVED'
-            proposal['approved_at']= datetime.now().isoformat()
-            self.approved_history.append(proposal)
-            self.pending_upgrades  = [p for p in self.pending_upgrades if p['id'] != proposal_id]
-            self._save_pending()
-
-            return (
-                f"Upgrade {proposal_id} approved. "
-                f"Review the changes at: {proposal_file} "
-                f"Then manually apply to: {target_file}"
-            )
+                return f"Upgrade {proposal_id} applied.\n{msg}"
+            else:
+                return f"Apply failed: {msg}"
+        except Exception as e:
+            return f"Apply failed: {str(e)[:80]}"
 
     def _validate_proposal_code(self, code: str) -> Dict[str, Any]:
         """Validate proposed Python code with AST parsing before saving"""
