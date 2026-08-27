@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="#-what-is-ciph-30">Architecture</a> •
-  <a href="#-the-15-core-operational-engines">The 15 Engines</a> •
+  <a href="#-the-17-core-operational-engines">The 17 Engines</a> •
   <a href="#-installation--quickstart">Quickstart & Installation</a> •
   <a href="#-interactive-cli--demonstrations">Interactive Demos</a> •
   <a href="#-categorized-command-catalog">Command Catalog</a> •
@@ -27,17 +27,17 @@
 
 ## 🧠 What is CIPH 3.0?
 
-**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, 24/7 real-world sensory telemetry, darknet mapping, bug bounty reconnaissance, wealth operations, sports analytics, and strategic adversarial simulation.
+**CIPH 3.0** is an autonomous, sovereign intelligence operative built for local execution, 24/7 real-world sensory telemetry, darknet mapping, bug bounty reconnaissance, wealth operations, sports analytics, autonomous polymath research, and strategic adversarial simulation.
 
 Unlike conventional AI wrappers, CIPH is directly wired to its host operating system, persistent encrypted databases, and an isolated SOCKS5h Tor transport layer. It operates under a strict **Fail-Closed** security architecture with zero third-party telemetry, local AES-256 encrypted vaults, and continuous 24/7 background radar that monitors live CVEs, zero-days, and macro technological shifts while offline.
 
-When you log in, CIPH takes the initiative—greeting you with exact offline durations, synthesizing named vulnerabilities and breaches, and formulating proactive tactical questions rather than passively waiting for user input. All slash commands and tool outputs are automatically bridged into conversational working context, eliminating AI hallucinations on multi-turn technical follow-ups.
+When you log in, CIPH takes the initiative—greeting you with exact offline durations, synthesizing named vulnerabilities and breaches, reporting autonomous cognitive expeditions, and formulating proactive tactical questions rather than passively waiting for user input. All slash commands and tool outputs are automatically bridged into conversational working context, eliminating AI hallucinations on multi-turn technical follow-ups.
 
 When engineering code, CIPH never pollutes the interactive terminal with massive raw code blocks. Instead, it extracts and stages the code into an isolated artifact, runs automated dependency resolution via venv pip, executes an isolated sandbox test, and presents an executive summary with a clean 1-click approval card (`/apply <id>`) featuring automated backups, rollback failsafes, and structured changelog tracking.
 
 ---
 
-## ⚡ The 15 Core Operational Engines
+## ⚡ The 17 Core Operational Engines
 
 ```
                                   ┌───────────────────┐
@@ -47,16 +47,15 @@ When engineering code, CIPH never pollutes the interactive terminal with massive
         ┌───────────────────┬───────────────┼───────────────┬───────────────────┐
         ▼                   ▼               ▼               ▼                   ▼
 ┌───────────────┐   ┌───────────────┐ ┌───────────┐ ┌───────────────┐   ┌───────────────┐
-│ RECON & OPSEC │   │ THREAT INTEL  │ │  WEALTH   │ │ SPORTS ENGINE │   │ PROACTIVE AI  │
-│ - GhostTor    │   │ - 24/7 Radar  │ │ - Crypto  │ │ - 5-Layer ML  │   │ - Session Log │
-│ - Takeovers   │   │ - Darknet Tor │ │ - Signals │ │ - Poisson/xG  │   │ - Zero-Halluc │
-│ - GraphQL     │   │ - NVD & CVEs  │ │ - Arbs    │ │ - Auto-Report │   │ - Code Staging│
+│ - GhostTor    │   │ - 24/7 Radar  │ │ - Crypto  │ │ - 5-Layer ML  │   │ - Polymath    │
+│ - Link Reader │   │ - Darknet Tor │ │ - Signals │ │ - Poisson/xG  │   │ - Neural Mem  │
+│ - Takeovers   │   │ - NVD & CVEs  │ │ - Arbs    │ │ - Auto-Report │   │ - Code Staging│
 └───────────────┘   └───────────────┘ └───────────┘ └───────────────┘   └───────────────┘
 ```
 
 | Engine | Primary Modules | Operational Capabilities |
 | :--- | :--- | :--- |
-| **1. Ghost Transport (OPSEC)** | `ghost_transport.py`, `tor_proxy.py` | SOCKS5h Tor session pooling (`127.0.0.1:9050`), DoH remote DNS resolution over Tor (zero ISP leaks), anti-fingerprint headers, timing jitter, strict fail-closed enforcement. |
+| **1. Ghost Transport & OPSEC Link Reader** | `ghost_transport.py`, `tor_proxy.py`, `ciph_link_reader.py` | SOCKS5h Tor session pooling (`127.0.0.1:9050`), DoH remote DNS resolution over Tor (zero ISP leaks), anti-fingerprint headers, tracking parameter scrubbing (`utm_*`, `fbclid=`), canary token/IP logger blocking, 2MB stream ceiling, and auto PDF book downloading. |
 | **2. Elite Bug Bounty Suite v3** | `bounty_hunter.py`, `cvss_calculator.py` | Passive subdomain discovery cascade (AlienVault, Wayback CDX, crt.sh), automated dangling CNAME takeover detection across 10+ cloud providers, GraphQL `__schema` introspection, and SPA baseline calibration. |
 | **3. 24/7 World Telemetry & Sensory Radar** | `world_telemetry.py` | 24/7 autonomous background sensory sweeps across NVD NIST CVE feeds, PacketStorm, Exploit-DB, BleepingComputer, HackerNews, and Reuters macro news. |
 | **4. Darknet Threat Intelligence** | `darknet_monitor.py` | Tor hidden service crawling (Ahmia & Onion mirrors), ransomware tracker monitoring, zero-day threat indexing, and credential breach search. |
@@ -66,11 +65,13 @@ When engineering code, CIPH never pollutes the interactive terminal with massive
 | **8. Wealth Ops & Crypto Arbitrage** | `trading_engine.py` | Real-time crypto market data feeds, cross-exchange arbitrage detector, momentum indicators, volatility metrics, and quantitative trading signals. |
 | **9. 5-Layer Sports Intelligence** | `sports_predictor.py`, `sports_performance.py` | 5-factor probabilistic engine (Poisson distribution + xG modeling + odds movement + sports news context + LLM reasoning arbiter), daily automated result resolution, and email briefing dispatch. |
 | **10. Network Pentest Engine** | `pentest_engine.py` | Local subnet discovery, multi-threaded TCP port scanning, service banner grabbing, HTTP security header auditing, and CORS reflection testing. |
-| **11. Strategic Wisdom & Philosophy** | `book_engine.py`, `file_analyzer.py` | Local PDF library ingestion, knowledge extraction, and strategic wisdom synthesis (Sun Tzu, Machiavelli, Robert Greene, Marcus Aurelius) applied to operational decisions. |
+| **11. High-Performance Strategic Wisdom & Inverted Index** | `book_engine.py`, `file_analyzer.py` | Sub-millisecond in-memory inverted keyword indexing (225,000x search speedup), local PDF library ingestion, knowledge extraction, and strategic wisdom synthesis (Sun Tzu, Machiavelli, Greene, Aurelius). |
 | **12. Self-Awareness & Auto-Patches** | `self_awareness.py` | Continuous AST code scanning, architectural stub detection, and automated upgrade proposals (`ciph_proposals/`) with review and safe self-patching workflows. |
 | **13. Autonomous Action Agent** | `ciph_autonomous_agent.py` | Conversational action dispatcher. Evaluates natural-language dialogue, triggers back-end tools over Tor, and synthesizes findings without command friction. |
 | **14. Adversarial War Room** | `war_room.py` | 3-perspective adversarial stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Synthesis). |
-| **15. Defense, Vault & Emergency** | `cipher_vault.py`, `security_layer.py`, `dead_mans_switch.py` | High-concurrency SQLite `WAL` mode, AES-256 encryption, memory graph pinning, footprint cleaner, integrity checks, and emergency kill-switch wipe. |
+| **15. Defense, Vault & Emergency** | `cipher_vault.py`, `security_layer.py`, `dead_mans_switch.py` | High-concurrency SQLite `WAL` mode, AES-256 encryption, PBKDF2/MultiFernet migration, footprint cleaner, integrity checks, and emergency kill-switch wipe. |
+| **16. Autonomous Cognitive Evolution & Polymath Engine** | `ciph_evolution.py`, `ciph_link_reader.py` | 24/7 background curiosity daemon (~100 expeditions/day across Quantum Physics, Macro-History, Psychology, Frontier AI, and Epistemology), 4-tier structured blueprint synthesizer, polymath cross-domain isomorphism engine, midnight self-interrogation audit, and ASCII cognitive topology dashboard (`/mind-metrics`). |
+| **17. Sovereign Neural Memory Architecture (SMAU v2.0)** | `smart_memory.py`, `cipher_vault.py` | Autonomous implicit profile and boundary extraction (zero manual `/pin`), dynamic rolling working memory (infinite dialogue flow without turn drops), associative semantic entity graph (Targets ↔ CVEs ↔ Staged Tools ↔ Decisions), decision outcome feedback loop, circadian diurnal rhythm tracking, and retroactive cold-start learner (`/retroactive-learn`). |
 
 ---
 
@@ -463,6 +464,72 @@ Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor
 - 3. Generate instant CVSS v3.1 reports upon sensitive type confirmation.
 ```
 
+### 12. Autonomous Cognitive Topology & Growth Dashboard
+```text
+Operator: /mind-metrics
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                   CIPH COGNITIVE TOPOLOGY & GROWTH DASHBOARD             ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+📈 Global Assimilation Metrics:
+• Total Cognitive Blueprints     : 25
+• Cross-Domain Isomorphisms Built : 1
+• Operator Council Theses Curated : 1 (1 discussed)
+• Alignment Health Rating        : 100% (Sovereign Aligned)
+
+🌐 Knowledge Spectrum Distribution:
+[████      ] 16.0% Epistemology & Strategic Philosophy
+[█████     ] 20.0% Frontier AI & Neural Mathematics
+[█████     ] 20.0% Human Psychology & Social Dynamics
+[█████     ] 20.0% Macro-History & Sovereign Statecraft
+[██████    ] 24.0% Theoretical & Quantum Physics
+
+🔗 Recent Polymathic Cross-Domain Leaps:
+• Landauer erasure entropy directly mirrors bureaucratic institutional exhaustion.
+═══════════════════════════════════════════════════════════════════════════
+```
+
+### 13. Dual-Spectrum OPSEC Link Ingestion & Canary Stripping
+```text
+Operator: "check out this target paper https://arxiv.org/abs/2309.00001?utm_source=twitter&ref=tracking"
+
+┌────────────────────────────────────────────────────────────┐
+│ 🛡️ OPSEC LINK AUDIT                                        │
+│ • Domain     : arxiv.org                                   │
+│ • Transport  : Tor SOCKS5h Exit Node                       │
+│ • Privacy    : Clean (2 tracking params stripped)          │
+│ • Canary Risk: ZERO (Clean Domain)                         │
+└────────────────────────────────────────────────────────────┘
+
+Ciph: Fetched and synthesized over Tor. 
+      The paper introduces Topological Invariants in Quantum Error Correction. 
+      Mechanics: Information invariants preserve state stability under continuous perturbations.
+      Strategic Application: Force unresolvable ambiguity in defensive postures until adversary 
+      resources exhaust.
+```
+
+### 14. Sovereign Neural Memory & Implicit Profile Recall
+```text
+Operator: /profile
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                     OPERATOR'S STRATEGIC PROFILE (ENCRYPTED)                ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+[OPERATIONAL]
+• infrastructure_location: Infrastructure / VPS node located in Amsterdam.
+
+[PREFERENCE]
+• preferred_language: Prefers Go and Python for implementations.
+
+[PHILOSOPHY]
+• communication_tone: Direct, razor-sharp, zero-fluff.
+
+[EMOTIONAL]
+• circadian_rhythm: Sharp operational focus in morning, philosophical dialectic at night.
+═══════════════════════════════════════════════════════════════════════════
+```
+
 ---
 
 ## 🕹️ Categorized Command Catalog
@@ -476,6 +543,23 @@ Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor
 * `/reality-check` — Raw ground-truth system telemetry (no hallucination)
 * `/clear` — Clear terminal session screen
 * `/exit` — Encrypt database connections and cleanly terminate
+
+### 🧠 Autonomous Cognitive Evolution & Polymathic Intelligence
+* `/curiosity <on|off|status>` — Control 24/7 detached background curiosity research daemon
+* `/mind-log` — Decrypt and display recent 4-tier cognitive discovery blueprints in RAM
+* `/mind-metrics` (or `/topology`) — Visual ASCII Cognitive Topology & Growth Dashboard
+* `/council` (or `"talk to me"`) — Trigger peer-level dialectic on recent research theses
+* `/self-audit` — Execute 24-hour metaconscious alignment & blind-spot self-interrogation
+* `/fetch <url>` — Safely fetch, OPSEC-audit, and read Clearnet / `.onion` links over Tor
+* `/zeroize-mind` — Emergency cryptographic shredder for all cognitive blueprints and models
+
+### 🧬 Sovereign Neural Memory System (SMAU v2.0)
+* `/profile` (or `/my-profile`) — Decrypt and display Operator's strategic profile & operational boundaries
+* `/profile-clear [key]` — Delete a specific profile fact or clear implicit profile
+* `/memory-graph [query]` — Query associative entity knowledge graph (Targets, CVEs, Staged Exploits)
+* `/memory-status` — Full Neural Memory Health & Working Context Depth Dashboard
+* `/retroactive-learn` — Execute cold-start retroactive learning sweep across historical conversations
+* `/timeline` — View episodic narrative timeline milestones across sessions
 
 ### 📦 Code Staging, Sandbox & Hot-Patching
 * `/staged` (or `/code`, `/upgrades`) — List all pending, applied, and rejected code artifacts
@@ -519,11 +603,10 @@ Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor
 * `/web-scan <url>` — HTTP security headers and CORS configuration check
 * `/ssl-scan <domain>` — Audit SSL/TLS cipher suites and certificate validity
 
-### 📚 Strategic Wisdom & Memory
+### 📚 Strategic Wisdom & Library
 * `/load-book <file.pdf>` — Ingest PDF document into local strategic library
 * `/ask-book <query>` — Synthesize strategic wisdom from ingested library
 * `/memory` — View active memory entities and context load
-* `/timeline` — View episodic memory narrative timeline
 
 ### 🧠 Self-Awareness & War Room
 * `/self-analyze` — Scan codebase, detect gaps, and write upgrade proposals
@@ -541,9 +624,12 @@ Operator: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor
 ```text
 run_ciph.py (Bootstrap & Dependency Verification)
   └── ciph_core.py (Session Core & Proactive Event Loop)
+        ├── ciph_evolution.py ──────► 24/7 Polymath Curiosity Daemon & Blueprint Engine
+        ├── ciph_link_reader.py ────► Dual-Spectrum OPSEC Link Fetcher & Canary Blocker
+        ├── smart_memory.py ────────► Sovereign Neural Memory (Profile & Entity Graph)
         ├── code_staging.py ────────► Auto-Sandbox, Pip Resolver & Hot-Patching
         ├── world_telemetry.py ─────► 24/7 Clearnet CVE & Tor Darknet Sensory Engine
-        ├── enhanced_conversation.py ► Unified Command & Staging Context Bridge
+        ├── enhanced_conversation.py ► Rolling Memory & Operator Council Dialectic
         ├── ciph_router.py ─────────► DeepSeek V4 Pro Engine (Direct Cognitive API)
         ├── ciph_autonomous_agent.py ► Natural Language Tool Dispatcher
         ├── ghost_transport.py ─────► Fail-Closed Tor SOCKS5h & DoH DNS Resolver
@@ -553,11 +639,11 @@ run_ciph.py (Bootstrap & Dependency Verification)
         ├── trading_engine.py ──────► Crypto Arbitrage & Quantitative Signals
         ├── sports_predictor.py ────► 5-Layer Probabilistic Analytics Engine
         ├── pentest_engine.py ──────► Port Scanner & Banner Grabbing
-        ├── book_engine.py ─────────► PDF Strategic Wisdom Ingestion
+        ├── book_engine.py ─────────► High-Speed Inverted Index Strategic Wisdom
         ├── self_awareness.py ──────► AST Code Auditor & Upgrade Proposals
         ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
         ├── osint_catalog.py ───────► Multi-Tier Failover Threat Intelligence
-        ├── cipher_vault.py ────────► High-Concurrency WAL SQLite, Session & Diffs
+        ├── cipher_vault.py ────────► High-Concurrency WAL SQLite, PBKDF2 MultiFernet
         └── query_router.py ────────► Deterministic AST Math (LLM-Bypass)
 ```
 
