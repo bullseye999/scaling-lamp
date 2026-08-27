@@ -599,7 +599,7 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             
             return response
 
-        elif user_input == '/monetize-plan':
+        elif user_input == '/research-plan' or user_input == '/monetize-plan' or user_input == '/vuln-plan':
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
@@ -607,127 +607,101 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                 # Get opportunities
                 opportunities = self.osint.find_monetizable_threats()
                 if not opportunities:
-                    return "‖ No opportunities found. Run /osint-cycle first. ‖"
+                    return "‖ No vulnerability research targets found. Run /osint-cycle first. ‖"
         
                 # Take the top opportunity
                 top_opp = opportunities[0]
         
                 # Build plan based on threat type
                 threat_type = top_opp.get('threat_type', 'unknown')
-                potential_value = top_opp.get('potential_value', '$0')
+                potential_value = top_opp.get('potential_value', 'High Severity')
                 title = top_opp.get('title', 'Unknown')[:80] if len(top_opp.get('title', '')) > 80 else top_opp.get('title', 'Unknown')
         
                 # Different plans for different threat types
                 if 'zero_day' in threat_type:
                     plan = f"""
-💰 ZERO-DAY EXPLOIT MONETIZATION PLAN
-======================================
-Opportunity: {title}
-Potential Value: {potential_value}
+🎯 ZERO-DAY VULNERABILITY RESEARCH & DISCLOSURE PLAN
+=====================================================
+Target Vulnerability: {title}
+Estimated Impact: {potential_value}
 
 📋 STEP-BY-STEP EXECUTION:
 
-PHASE 1: RESEARCH (2-4 hours)
-• Google: "{title.split(':')[0] if ':' in title else title} exploit"
-• Check: exploit-db.com, github.com, packetstormsecurity.com
-• Goal: Find existing PoC or similar exploits
+PHASE 1: RESEARCH & TRIAGE (2-4 hours)
+• Search CVE database and security advisories for root-cause analysis
+• Check Exploit-DB, PacketStorm, and GitHub security feeds
+• Goal: Determine reproduction steps and affected version range
 
-PHASE 2: DEVELOPMENT (4-8 hours)
-• If PoC exists: Modify for reliability
-• If no PoC: Research vulnerability details
-• Test in isolated VM (VirtualBox + Kali Linux)
+PHASE 2: ISOLATED REPRODUCTION (4-8 hours)
+• Verify reproduction steps in isolated VM test environment
+• Validate patch status and mitigations
+• Draft deterministic proof-of-concept verification script
 
-PHASE 3: MONETIZATION PATHS
+PHASE 3: RESPONSIBLE DISCLOSURE PATHS
 
-PATH A - BUG BOUNTY (Authorized / Legal)
-• Submit to vendor's official bug bounty program (HackerOne/Bugcrowd/Intigriti)
-• Estimated: {potential_value}
-• Timeline: 30-90 days
-• Requirements: Professional report, responsible disclosure
+PATH A - OFFICIAL BUG BOUNTY SUBMISSION (HackerOne / Bugcrowd / Intigriti)
+• Submit detailed markdown report with CVSS vector and reproduction steps
+• Timeline: 14-45 days for validation and bounty reward
 
-PATH B - RESPONSIBLE VENDOR DISCLOSURE / CONSULTING (Legal)
-• Coordinate direct disclosure with vendor security team or certified security firm
-• Gain CVE attribution, direct vendor bounty, or security consulting contracts
-• Timeline: 14-45 days
-• Payment: Direct bounty / Bank transfer / Crypto
+PATH B - COORDINATED VENDOR DISCLOSURE (security.txt)
+• Contact vendor security team via official RFC 9116 security.txt channels
+• Request CVE attribution and coordinate patch validation timeline
 
-PATH C - SECURITY ADVISORY / AUDIT REPORT (White Hat)
-• Author comprehensive vulnerability analysis & remediation guide
-• Submit to vendor or security community via official channels
-• Career & credibility building: High reputation, direct contract referrals
-• Timeline: 7-14 days
+PATH C - SECURITY ADVISORY & REMEDIATION GUIDE (White Hat)
+• Author comprehensive technical advisory after vendor releases fix
+• Publish responsible disclosure writeup for community defense
 
-📊 RECOMMENDED: Submit via PATH A (Bug Bounty) or PATH B (Responsible Vendor Disclosure).
+📊 RECOMMENDED: Submit via PATH A (Bug Bounty) or PATH B (Coordinated Vendor Disclosure).
 """
         
                 elif 'crypto' in threat_type or 'defi' in threat_type:
                     plan = f"""
-💰 CRYPTO/DEFI EXPLOIT MONETIZATION
-====================================
-Opportunity: {title}
-Potential Value: {potential_value}
+🛡️ SMART CONTRACT & PROTOCOL SECURITY AUDIT PLAN
+=================================================
+Target Protocol: {title}
+Estimated Impact: {potential_value}
 
-📋 IMMEDIATE ACTIONS:
+📋 IMMEDIATE AUDIT ACTIONS:
 
-1. RESEARCH THE EXPLOIT (1-2 hours)
-• Find transaction hash on Etherscan
-• Check if exploit is still viable
-• Look for similar patterns
+1. REPRODUCE IN LOCAL SANDBOX (1-2 hours)
+• Fork network state locally (Hardhat / Foundry / Anvil)
+• Verify invariant violations and root cause in local fork
+• Test remediation fix to protect user funds
 
-2. PREPARE EXECUTION (2-3 hours)
-• Set up crypto wallet (fresh, burner)
-• Test with small amount first ($10-$100)
-• Have exit strategy ready
-
-3. EXECUTE OR COUNTER (Real-time)
-• If arbitrage: Execute quickly before gap closes
-• If exploit: Consider ethical implications
-• ALWAYS: Test small before scaling
-
-⚠️ WARNING: Crypto exploits move FAST
-• 90% are patched within 24 hours
-• High risk of getting front-run
-• Consider legal implications
+2. RESPONSIBLE DISCLOSURE (Day 1)
+• Submit report to official Immunefi Bug Bounty or protocol security contact
+• Ensure zero public disclosure prior to team patch deployment
+• Coordinate bounty resolution and validation testing
 """
         
                 else:
                     plan = f"""
-💰 GENERAL THREAT MONETIZATION
-================================
-Opportunity: {title}
+🛡️ SECURITY RESEARCH & VULNERABILITY PLAN
+==========================================
+Target: {title}
 Type: {threat_type}
-Potential Value: {potential_value}
+Impact: {potential_value}
 
 📋 ACTION PLAN:
 
-1. DEEPER RESEARCH (1-2 hours)
-• What exactly is the threat/vulnerability?
-• Who is affected? (companies, individuals)
-• What's the current status? (patched, active)
+1. THREAT ANALYSIS (1-2 hours)
+• What is the affected component and attack vector?
+• Determine in-scope organizations and vulnerable versions
+• Verify if vendor has issued an official patch
 
-2. VALUE PROPOSITION (1 hour)
-• Why would someone pay for this information?
-• Who would pay? (companies, security firms, individuals)
-• What's fair market price?
-
-3. EXECUTION CHANNELS
-• Legal: Bug bounty platforms, security consulting
-• White Hat: Coordinated vulnerability disclosure, vendor remediation
-• Research: Academic/industry security publications, conference presentations
-
-4. NEXT STEP TODAY:
-• Spend 30 minutes researching this specific threat
-• Decide on monetization channel
-• Prepare first contact/message
+2. DISCLOSURE & REMEDIATION CHANNELS
+• Bug Bounty Platforms: HackerOne, Bugcrowd, Intigriti
+• Vendor Direct: Coordinated security.txt disclosure
+• Advisory: Comprehensive patch verification and writeup
 """
         
                 return plan
         
             except Exception as e:
-                return f"‖ Monetization plan error: {str(e)[:100]} ‖"
+                return f"‖ Research plan error: {str(e)[:100]} ‖"
         
-        elif user_input == '/money-ops':
-            """Show all money-making opportunities"""
+        elif user_input == '/vuln-ops' or user_input == '/money-ops':
+            """Show top vulnerability research opportunities"""
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
@@ -735,22 +709,20 @@ Potential Value: {potential_value}
                 ops = self.osint.find_monetizable_threats()
         
                 if not ops:
-                    return "‖ No money ops found. Run /osint-cycle first. ‖"
+                    return "‖ No research opportunities found. Run /osint-cycle first. ‖"
         
-                # Count by type
                 zero_days = sum(1 for o in ops if 'zero_day' in str(o.get('threat_type', '')))
                 crypto = sum(1 for o in ops if 'crypto' in str(o.get('threat_type', '')))
                 other = len(ops) - zero_days - crypto
         
-                response = f"💰 FOUND {len(ops)} MONEY OPS:\n"
-                response += f"• Zero-days: {zero_days}\n"
-                response += f"• Crypto: {crypto}\n"
-                response += f"• Other: {other}\n\n"
+                response = f"🎯 FOUND {len(ops)} VULNERABILITY RESEARCH TARGETS:\n"
+                response += f"• Zero-Days / CVEs: {zero_days}\n"
+                response += f"• Smart Contracts / DeFi: {crypto}\n"
+                response += f"• General Bounty Targets: {other}\n\n"
         
-                # Show top 2
-                for i, op in enumerate(ops[:2], 1):
-                    response += f"{i}. {op.get('threat_type', 'unknown')}: {op.get('potential_value', '$?')}\n"
-                    response += f"   {op.get('title', 'No title')[:50]}...\n"
+                for i, op in enumerate(ops[:3], 1):
+                    response += f"{i}. [{op.get('threat_type', 'unknown').upper()}] {op.get('potential_value', 'High')}\n"
+                    response += f"   {op.get('title', 'No title')[:55]}...\n"
         
                 return response.strip()
         
@@ -758,153 +730,50 @@ Potential Value: {potential_value}
                 return f"‖ Error: {e} ‖"
 
         elif user_input == '/execute-plan':
-            """Generate execution plan for top opportunity"""
+            """Generate execution plan for top research opportunity"""
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
             try:
                 ops = self.osint.find_monetizable_threats()
-        
                 if not ops:
-                    return "‖ No opportunities. Run /osint-cycle first. ‖"
+                    return "‖ No research opportunities. Run /osint-cycle first. ‖"
         
                 top_op = ops[0]
-        
-                # SIMPLE, GUARANTEED-TO-WORK PLAN
-                plan = f"""
-🎯 EXECUTION PLAN FOR: {top_op.get('threat_type', 'Opportunity')}
-======================================================
+                return f"""
+🎯 RESPONSIBLE DISCLOSURE EXECUTION PLAN: {top_op.get('threat_type', 'Vulnerability')}
+================================================================================
 
-📌 OPPORTUNITY:
+📌 TARGET:
 {top_op.get('title', 'Unknown')[:80]}
 
-💰 POTENTIAL: {top_op.get('potential_value', '$0')}
+💰 ESTIMATED BOUNTY IMPACT: {top_op.get('potential_value', 'High')}
 
-⏱️ TIMELINE: 7-30 days to first payout
+⏱️ TIMELINE: 7-30 days for triage and vendor resolution
 
-🚀 PHASE 1: RESEARCH (TODAY - 2 hours)
-1. Google the CVE/vulnerability name
-2. Check Exploit-DB: https://www.exploit-db.com
-3. Search GitHub for proof-of-concept code
-4. Join relevant Discord/Telegram security research groups
+🚀 PHASE 1: RESEARCH & ISOLATED REPRODUCTION
+1. Validate vulnerability against latest official release
+2. Document deterministic reproduction steps with curl / PoC script
+3. Check program scope rules on HackerOne / Bugcrowd / Intigriti
 
-🚀 PHASE 2: PREPARE (TOMORROW - 3 hours)
-1. Set up test environment (VirtualBox + Kali)
-2. Download/verify proof-of-concept code safely
-3. Create professional vulnerability report & remediation steps
-4. Decide monetization path
+🚀 PHASE 2: REPORT DRAFTING & SUBMISSION
+1. Compile Markdown report with CVSS v3.1 vector calculation
+2. Detail root-cause analysis and recommended vendor patch
+3. Submit securely via authorized bug bounty channel or security.txt
 
-🚀 PHASE 3: EXECUTE (DAY 3+)
-PATH A - Legal/Bug Bounty:
-• Submit through HackerOne/Bugcrowd/Intigriti
-• Wait 30-90 days for payout & CVE credit
-
-PATH B - Coordinated Vendor Disclosure:
-• Contact vendor security/security.txt team directly
-• Offer remediation consulting and verification
-• Receive vendor bounty or consulting contract
-
-✅ RECOMMENDATION:
-Start with PATH A, use PATH B for unlisted vendors.
-
-⚠️ WARNING:
-• Always follow responsible disclosure guidelines
-• Test only on authorized targets / isolated test environments
-• Document exact steps to reproduce for faster bounty validation
+⚠️ RESPONSIBLE DISCLOSURE NOTICE:
+• Always adhere to program scope and Safe Harbor guidelines
+• Never test against unauthorized infrastructure
+• Keep findings confidential until patch deployment
 """
-        
-                return plan
-
             except Exception as e:
                 return f"‖ Plan error: {e} ‖"
 
-        elif user_input == '/next-step':
-            """Tell me exactly what to do right now"""
-            if not self.osint:
-                return "‖ Load OSINT first: /load osint ‖"
-    
-            try:
-                # Check if we have opportunities
-                ops = self.osint.find_monetizable_threats()
-        
-                if ops:
-                    top = ops[0]
-                    return f"""
-🎯 YOUR NEXT STEP (DO THIS NOW):
-1. OPEN BROWSER
-2. GOOGLE: "{top.get('title', 'zero-day').split(':')[0] if ':' in top.get('title', '') else top.get('title', 'zero-day')} exploit"
-3. CHECK: exploit-db.com AND github.com
-4. SPEND: 30 minutes researching
-5. REPORT BACK: What you found
-
-Potential value: {top.get('potential_value', '$0')}
-Time required: 30 minutes
-"""
-                else:
-                    return """
-🎯 YOUR NEXT STEP:
-1. Run: /osint-cycle
-2. Wait for scan to complete
-3. Then run: /next-step again
-
-This will find ACTUAL money-making opportunities.
-"""
-        
-            except Exception as e:
-                return f"‖ Error: {e} ‖"
-        
         elif user_input == '/osint-status':
             if not self.osint:
                 return "‖ OSINT module not loaded. Use /load osint ‖"
             status = self.osint.get_status()
             return f"‖ OSINT: {status['feeds_monitored']} feeds, {len(status['watch_keywords'])} keywords ‖ Last: {status['last_check']} ‖"
-        
-        elif user_input == '/money-plan':
-            if not self.osint:
-                return "‖ OSINT module not loaded ‖"
-    
-            try:
-                # Get money opportunities
-                opportunities = self.osint.find_monetizable_threats()
-        
-                if not opportunities:
-                    return "‖ No money opportunities. Run /osint-cycle first. ‖"
-        
-                # Simple working version
-                response = f"""
-💰 CIPH MONEY-MAKING PLAN
-=========================
-Found {len(opportunities)} opportunities
-Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
-
-📈 TOP 3 OPPORTUNITIES:
-"""
-        
-                for i, opp in enumerate(opportunities[:3], 1):
-                    title = opp.get('title', 'Unknown')
-                    if len(title) > 60:
-                        title = title[:57] + "..."
-            
-                    response += f"""
-{i}. {opp.get('threat_type', 'unknown')}
-   Value: {opp.get('potential_value', '$0')}
-   Title: {title}
-"""
-        
-                response += """
-🚀 IMMEDIATE ACTION (Pick ONE):
-1. Google the CVE/exploit name
-2. Check if exploit code exists on GitHub
-3. Decide: Bug Bounty (HackerOne/Bugcrowd) vs Coordinated Disclosure
-4. Execute TODAY - opportunities expire fast
-
-💡 TIP: Start with the first zero-day Ciph found.
-"""
-        
-                return response
-        
-            except Exception as e:
-                return f"‖ Error: {str(e)[:80]} ‖"
 
         elif user_input.startswith('/watch '):
             if not self.osint:
