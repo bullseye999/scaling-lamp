@@ -84,15 +84,31 @@ class TaskScheduler:
                 self._run_memory_cleanup
             )
 
-        # In task_scheduler.py, add to _schedule_default_tasks:
-            schedule.every(4).hours.do(self._run_autonomous_osint)
-            schedule.every(45).minutes.do(self._run_autonomous_world_telemetry)
+        # Weekly conversation vault cleanup (30-day retention)
+        schedule.every().week.do(self._run_weekly_conversation_cleanup)
+
+        # Scheduled autonomous sweeps
+        schedule.every(4).hours.do(self._run_autonomous_osint)
+        schedule.every(45).minutes.do(self._run_autonomous_world_telemetry)
         
         # Backup vault every 12 hours
         if self.default_schedule['backup_vault']['enabled']:
             schedule.every(self.default_schedule['backup_vault']['interval_hours']).hours.do(
                 self._run_backup
             )
+    
+    def _run_weekly_conversation_cleanup(self):
+        """Automated weekly conversation cleanup to prevent unbounded vault growth"""
+        try:
+            removed = self.vault.cleanup_old_conversations(days_old=30)
+            self.vault.store_conversation(
+                "🧹 WEEKLY VAULT CLEANUP",
+                f"Time: {datetime.now()}\nPurged {removed} conversations older than 30 days.",
+                context_tag="auto_task"
+            )
+            print(f"‖ AUTO-TASK: Weekly cleanup purged {removed} old conversations from vault ‖")
+        except Exception as e:
+            print(f"‖ AUTO-TASK Error during weekly cleanup: {e} ‖")
     
     def _run_osint_scan(self):
         """Automated OSINT scan"""
