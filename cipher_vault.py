@@ -5,6 +5,9 @@
 import sqlite3
 import json
 from cryptography.fernet import Fernet # type: ignore
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 import base64
 import os
 from typing import Optional, Dict, Any, List
@@ -14,29 +17,41 @@ class CipherVault:
     """
     Secure, encrypted storage for Ciph's memory and configurations.
     All data is encrypted before being written to the SQLite database.
-    ENHANCED: Fixed type hints + added datetime parsing utilities
+    ENHANCED: PBKDF2 key derivation + Exception-raising decryption + strict WAL mode.
     """
 
-    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key"):
+    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt"):
         self.db_path = db_path
         self.key_file = key_file
+        self.salt_file = salt_file
         self._init_key()
         self._init_db()
 
     def _init_key(self):
-        """Load encryption key or generate a new one if it doesn't exist."""
-        if os.path.exists(self.key_file):
-            with open(self.key_file, 'rb') as f:
-                self.key = f.read()
+        """Derive encryption key using PBKDF2HMAC with random salt and passphrase."""
+        # 1. Manage persistent salt
+        if os.path.exists(self.salt_file):
+            with open(self.salt_file, 'rb') as f:
+                salt = f.read()
         else:
-            self.key = Fernet.generate_key()
-            with open(self.key_file, 'wb') as f:
-                f.write(self.key)
-            # Secure the key file permissions (Unix-like systems)
+            salt = os.urandom(16)
+            with open(self.salt_file, 'wb') as f:
+                f.write(salt)
             try:
-                os.chmod(self.key_file, 0o600)
+                os.chmod(self.salt_file, 0o600)
             except Exception:
                 pass
+
+        # 2. Derive key from passphrase using PBKDF2HMAC (SHA256, 480,000 iterations)
+        passphrase = os.getenv("CIPH_VAULT_PASSPHRASE", "REDACTED_LEGACY_VALUE").encode()
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=480000,
+            backend=default_backend()
+        )
+        self.key = base64.urlsafe_b64encode(kdf.derive(passphrase))
         self.cipher_suite = Fernet(self.key)
 
     def _encrypt(self, data: str) -> str:
@@ -45,14 +60,14 @@ class CipherVault:
             data = ""  # Handle None values
         return self.cipher_suite.encrypt(data.encode()).decode()
 
-    def _decrypt(self, encrypted_data: str) -> Optional[str]:
-        """Decrypt a string."""
-        if encrypted_data is None:
-            return None
-        try:
-            return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
-        except Exception:
-            return None
+    def _decrypt(self, encrypted_data: str) -> str:
+        """
+        Decrypt an encrypted string.
+        Raises cryptography.fernet.InvalidToken or ValueError on invalid/corrupted payloads.
+        """
+        if not encrypted_data:
+            return ""
+        return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection configured with WAL mode and busy timeout."""
