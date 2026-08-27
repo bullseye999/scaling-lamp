@@ -11,7 +11,7 @@ class BookEngine:
     Ciph's personal library.
     Reads PDFs, chunks them intelligently, stores them searchable.
     Ciph can query any book by topic, chapter, or situation.
-    All knowledge serves the Operator.
+    All knowledge serves Operator.
     """
 
     CHUNK_SIZE = 800       # words per chunk
@@ -22,8 +22,39 @@ class BookEngine:
         self.vault     = vault
         self.library   = {}   # title -> metadata
         self.books_dir = "ciph_books"
+        self._inverted_index = None
         os.makedirs(self.books_dir, exist_ok=True)
         self._load_library_index()
+
+    def _ensure_inverted_index(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Build or return cached in-memory inverted index across all book chunks."""
+        if self._inverted_index is not None:
+            return self._inverted_index
+        
+        index: Dict[str, List[Dict[str, Any]]] = {}
+        try:
+            conn = self.vault._get_connection()
+            c = conn.cursor()
+            c.execute('SELECT key, encrypted_value FROM config WHERE key LIKE "book_%_chunk_%"')
+            rows = c.fetchall()
+            conn.close()
+
+            for key, enc_val in rows:
+                try:
+                    val = self.vault._decrypt(enc_val)
+                    entry = json.loads(val)
+                    keywords = set(entry.get('keywords', []))
+                    for kw in keywords:
+                        kw_l = kw.lower()
+                        if kw_l not in index:
+                            index[kw_l] = []
+                        index[kw_l].append(entry)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        self._inverted_index = index
+        return self._inverted_index
 
     # ─────────────────────────────────────────────
     # INGEST
@@ -98,6 +129,7 @@ class BookEngine:
                 'word_count':  len(full_text.split())
             }
             self._save_library_index()
+            self._inverted_index = None  # Invalidate cache
 
             return (
                 f"Book ingested: {title} by {author}. "
@@ -140,6 +172,7 @@ class BookEngine:
             'word_count':  len(text.split())
         }
         self._save_library_index()
+        self._inverted_index = None  # Invalidate cache
 
         return f"Text ingested: {title}. {len(chunks)} chunks stored."
 
@@ -154,67 +187,51 @@ class BookEngine:
 
     def search(self, query: str, book_title: str = None, limit: int = None) -> List[Dict]:
         """
-        Search across all books or a specific book.
-        Returns relevant chunks ranked by relevance and fuzzy matching.
+        Ultra-fast O(1) in-memory inverted index search across library.
         """
-        limit       = limit or self.MAX_SEARCH_RESULTS
-        query_words = set(query.lower().split())
-        results     = []
+        limit = limit or self.MAX_SEARCH_RESULTS
+        
+        stopwords = {
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'any', 'can', 'her', 'was',
+            'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now',
+            'old', 'see', 'two', 'way', 'who', 'did', 'its', 'let', 'put', 'say', 'she', 'too',
+            'use', 'with', 'that', 'this', 'from', 'they', 'here', 'what', 'when', 'where', 'which',
+            'there', 'their', 'about', 'would', 'these', 'other', 'words', 'could', 'should'
+        }
+        
+        raw_words = [w.strip('.,!?:;"()[]{}<>-/*`_') for w in query.lower().split()]
+        filtered_words = [w for w in raw_words if len(w) > 3 and w not in stopwords]
+        query_words = filtered_words[:10] if filtered_words else raw_words[:6]
+        
+        if not query_words:
+            return []
 
-        # Get all book IDs to search
-        if book_title:
-            book_ids = [
-                bid for bid, meta in self.library.items()
-                if book_title.lower() in meta['title'].lower()
-            ]
-        else:
-            book_ids = list(self.library.keys())
+        inv_index = self._ensure_inverted_index()
+        scores: Dict[Any, List[Any]] = {}
 
-        for book_id in book_ids:
-            meta   = self.library[book_id]
-            chunks = meta['chunks']
-
-            for i in range(chunks):
-                key = f"book_{book_id}_chunk_{i:06d}"
-                raw = self.vault.get_config(key)
-                if not raw:
-                    # Fallback to legacy 4-digit key if existing
-                    raw = self.vault.get_config(f"book_{book_id}_chunk_{i:04d}")
-                    if not raw:
+        for qw in query_words:
+            if qw in inv_index:
+                for entry in inv_index[qw]:
+                    if book_title and book_title.lower() not in entry.get('title', '').lower():
                         continue
+                    ckey = (entry.get('book_id'), entry.get('chunk_idx'))
+                    if ckey not in scores:
+                        scores[ckey] = [0, entry]
+                    scores[ckey][0] += 1
 
-                try:
-                    entry = json.loads(raw)
-                except Exception:
-                    continue
-
-                # Score by keyword overlap + fuzzy matching
-                chunk_words = set(entry['text'].lower().split())
-                keywords    = set(entry.get('keywords', []))
-                combined_words = chunk_words | keywords
-                overlap     = len(query_words & combined_words)
-
-                # Fuzzy matching bonus
-                fuzzy_matches = 0
-                for qw in query_words:
-                    if len(qw) > 3 and get_close_matches(qw, list(combined_words), cutoff=0.85):
-                        fuzzy_matches += 1
-
-                score = overlap + (fuzzy_matches * 0.5)
-
-                if score > 0:
-                    results.append({
-                        'score':    score,
-                        'title':    entry['title'],
-                        'author':   entry['author'],
-                        'chunk':    entry['chunk_idx'],
-                        'total':    entry['total'],
-                        'text':     entry['text'],
-                        'category': entry['category']
-                    })
-
-        results.sort(key=lambda x: x['score'], reverse=True)
-        return results[:limit]
+        ranked = sorted(scores.values(), key=lambda x: x[0], reverse=True)
+        results = []
+        for score, entry in ranked[:limit]:
+            results.append({
+                'score':    score,
+                'title':    entry.get('title', 'Unknown'),
+                'author':   entry.get('author', 'Unknown'),
+                'chunk':    entry.get('chunk_idx', 0),
+                'total':    entry.get('total', 1),
+                'text':     entry.get('text', ''),
+                'category': entry.get('category', 'general')
+            })
+        return results
 
     def ask_book(self, question: str, book_title: str = None) -> str:
         """
@@ -238,7 +255,7 @@ class BookEngine:
 
     def get_situational_advice(self, situation: str) -> str:
         """
-        Given a situation the Operator is facing, pull relevant wisdom
+        Given a situation Operator is facing, pull relevant wisdom
         from all books in the library.
         """
         results = self.search(situation, limit=3)
@@ -313,7 +330,7 @@ class BookEngine:
     def build_book_context(self, user_input: str) -> str:
         """
         Build book context to inject into Ciph's system prompt.
-        Automatically surfaces relevant passages when the Operator is talking
+        Automatically surfaces relevant passages when Operator is talking
         about strategy, power, decisions, or situations.
         """
         if not self.library:
