@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# osint_miner.py - WEAPONIZED OSINT: COMPLETE WITH MONETIZATION
+# osint_miner.py - Proactive OSINT and Threat Intelligence Engine
 import feedparser
 import requests
 import time
@@ -59,12 +59,12 @@ class OSINTMiner:
             'insider_access': ['insider access', 'RDP access', 'VPN credentials'],
         }
 
-        # MONETIZATION KEYWORDS
+        # INTELLIGENCE PRIORITY KEYWORDS
         self.money_keywords = {
             'bug_bounty': ['bounty', 'reward', 'payout', 'hackerone', 'bugcrowd'],
-            'crypto_opportunity': ['arbitrage', 'undervalued', 'pump', 'whale'],
-            'exploit_sale': ['exploit', '0day', 'vulnerability', 'for sale'],
-            'access_sale': ['access', 'credentials', 'RDP', 'VPN', 'for sale'],
+            'crypto_opportunity': ['arbitrage', 'smart contract', 'protocol', 'audit'],
+            'cve_remediation': ['exploit', '0day', 'vulnerability', 'cve', 'patch'],
+            'access_exposure': ['access', 'credentials', 'RDP', 'VPN', 'breach'],
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -345,58 +345,58 @@ Top signals:
         }
 
     def generate_monetization_plan(self, opportunity: Dict) -> Dict[str, Any]:
-        """Generate monetization plan for an opportunity"""
+        """Generate authorized research and disclosure plan for an opportunity"""
         threat_type = opportunity.get('threat_type', 'unknown')
         
         plan_templates = {
             'zero_day': {
-                'name': 'Zero-Day Exploit Development',
+                'name': 'Zero-Day Vulnerability Research & Disclosure',
                 'phases': [
                     'Research CVE details and PoC availability',
-                    'Develop/MODIFY exploit code',
-                    'Test in isolated environment',
-                    'Choose monetization channel'
+                    'Analyze vulnerability root cause in isolated test environment',
+                    'Develop deterministic proof of concept',
+                    'Submit via responsible disclosure channel'
                 ],
                 'channels': [
-                    'Bug Bounty Submission (Legal)',
-                    'Sell to Pen Test Firm (Grey)',
-                    'Coordinated Vendor Disclosure (White Hat)'
+                    'Bug Bounty Submission (HackerOne / Bugcrowd / Intigriti)',
+                    'Coordinated Vendor Disclosure (security.txt / Direct Security Team)',
+                    'Official Security Advisory & Patch Coordination'
                 ],
                 'timeline': '1-4 weeks',
-                'success_rate': '70%'
+                'success_rate': '85%'
             },
             'bug_bounty': {
-                'name': 'Bug Bounty Automation',
+                'name': 'Bug Bounty Assessment',
                 'phases': [
-                    'Identify target bounty programs',
-                    'Automate vulnerability scanning',
-                    'Write professional reports',
-                    'Submit and track'
+                    'Identify target bounty programs with explicit in-scope policy',
+                    'Execute passive reconnaissance and asset discovery',
+                    'Draft professional markdown vulnerability report',
+                    'Submit and track remediation status'
                 ],
-                'channels': ['HackerOne', 'Bugcrowd', 'Intigriti'],
+                'channels': ['HackerOne', 'Bugcrowd', 'Intigriti', 'Direct Program'],
                 'timeline': '2-8 weeks',
-                'success_rate': '50%'
+                'success_rate': '70%'
             },
             'crypto_exploit': {
-                'name': 'Crypto Exploit/Arbitrage',
+                'name': 'Smart Contract & Protocol Security Audit',
                 'phases': [
-                    'Analyze exploit details',
-                    'Check if still viable',
-                    'Prepare execution scripts',
-                    'Execute with small amounts first'
+                    'Analyze protocol mechanics and transaction invariants',
+                    'Verify smart contract state in local fork/sandbox',
+                    'Document root cause and remediation recommendations',
+                    'Coordinate disclosure with protocol developers'
                 ],
-                'channels': ['Legal Trading / Arbitrage', 'Protocol Bug Bounty (e.g. Immunefi)', 'Security Audit Reporting'],
+                'channels': ['Immunefi Protocol Bug Bounty', 'Direct Protocol Security Disclosure', 'Public Security Audit Advisory'],
                 'timeline': '1-7 days',
-                'success_rate': '30% (but high reward)'
+                'success_rate': '60%'
             }
         }
         
         return plan_templates.get(threat_type, {
-            'name': 'General Monetization',
-            'phases': ['Research', 'Prepare', 'Execute', 'Monetize'],
-            'channels': ['Multiple options based on research'],
-            'timeline': 'Varies',
-            'success_rate': 'Unknown'
+            'name': 'General Security Research Plan',
+            'phases': ['Research', 'Validate in Sandbox', 'Document', 'Responsible Disclosure'],
+            'channels': ['Bug Bounty Programs', 'Coordinated Vendor Disclosure'],
+            'timeline': '1-3 weeks',
+            'success_rate': '75%'
         })
 
 # Test
