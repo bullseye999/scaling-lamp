@@ -409,10 +409,11 @@ class SelfAwareness:
                 pain_points.append('ollama_timeout')
             if 'hallucin' in content:
                 pain_points.append('hallucination')
-            if 'not found' in content or 'missing' in content:
-                pain_points.append('missing_feature')
-            if 'error' in content:
-                pain_points.append('errors')
+            # Robust failure signals instead of bare words
+            if 'traceback (most recent call last)' in content or 'unhandled exception:' in content:
+                pain_points.append('runtime_crash')
+            if 'modulenotfounderror:' in content or 'importerror:' in content:
+                pain_points.append('missing_dependency')
 
         # Propose based on pain points
         if pain_points.count('ollama_timeout') >= 2:
@@ -501,6 +502,12 @@ class SelfAwareness:
         Save a proposal as a readable file in ciph_proposals/.
         This is what the Operator sees and reviews before approving.
         """
+        # Strict AST Syntax Check BEFORE writing proposal file
+        validation = self._validate_proposal_code(content)
+        if not validation.get('valid'):
+            print(f"❌ [SelfAwareness] Proposal {proposal_id} aborted: Syntax error in proposed code: {validation.get('error')}")
+            return False
+
         proposal_path = os.path.join(self.PROPOSALS_DIR, f"{proposal_id}_{filename}")
 
         # Write the actual code/content file
@@ -539,6 +546,7 @@ class SelfAwareness:
         print(f"   Review: cat {proposal_path}")
         print(f"   Apply:  /apply-upgrade {proposal_id}")
         print(f"   Reject: /reject-upgrade {proposal_id}")
+        return True
 
     def _create_upgrade_proposal(self, module: str, title: str,
                                    problem: str, priority: str) -> Optional[Dict]:
@@ -567,7 +575,7 @@ class SelfAwareness:
             return None
 
         proposal_id = f"UP-{len(self.pending_upgrades)+1:03d}"
-        self._save_proposal_file(
+        saved = self._save_proposal_file(
             proposal_id=proposal_id,
             filename=module,
             content=code,
@@ -577,6 +585,8 @@ class SelfAwareness:
             module=module,
             is_new_file=False
         )
+        if not saved:
+            return None
         return {'id': proposal_id}
 
     # ─────────────────────────────────────────────
@@ -602,6 +612,11 @@ class SelfAwareness:
             success, msg = mgr.apply(proposal_id)
             if success:
                 target_file = proposal.get('target_file', proposal.get('module', ''))
+                # Populate backup path from CodeStagingManager artifact
+                artifact = mgr.find_artifact(proposal_id)
+                if artifact and artifact.get('backup_file'):
+                    proposal['backup'] = artifact.get('backup_file')
+                    proposal['backup_file'] = artifact.get('backup_file')
                 proposal['status'] = 'APPLIED'
                 proposal['applied_at'] = datetime.now().isoformat()
                 self.approved_history.append(proposal)
@@ -725,6 +740,9 @@ class SelfAwareness:
 
     def _find_proposal(self, proposal_id: str) -> Optional[Dict]:
         for p in self.pending_upgrades:
+            if p['id'] == proposal_id:
+                return p
+        for p in self.approved_history:
             if p['id'] == proposal_id:
                 return p
         return None
