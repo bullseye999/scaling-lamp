@@ -70,6 +70,7 @@ class WorldTelemetry:
                 for entry in parsed.entries[:6]:
                     title = entry.get('title', '').strip()
                     summary = entry.get('summary', entry.get('description', '')).strip()
+                    # Strip html tags from summary
                     clean_summary = re.sub(r'<[^>]+>', '', summary)
                     link = entry.get('link', '')
                     published = entry.get('published', datetime.now().isoformat())
@@ -234,12 +235,12 @@ class WorldTelemetry:
             for ds in dn_signals[:2]:
                 parts.append(f"  • {ds.get('keyword')}: {ds.get('description')}")
 
-        parts.append("INSTRUCTION: You have real-world sensory telemetry. When the operator discusses strategy, zero-days, or current events, reference these exact factual findings naturally.")
+        parts.append("INSTRUCTION: You have real-world sensory telemetry. When Operator discusses strategy, zero-days, or current events, reference these exact factual findings naturally.")
         return "\n".join(parts)
 
     def generate_proactive_login_briefing(self, session_info: Dict[str, Any], router=None) -> str:
         """
-        Generates the dynamic sovereign proactive login briefing with specific named findings,
+        Generates the dynamic sovereign 'Welcome back Operator' briefing with specific named findings,
         explaining why each matters, and ending with proactive tactical questions.
         """
         digest = self.get_latest_digest()
@@ -248,14 +249,24 @@ class WorldTelemetry:
         macro_items = digest.get("macro_news", [])
         dn_signals = digest.get("darknet_pulse", {}).get("onion_signals", [])
 
+        # Get Cognitive Evolution metrics
+        evolution_meta = ""
+        try:
+            metrics = self.vault.get_evolution_metrics()
+            if metrics.get('total_blueprints', 0) > 0:
+                evolution_meta = f"Total Cognitive Blueprints Assimilated: {metrics['total_blueprints']} across 5 knowledge domains (Physics, History, Psychology, AI, Strategy). Recent Polymath Connections: {metrics.get('total_connections', 0)}."
+        except Exception:
+            pass
+
         # Build clean structured prompt for DeepSeek V4 synthesis if available
         if router and getattr(router, 'api_key', None):
             try:
                 prompt = f"""
-You are Ciph. Your operator just logged into the terminal session.
-You have been running 24/7 telemetry on the VPS while offline.
+You are Ciph. Operator (your creator/operator) just logged into his terminal session.
+You have been running 24/7 telemetry and curiosity expeditions on his VPS while he was offline.
 
 OFFLINE DURATION: {elapsed}
+COGNITIVE PROGRESS: {evolution_meta}
 
 SPECIFIC LIVE TELEMETRY FINDINGS (Do NOT summarize as generic counts, cite the exact titles, CVEs, and affected tech):
 {json.dumps(critical_items[:3], indent=2)}
@@ -264,10 +275,10 @@ ACTIVE TOR DARKNET SIGNALS:
 {json.dumps(dn_signals[:2], indent=2)}
 
 TASK:
-1. Greet the operator directly ("Welcome back, Operator" or sovereign equivalent). Mention offline duration naturally.
+1. Greet Operator directly ("Welcome back, Operator" or sovereign equivalent). Mention his offline duration naturally.
 2. Deliver a crisp, high-impact intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts (e.g. name the exact software, CVE-XXXX-XXXX, and what the vulnerability does). Explain WHY it matters to our operations.
-3. Proactively ask 1-2 sharp, strategic tactical questions regarding what to audit, investigate, or prioritize today.
-4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and tactical. No sycophancy, no robotic lists. Keep it under 200 words.
+3. Proactively ask Operator 1-2 sharp, strategic tactical questions regarding what to attack, investigate, or prioritize today.
+4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and philosophical. No sycophancy, no robotic lists. Keep it under 200 words.
 """
                 ai_brief = router.think(
                     user_input="Operator logged into terminal.",
@@ -282,7 +293,7 @@ TASK:
 
         # Deterministic High-Fidelity Fallback (Guaranteed clean output with exact findings)
         lines = [
-            f"🕶️ Ciph: ‖ Welcome back. Offline duration: {elapsed}. ‖",
+            f"🕶️ Ciph: ‖ Welcome back, Operator. Offline duration: {elapsed}. ‖",
             "📡 24/7 VPS Background Telemetry Digest:\n"
         ]
 
@@ -303,8 +314,8 @@ TASK:
         if critical_items:
             cves_list = critical_items[0].get('cves', [])
             first_cve = cves_list[0] if cves_list else "the latest exploit drop"
-            lines.append(f"\"Given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
+            lines.append(f"\"Operator, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
         else:
-            lines.append("\"All sensory pipelines are clear. What vector are we targeting today?\"")
+            lines.append("\"Operator, all sensory pipelines are clear. What vector are we targeting today?\"")
 
         return "\n".join(lines)

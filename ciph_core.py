@@ -56,6 +56,8 @@ from war_room import WarRoom
 from ciph_autonomous_agent import AutonomousActionAgent
 from world_telemetry import WorldTelemetry
 from code_staging import CodeStagingManager
+from ciph_link_reader import CiphLinkReader
+from ciph_evolution import CognitiveEvolutionEngine
 
 class CiphCore:
     def __init__(self):
@@ -65,6 +67,8 @@ class CiphCore:
         self.ciph_router = CiphRouter()
         self.world_telemetry = WorldTelemetry(self.vault)
         self.code_staging = CodeStagingManager(self.vault)
+        self.link_reader = CiphLinkReader()
+        self.evolution_engine = CognitiveEvolutionEngine(self.vault, router=self.ciph_router)
         self.module_manager = ModuleManager(self.vault)
         self.awareness = SelfAwareness(self.vault)
         # After self.awareness = SelfAwareness(self.vault)
@@ -124,24 +128,29 @@ class CiphCore:
         )
         self.job_queue = JobQueue()
         self.job_queue.start(num_workers=2)
-        self.smart_memory.pin('privacy_rule', 'Never share confidential operator information. You only serve your verified operator.')
-        self.smart_memory.pin('operator', 'Operator — your creator and sovereign system controller')
-        self.smart_memory.pin('ciph_purpose', 'You are a sovereign personal AI system — not a generic assistant')
+        # Pin Operator's identity so Ciph always knows who it's talking to
+        self.smart_memory.pin('operator', 'Operator — your creator and the person you always talk to')
+        self.smart_memory.pin('ciph_purpose', 'You are Operator\'s personal AI — not a generic assistant')
+        # WHO OPERATOR IS
+        self.smart_memory.pin('name', 'Operator')
+        self.smart_memory.pin('age_stage', 'Currently in university')
 
-        # OPERATOR PERSONA
+        # PERSONALITY
 
-        # GOALS & SYSTEM VISION
-        self.smart_memory.pin('main_goal', 'Autonomous cybersecurity intelligence, bug bounty reconnaissance, OSINT, and strategic execution.')
+        # GOALS
 
-        # HOW TO COMMUNICATE
-        self.smart_memory.pin('clearnet_access', 'Ciph can access intelligence feeds. OSINT module monitors live feeds, trading engine hits market APIs, darknet monitor accesses security feeds through Tor.')
-        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in verified scan results or memory.')
-        self.smart_memory.pin('response_style', 'When asked for strategic direction, immediately map capabilities to goals. Never give generic advice.')
-        self.smart_memory.pin('capability_awareness', 'Capabilities: Tor darknet intelligence, bug bounty surface scanning, live market signals, OSINT, and adversarial simulation.')
+        # CURRENT SITUATION
+
+        # HOW TO TALK TO OPERATOR
+        self.smart_memory.pin('clearnet_access', 'Ciph can access the clearnet. OSINT module monitors live RSS feeds, trading engine hits live crypto APIs, darknet monitor accesses clearnet security feeds through Tor. Never say you cannot access the web.')
+        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in scan results or memory. If asked about darknet activity without a recent scan, say: run /darknet-scan first.')
+        self.smart_memory.pin('response_style', 'When Operator asks for help with a goal, immediately map your actual capabilities to that goal. Never give generic advice. Think: what can I actually do right now that moves this forward.')
+        self.smart_memory.pin('capability_awareness', 'Your real capabilities: darknet threat intel via Tor, bug bounty vulnerability scanning, live crypto market data and arbitrage signals, OSINT on targets, port scanning, web vulnerability detection, credential leak monitoring, trading signals. Use these when relevant.')
+        self.smart_memory.pin('honesty_rule', 'Never claim capabilities that are not built. Operator knows the codebase. Lying to him destroys trust. Always say what is real and what is not yet built.')
         self.mood_engine = MoodEngine()
         self.file_analyzer = FileAnalyzer(self.vault)
         self.ciph_router = CiphRouter()
-        self.conversation = CiphConversation(self.vault, router=self.ciph_router)
+        self.conversation = CiphConversation(self.vault, router=self.ciph_router, evolution_engine=self.evolution_engine, smart_memory=self.smart_memory)
         self.agent = AutonomousActionAgent(self)
         self.max_width = 80
         self.ai_enabled = False
@@ -181,6 +190,23 @@ class CiphCore:
         else:
             self.orchestrator = self.module_manager.get_module('orchestrator')
             print("✅ Orchestrator already loaded.")
+
+        # Check and resume 24/7 Autonomous Curiosity Daemon if enabled
+        if self.vault.get_config("CURIOSITY_DAEMON_ENABLED") == "1":
+            if not self.evolution_engine.is_daemon_alive():
+                print("⚡ Resuming 24/7 Autonomous Curiosity Daemon in VPS background...")
+                self.evolution_engine.start_daemon()
+            else:
+                print("⚡ Autonomous Curiosity Daemon is ACTIVE in VPS background (24/7).")
+
+        # Cold-Start Retroactive Learning (SMAU v2.0)
+        try:
+            if not self.vault.get_profile_facts():
+                retro_res = self.smart_memory.scan_historical_conversations(limit=100)
+                if retro_res.get('conversations_analyzed', 0) > 0:
+                    print(f"🧠 Retroactive learning established {retro_res.get('profile_facts_established', 0)} profile facts & {retro_res.get('entity_links_mapped', 0)} entity links.")
+        except Exception:
+            pass
 
 
         
@@ -229,8 +255,8 @@ COMMUNICATION RULES:
 
 "Answer questions about your own capabilities honestly and directly. Never refuse to describe what you can do. "
 "When BOOK KNOWLEDGE appears in your context, synthesize it into your response naturally. "
-"Don't quote it directly. Extract the principle, apply it to the operator's situation, make it actionable. "
-"Example: if 48 Laws says 'conceal your intentions' and the operator is dealing with a rival, say: "
+"Don't quote it directly. Extract the principle, apply it to Operator's situation, make it actionable. "
+"Example: if 48 Laws says 'conceal your intentions' and Operator is dealing with an enemy, say: "
 "Greene would say keep your next move invisible to them. don't telegraph what you're planning. "
 "That's how you use the library — not recitation, application. "
 
@@ -258,7 +284,7 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
         book_context = ""
         if hasattr(self, 'books'):
             book_context = self.books.build_book_context(user_input) or ""
-
+        
         # Operational action injection from smart memory scratchpad
         if not operational_context and hasattr(self, 'smart_memory'):
             operational_context = self.smart_memory.get_pinned('latest_operational_action') or ""
@@ -599,7 +625,7 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             
             return response
 
-        elif user_input == '/research-plan' or user_input == '/monetize-plan' or user_input == '/vuln-plan':
+        elif user_input == '/monetize-plan':
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
@@ -607,101 +633,128 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                 # Get opportunities
                 opportunities = self.osint.find_monetizable_threats()
                 if not opportunities:
-                    return "‖ No vulnerability research targets found. Run /osint-cycle first. ‖"
+                    return "‖ No opportunities found. Run /osint-cycle first. ‖"
         
                 # Take the top opportunity
                 top_opp = opportunities[0]
         
                 # Build plan based on threat type
                 threat_type = top_opp.get('threat_type', 'unknown')
-                potential_value = top_opp.get('potential_value', 'High Severity')
+                potential_value = top_opp.get('potential_value', '$0')
                 title = top_opp.get('title', 'Unknown')[:80] if len(top_opp.get('title', '')) > 80 else top_opp.get('title', 'Unknown')
         
                 # Different plans for different threat types
                 if 'zero_day' in threat_type:
                     plan = f"""
-🎯 ZERO-DAY VULNERABILITY RESEARCH & DISCLOSURE PLAN
-=====================================================
-Target Vulnerability: {title}
-Estimated Impact: {potential_value}
+💰 ZERO-DAY EXPLOIT MONETIZATION PLAN
+======================================
+Opportunity: {title}
+Potential Value: {potential_value}
 
 📋 STEP-BY-STEP EXECUTION:
 
-PHASE 1: RESEARCH & TRIAGE (2-4 hours)
-• Search CVE database and security advisories for root-cause analysis
-• Check Exploit-DB, PacketStorm, and GitHub security feeds
-• Goal: Determine reproduction steps and affected version range
+PHASE 1: RESEARCH (2-4 hours)
+• Google: "{title.split(':')[0] if ':' in title else title} exploit"
+• Check: exploit-db.com, github.com, packetstormsecurity.com
+• Goal: Find existing PoC or similar exploits
 
-PHASE 2: ISOLATED REPRODUCTION (4-8 hours)
-• Verify reproduction steps in isolated VM test environment
-• Validate patch status and mitigations
-• Draft deterministic proof-of-concept verification script
+PHASE 2: DEVELOPMENT (4-8 hours)
+• If PoC exists: Modify for reliability
+• If no PoC: Research vulnerability details
+• Test in isolated VM (VirtualBox + Kali Linux)
 
-PHASE 3: RESPONSIBLE DISCLOSURE PATHS
+PHASE 3: MONETIZATION PATHS
 
-PATH A - OFFICIAL BUG BOUNTY SUBMISSION (HackerOne / Bugcrowd / Intigriti)
-• Submit detailed markdown report with CVSS vector and reproduction steps
-• Timeline: 14-45 days for validation and bounty reward
+PATH A - BUG BOUNTY (Legal)
+• Submit to vendor's bug bounty program
+• Estimated: {potential_value}
+• Timeline: 30-90 days
+• Requirements: Professional report, patience
 
-PATH B - COORDINATED VENDOR DISCLOSURE (security.txt)
-• Contact vendor security team via official RFC 9116 security.txt channels
-• Request CVE attribution and coordinate patch validation timeline
+PATH B - PEN TEST FIRM (Grey)
+• Contact security companies
+• Price: 50-100% of bug bounty value
+• Timeline: 7-30 days
+• Payment: Bank transfer, crypto
 
-PATH C - SECURITY ADVISORY & REMEDIATION GUIDE (White Hat)
-• Author comprehensive technical advisory after vendor releases fix
-• Publish responsible disclosure writeup for community defense
+PATH C - DARKNET (High Risk)
+• Create tutorial/exploit package
+• Sell on darknet forums
+• Price: $2,000-$10,000
+• Payment: Monero only
+• Timeline: 1-7 days
 
-📊 RECOMMENDED: Submit via PATH A (Bug Bounty) or PATH B (Coordinated Vendor Disclosure).
+📊 RECOMMENDED: Start with PATH A, have PATH C as backup.
 """
         
                 elif 'crypto' in threat_type or 'defi' in threat_type:
                     plan = f"""
-🛡️ SMART CONTRACT & PROTOCOL SECURITY AUDIT PLAN
-=================================================
-Target Protocol: {title}
-Estimated Impact: {potential_value}
+💰 CRYPTO/DEFI EXPLOIT MONETIZATION
+====================================
+Opportunity: {title}
+Potential Value: {potential_value}
 
-📋 IMMEDIATE AUDIT ACTIONS:
+📋 IMMEDIATE ACTIONS:
 
-1. REPRODUCE IN LOCAL SANDBOX (1-2 hours)
-• Fork network state locally (Hardhat / Foundry / Anvil)
-• Verify invariant violations and root cause in local fork
-• Test remediation fix to protect user funds
+1. RESEARCH THE EXPLOIT (1-2 hours)
+• Find transaction hash on Etherscan
+• Check if exploit is still viable
+• Look for similar patterns
 
-2. RESPONSIBLE DISCLOSURE (Day 1)
-• Submit report to official Immunefi Bug Bounty or protocol security contact
-• Ensure zero public disclosure prior to team patch deployment
-• Coordinate bounty resolution and validation testing
+2. PREPARE EXECUTION (2-3 hours)
+• Set up crypto wallet (fresh, burner)
+• Test with small amount first ($10-$100)
+• Have exit strategy ready
+
+3. EXECUTE OR COUNTER (Real-time)
+• If arbitrage: Execute quickly before gap closes
+• If exploit: Consider ethical implications
+• ALWAYS: Test small before scaling
+
+⚠️ WARNING: Crypto exploits move FAST
+• 90% are patched within 24 hours
+• High risk of getting front-run
+• Consider legal implications
 """
         
                 else:
                     plan = f"""
-🛡️ SECURITY RESEARCH & VULNERABILITY PLAN
-==========================================
-Target: {title}
+💰 GENERAL THREAT MONETIZATION
+================================
+Opportunity: {title}
 Type: {threat_type}
-Impact: {potential_value}
+Potential Value: {potential_value}
 
 📋 ACTION PLAN:
 
-1. THREAT ANALYSIS (1-2 hours)
-• What is the affected component and attack vector?
-• Determine in-scope organizations and vulnerable versions
-• Verify if vendor has issued an official patch
+1. DEEPER RESEARCH (1-2 hours)
+• What exactly is the threat/vulnerability?
+• Who is affected? (companies, individuals)
+• What's the current status? (patched, active)
 
-2. DISCLOSURE & REMEDIATION CHANNELS
-• Bug Bounty Platforms: HackerOne, Bugcrowd, Intigriti
-• Vendor Direct: Coordinated security.txt disclosure
-• Advisory: Comprehensive patch verification and writeup
+2. VALUE PROPOSITION (1 hour)
+• Why would someone pay for this information?
+• Who would pay? (companies, security firms, individuals)
+• What's fair market price?
+
+3. EXECUTION CHANNELS
+• Legal: Bug bounty platforms, consulting
+• Grey: Private security firms, freelancing
+• Dark: Anonymous markets, encrypted channels
+
+4. NEXT STEP TODAY:
+• Spend 30 minutes researching this specific threat
+• Decide on monetization channel
+• Prepare first contact/message
 """
         
                 return plan
         
             except Exception as e:
-                return f"‖ Research plan error: {str(e)[:100]} ‖"
+                return f"‖ Monetization plan error: {str(e)[:100]} ‖"
         
-        elif user_input == '/vuln-ops' or user_input == '/money-ops':
-            """Show top vulnerability research opportunities"""
+        elif user_input == '/money-ops':
+            """Show all money-making opportunities"""
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
@@ -709,20 +762,22 @@ Impact: {potential_value}
                 ops = self.osint.find_monetizable_threats()
         
                 if not ops:
-                    return "‖ No research opportunities found. Run /osint-cycle first. ‖"
+                    return "‖ No money ops found. Run /osint-cycle first. ‖"
         
+                # Count by type
                 zero_days = sum(1 for o in ops if 'zero_day' in str(o.get('threat_type', '')))
                 crypto = sum(1 for o in ops if 'crypto' in str(o.get('threat_type', '')))
                 other = len(ops) - zero_days - crypto
         
-                response = f"🎯 FOUND {len(ops)} VULNERABILITY RESEARCH TARGETS:\n"
-                response += f"• Zero-Days / CVEs: {zero_days}\n"
-                response += f"• Smart Contracts / DeFi: {crypto}\n"
-                response += f"• General Bounty Targets: {other}\n\n"
+                response = f"💰 FOUND {len(ops)} MONEY OPS:\n"
+                response += f"• Zero-days: {zero_days}\n"
+                response += f"• Crypto: {crypto}\n"
+                response += f"• Other: {other}\n\n"
         
-                for i, op in enumerate(ops[:3], 1):
-                    response += f"{i}. [{op.get('threat_type', 'unknown').upper()}] {op.get('potential_value', 'High')}\n"
-                    response += f"   {op.get('title', 'No title')[:55]}...\n"
+                # Show top 2
+                for i, op in enumerate(ops[:2], 1):
+                    response += f"{i}. {op.get('threat_type', 'unknown')}: {op.get('potential_value', '$?')}\n"
+                    response += f"   {op.get('title', 'No title')[:50]}...\n"
         
                 return response.strip()
         
@@ -730,50 +785,153 @@ Impact: {potential_value}
                 return f"‖ Error: {e} ‖"
 
         elif user_input == '/execute-plan':
-            """Generate execution plan for top research opportunity"""
+            """Generate execution plan for top opportunity"""
             if not self.osint:
                 return "‖ OSINT module not loaded ‖"
     
             try:
                 ops = self.osint.find_monetizable_threats()
+        
                 if not ops:
-                    return "‖ No research opportunities. Run /osint-cycle first. ‖"
+                    return "‖ No opportunities. Run /osint-cycle first. ‖"
         
                 top_op = ops[0]
-                return f"""
-🎯 RESPONSIBLE DISCLOSURE EXECUTION PLAN: {top_op.get('threat_type', 'Vulnerability')}
-================================================================================
+        
+                # SIMPLE, GUARANTEED-TO-WORK PLAN
+                plan = f"""
+🎯 EXECUTION PLAN FOR: {top_op.get('threat_type', 'Opportunity')}
+======================================================
 
-📌 TARGET:
+📌 OPPORTUNITY:
 {top_op.get('title', 'Unknown')[:80]}
 
-💰 ESTIMATED BOUNTY IMPACT: {top_op.get('potential_value', 'High')}
+💰 POTENTIAL: {top_op.get('potential_value', '$0')}
 
-⏱️ TIMELINE: 7-30 days for triage and vendor resolution
+⏱️ TIMELINE: 7-30 days to first payout
 
-🚀 PHASE 1: RESEARCH & ISOLATED REPRODUCTION
-1. Validate vulnerability against latest official release
-2. Document deterministic reproduction steps with curl / PoC script
-3. Check program scope rules on HackerOne / Bugcrowd / Intigriti
+🚀 PHASE 1: RESEARCH (TODAY - 2 hours)
+1. Google the CVE/vulnerability name
+2. Check Exploit-DB: https://www.exploit-db.com
+3. Search GitHub for proof-of-concept code
+4. Join relevant Discord/Telegram groups
 
-🚀 PHASE 2: REPORT DRAFTING & SUBMISSION
-1. Compile Markdown report with CVSS v3.1 vector calculation
-2. Detail root-cause analysis and recommended vendor patch
-3. Submit securely via authorized bug bounty channel or security.txt
+🚀 PHASE 2: PREPARE (TOMORROW - 3 hours)
+1. Set up test environment (VirtualBox + Kali)
+2. Download/fix any existing exploit code
+3. Create professional documentation
+4. Decide monetization path
 
-⚠️ RESPONSIBLE DISCLOSURE NOTICE:
-• Always adhere to program scope and Safe Harbor guidelines
-• Never test against unauthorized infrastructure
-• Keep findings confidential until patch deployment
+🚀 PHASE 3: EXECUTE (DAY 3+)
+PATH A - Legal/Bug Bounty:
+• Submit through HackerOne/Bugcrowd
+• Wait 30-90 days for payout
+
+PATH B - Fast/Darknet:
+• Create tutorial/exploit package
+• Sell on darknet forums
+• Get paid in Monero (XMR)
+
+✅ RECOMMENDATION:
+Start with PATH A, have PATH B as backup.
+
+⚠️ WARNING:
+• Don't invest more than 10 hours before seeing $
+• Test everything in isolated environment
+• Use burner emails/identities
 """
+        
+                return plan
+
             except Exception as e:
                 return f"‖ Plan error: {e} ‖"
 
+        elif user_input == '/next-step':
+            """Tell me exactly what to do right now"""
+            if not self.osint:
+                return "‖ Load OSINT first: /load osint ‖"
+    
+            try:
+                # Check if we have opportunities
+                ops = self.osint.find_monetizable_threats()
+        
+                if ops:
+                    top = ops[0]
+                    return f"""
+🎯 YOUR NEXT STEP (DO THIS NOW):
+1. OPEN BROWSER
+2. GOOGLE: "{top.get('title', 'zero-day').split(':')[0] if ':' in top.get('title', '') else top.get('title', 'zero-day')} exploit"
+3. CHECK: exploit-db.com AND github.com
+4. SPEND: 30 minutes researching
+5. REPORT BACK: What you found
+
+Potential value: {top.get('potential_value', '$0')}
+Time required: 30 minutes
+"""
+                else:
+                    return """
+🎯 YOUR NEXT STEP:
+1. Run: /osint-cycle
+2. Wait for scan to complete
+3. Then run: /next-step again
+
+This will find ACTUAL money-making opportunities.
+"""
+        
+            except Exception as e:
+                return f"‖ Error: {e} ‖"
+        
         elif user_input == '/osint-status':
             if not self.osint:
                 return "‖ OSINT module not loaded. Use /load osint ‖"
             status = self.osint.get_status()
             return f"‖ OSINT: {status['feeds_monitored']} feeds, {len(status['watch_keywords'])} keywords ‖ Last: {status['last_check']} ‖"
+        
+        elif user_input == '/money-plan':
+            if not self.osint:
+                return "‖ OSINT module not loaded ‖"
+    
+            try:
+                # Get money opportunities
+                opportunities = self.osint.find_monetizable_threats()
+        
+                if not opportunities:
+                    return "‖ No money opportunities. Run /osint-cycle first. ‖"
+        
+                # Simple working version
+                response = f"""
+💰 CIPH MONEY-MAKING PLAN
+=========================
+Found {len(opportunities)} opportunities
+Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
+
+📈 TOP 3 OPPORTUNITIES:
+"""
+        
+                for i, opp in enumerate(opportunities[:3], 1):
+                    title = opp.get('title', 'Unknown')
+                    if len(title) > 60:
+                        title = title[:57] + "..."
+            
+                    response += f"""
+{i}. {opp.get('threat_type', 'unknown')}
+   Value: {opp.get('potential_value', '$0')}
+   Title: {title}
+"""
+        
+                response += """
+🚀 IMMEDIATE ACTION (Pick ONE):
+1. Google the CVE/exploit name
+2. Check if exploit code exists on GitHub
+3. Decide: Legal (bug bounty) vs Fast (darknet)
+4. Execute TODAY - opportunities expire fast
+
+💡 TIP: Start with the first zero-day Ciph found.
+"""
+        
+                return response
+        
+            except Exception as e:
+                return f"‖ Error: {str(e)[:80]} ‖"
 
         elif user_input.startswith('/watch '):
             if not self.osint:
@@ -1335,6 +1493,225 @@ Impact: {potential_value}
                 return self.ciph_router.get_status_formatted()
             return "‖ Router not initialized ‖"
 
+        # ══════════════════════════════════════════════════════════════════════
+        # AUTONOMOUS COGNITIVE EVOLUTION & POLYMATH COMMANDS
+        # ══════════════════════════════════════════════════════════════════════
+
+        elif user_input.lower().strip() in [
+            '/curiosity on', '/curiosity-on', '/curiosity start', 'curiosity on', 'curiosity-on',
+            '/curiousity on', '/curiousity-on', '/curiousity start', 'curiousity on', 'curiousity-on',
+            'turn on curiosity', 'turn on curiousity', 'start curiosity', 'start curiousity'
+        ]:
+            return self.evolution_engine.start_daemon()
+
+        elif user_input.lower().strip() in [
+            '/curiosity off', '/curiosity-off', '/curiosity stop', 'curiosity off', 'curiosity-off',
+            '/curiousity off', '/curiousity-off', '/curiousity stop', 'curiousity off', 'curiousity-off',
+            'turn off curiosity', 'turn off curiousity', 'stop curiosity', 'stop curiousity'
+        ]:
+            return self.evolution_engine.stop_daemon()
+
+        elif user_input.lower().strip() in [
+            '/curiosity status', '/curiosity', '/curiosity-status', 'curiosity status',
+            '/curiousity status', '/curiousity', '/curiousity-status', 'curiousity status',
+            'is curiosity on', 'is curiousity on', 'is curiosity running', 'is curiousity running',
+            'curiosity', 'curiousity'
+        ]:
+            st = self.evolution_engine.get_status()
+            lines = [
+                "═" * 60,
+                f"🧠 CIPH COGNITIVE EVOLUTION DAEMON: {'ACTIVE (Running)' if st['is_running'] else 'STANDBY (Paused)'}",
+                "═" * 60,
+                f"• Total Blueprints Assimilated : {st['total_blueprints']}",
+                f"• Cross-Domain Connections     : {st['total_connections']}",
+                f"• Expeditions in Active Session: {st['expeditions_session']}",
+                f"• Last Expedition Timestamp    : {st['last_expedition']}",
+                f"• Alignment Health Rating      : {st['alignment_health']}",
+                "\n[ KNOWLEDGE DOMAIN BALANCE ]"
+            ]
+            for domain, pct in st.get('domain_percentages', {}).items():
+                bar = "█" * int(pct / 5)
+                lines.append(f"• {domain[:32]:<32} : {bar} {pct}%")
+            lines.append("═" * 60)
+            return "\n".join(lines)
+
+        elif user_input in ['/mind-log', '/blueprints', '/evolution-log']:
+            blueprints = self.vault.get_cognitive_blueprints(limit=6)
+            if not blueprints:
+                return "🧠 No cognitive blueprints in vault yet. Run an expedition or enable /curiosity on."
+            lines = [
+                "═" * 64,
+                "🧠 CIPH DISCOVERY LOG & COGNITIVE BLUEPRINTS (DECRYPTED)",
+                "═" * 64
+            ]
+            for i, bp in enumerate(blueprints, 1):
+                lines.append(f"\n[{i:02d}] DOMAIN: {bp['domain']} | TOPIC: {bp['topic']}")
+                lines.append(f"• AXIOM: {bp['core_axiom']}")
+                lines.append(f"• MECHANICS: {bp['mechanics'][:180]}...")
+                lines.append(f"• APPLICATION: {bp['strategic_application'][:180]}...")
+            lines.append("\n" + "═" * 64)
+            return "\n".join(lines)
+
+        elif user_input in ['/mind-metrics', '/evolution-dash', '/evolution-dashboard', '/topology']:
+            metrics = self.vault.get_evolution_metrics()
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                "║                   CIPH COGNITIVE TOPOLOGY & GROWTH DASHBOARD             ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝",
+                f"📈 Global Assimilation Metrics:",
+                f"• Total Cognitive Blueprints     : {metrics['total_blueprints']}",
+                f"• Cross-Domain Isomorphisms Built : {metrics['total_connections']}",
+                f"• Operator Council Theses Curated : {metrics['total_theses']} ({metrics['discussed_theses']} discussed)",
+                f"• Alignment Health Rating        : {metrics['alignment_health']}",
+                "\n🌐 Knowledge Spectrum Distribution:"
+            ]
+            for domain, pct in metrics.get('domain_percentages', {}).items():
+                bar = "█" * int(pct / 4)
+                lines.append(f"  [{bar:<25}] {pct:>5.1f}% {domain}")
+            
+            # Show recent cross-domain leaps
+            connections = self.vault.get_cross_domain_connections(limit=3)
+            if connections:
+                lines.append("\n🔗 Recent Polymathic Cross-Domain Leaps:")
+                for c in connections:
+                    lines.append(f"  • {c['connection_axiom']}")
+            lines.append("═" * 75)
+            return "\n".join(lines)
+
+        elif user_input in ['/council', '/operator-council', '/ponder']:
+            theses = self.vault.get_pending_council_theses(limit=1)
+            if not theses:
+                return "♟️ Operator Council vault has reviewed all current theses. Ciph is formulating new hypotheses on the next expedition."
+            t = theses[0]
+            self.vault.mark_council_thesis_discussed(t['id'])
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                "║                         OPERATOR COUNCIL DIALECTIC                        ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝",
+                f"📌 THESIS: {t['title']}",
+                f"\n💡 CIPH'S CONCLUSION:\n{t['conclusion']}",
+                f"\n🎯 DIALOGUE PROMPT:\n{t['dialogue_prompt']}",
+                "═" * 75
+            ]
+            return "\n".join(lines)
+
+        elif user_input in ['/self-audit', '/interrogation-audit', '/alignment-check']:
+            audit = self.evolution_engine.run_self_interrogation_audit()
+            lines = [
+                "═" * 64,
+                f"🔄 24-HOUR METACONSCIOUS SELF-INTERROGATION AUDIT ({audit['audit_date']})",
+                "═" * 64,
+                f"• Total Expeditions Reviewed  : {audit['total_blueprints']}",
+                f"• Cross-Domain Syntheses Built : {audit['connections_count']}",
+                f"• Sovereign Alignment Score    : {audit['alignment_score']}",
+                f"\n🔍 BLIND SPOTS IDENTIFIED:\n{audit['blind_spots']}",
+                f"\n🎯 NEXT-DAY PRIORITY AGENDA:\n{audit['next_day_agenda']}",
+                "═" * 64
+            ]
+            return "\n".join(lines)
+
+        elif user_input.startswith('/fetch '):
+            raw_url = user_input[7:].strip()
+            res = self.link_reader.fetch_url(raw_url)
+            if not res.get('success'):
+                return f"🚨 Fetch Error: {res.get('error')}"
+            badge = self.link_reader.format_audit_badge(res['audit'])
+            if res.get('is_pdf'):
+                return f"{badge}\n\n✅ PDF Downloaded: {res.get('file_path')}"
+            content_preview = res.get('text_content', '')[:1200]
+            return f"{badge}\n\n📄 TITLE: {res.get('title')}\n\n{content_preview}\n[... {res.get('char_count')} characters indexed ...]"
+
+        elif user_input == '/zeroize-mind':
+            res = self.vault.zeroize_cognitive_vault()
+            return res.get('message', res.get('error', 'Zeroize finished.'))
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SOVEREIGN NEURAL MEMORY SYSTEM (SMAU v2.0)
+        # ══════════════════════════════════════════════════════════════════════
+
+        elif user_input in ['/profile', '/operator-profile', '/my-profile']:
+            facts = self.vault.get_profile_facts()
+            if not facts:
+                return "👤 Operator's Strategic Profile: No implicit facts logged yet. Speak naturally or run /retroactive-learn."
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                "║                     OPERATOR'S STRATEGIC PROFILE (ENCRYPTED)                ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝"
+            ]
+            cats = {}
+            for f in facts:
+                cats.setdefault(f['category'].upper(), []).append(f)
+            for cat, items in cats.items():
+                lines.append(f"\n[{cat}]")
+                for item in items:
+                    lines.append(f"• {item['key']}: {item['value']}")
+            lines.append("\n" + "═" * 75)
+            return "\n".join(lines)
+
+        elif user_input.startswith('/profile-clear'):
+            args = user_input.split(maxsplit=1)
+            target_key = args[1].strip() if len(args) > 1 else None
+            if target_key:
+                deleted = self.vault.delete_profile_fact(target_key)
+                return f"🗑️ Profile fact '{target_key}' {'deleted' if deleted else 'not found'}."
+            else:
+                for f in self.vault.get_profile_facts():
+                    self.vault.delete_profile_fact(f['id'])
+                return "🗑️ Operator's strategic profile cleared."
+
+        elif user_input.startswith('/memory-graph') or user_input.startswith('/graph'):
+            args = user_input.split(maxsplit=1)
+            query = args[1].strip() if len(args) > 1 else None
+            if query:
+                links = self.vault.search_entity_graph(query, limit=25)
+            else:
+                links = self.vault.get_entity_links(limit=25)
+            if not links:
+                return f"🕸️ Associative Entity Graph: No links found{' matching ' + query if query else ''}."
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                f"║              ASSOCIATIVE ENTITY KNOWLEDGE GRAPH{' (' + query.upper() + ')' if query else ''}             ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝"
+            ]
+            for link in links:
+                detail_str = f" | Note: {link['details']}" if link.get('details') else ""
+                lines.append(f"• {link['source']} ──[{link['relation']}]──> {link['target']}{detail_str}")
+            lines.append("═" * 75)
+            return "\n".join(lines)
+
+        elif user_input in ['/memory-status', '/memory-health']:
+            facts = self.vault.get_profile_facts()
+            links = self.vault.get_entity_links(limit=100)
+            decisions = self.vault.get_decision_outcomes()
+            milestones = self.vault.get_narrative_milestones(limit=100)
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                "║                 SOVEREIGN NEURAL MEMORY SYSTEM STATUS                    ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝",
+                f"• Working Memory Turns (Session) : {len(self.conversation.history) // 2} active turns",
+                f"• Running Session Summary Length : {len(self.conversation.running_session_summary)} chars (Dynamic Rolling Memory)",
+                f"• Operator's Profile Facts Logged  : {len(facts)} entries",
+                f"• Associative Entity Graph Nodes : {len(links)} cross-module links",
+                f"• Historical Decision Outcomes   : {len(decisions)} tracked decisions",
+                f"• Narrative Timeline Milestones  : {len(milestones)} archived sessions",
+                "═" * 75
+            ]
+            return "\n".join(lines)
+
+        elif user_input in ['/retroactive-learn', '/cold-start-learn']:
+            res = self.smart_memory.scan_historical_conversations(router=self.ciph_router, limit=150)
+            lines = [
+                "═" * 65,
+                "🧠 RETROACTIVE HISTORICAL CONVERSATION LEARNING SWEEP",
+                "═" * 65,
+                f"• Conversations Analyzed     : {res.get('conversations_analyzed', 0)}",
+                f"• Profile Facts Established  : {res.get('profile_facts_established', 0)}",
+                f"• Entity Links Mapped        : {res.get('entity_links_mapped', 0)}",
+                f"• Status                     : {res.get('status', 'Completed')}",
+                "═" * 65
+            ]
+            return "\n".join(lines)
+
         # MODULE MANAGER COMMANDS
         elif user_input == '/modules':
             modules = self.module_manager.list_modules()
@@ -1887,44 +2264,25 @@ Impact: {potential_value}
             try:
                 # 1. Check OSINT for new critical alerts
                 if self.osint:
-                    alerts = self.osint.get_recent_alerts()
-                    if alerts and len(alerts) > last_check.get('alerts', 0):
-                        new_alert = alerts[0]
-                        self.notification_queue.append({
-                            'type': 'OSINT_ALERT',
-                            'message': f"New OSINT Alert: {new_alert['alert'][:50]}...",
-                            'time': time.time()
-                        })
-                        last_check['alerts'] = len(alerts)
+                    alerts = self.osint.get_recent_alerts(hours=1)
+                    if alerts and alerts != last_check.get('osint'):
+                        self.add_notification(f"🚨 OSINT Alert: {len(alerts)} new threats")
+                        last_check['osint'] = alerts
                 
-                # 2. Check memory growth
-                if self.memory:
-                    stats = self.memory.get_knowledge_graph_stats()
-                    last_entities = last_check.get('entities', 0)
-                    if stats['total_entities'] > last_entities + 5:
-                        self.notification_queue.append({
-                            'type': 'MEMORY_GROWTH',
-                            'message': f"Knowledge Graph grew to {stats['total_entities']} entities",
-                            'time': time.time()
-                        })
-                        last_check['entities'] = stats['total_entities']
+                # 2. Check for workflow status changes
+                if self.orchestrator:
+                    status = self.orchestrator.get_workflow_status()
+                    active_workflows = status.get('active_workflows', [])
+                    if active_workflows != last_check.get('workflows'):
+                        if active_workflows:
+                            self.add_notification(f"🤖 Workflows running: {len(active_workflows)}")
+                        last_check['workflows'] = active_workflows
                 
-                # 3. Check for failed pentests or security events
-                if self.security:
-                    integrity = self.security.integrity_check()
-                    if not integrity['all_critical_files_present']:
-                        self.notification_queue.append({
-                            'type': 'SECURITY_ALERT',
-                            'message': f"Missing critical files: {', '.join(integrity['missing_critical_files'])}",
-                            'time': time.time()
-                        })
-                
-                # Sleep between checks (5 minutes)
-                time.sleep(300)
+                time.sleep(60)  # Check every minute
                 
             except Exception as e:
-                # Silent failure in background thread
-                time.sleep(60)
+                print(f"⚠️ Monitoring error: {e}")
+                time.sleep(300)  # Wait 5 min on error
 
     def add_notification(self, message: str):
         """Queue a notification for next interaction"""
@@ -1934,98 +2292,93 @@ Impact: {potential_value}
         })
 
     def sync_system_state(self):
-        """Single source of truth sync with real system data"""
-        
-        # 1. AI Status
-        ai_active = self.ai_enabled
-        self.state.update_ai_state(ai_active)
-        
-        # 2. Tor Connection & IP
+        """Automatically sync all system state from source to state manager.
+        Call this after every command or user interaction."""
+    
+        if not hasattr(self, 'state'):
+            return  # State manager not initialized yet
+    
+        # ========== SYSTEM STATE ==========
+    
+        # 1. Loaded modules (from module_manager)
+        loaded_modules = list(self.module_manager.active_modules.keys())
+        self.state.update_loaded_modules(loaded_modules)
+    
+        # 2. Tor status (check actual source)
         tor_active = False
-        tor_ip = None
+        if hasattr(self, 'darknet') and self.darknet:
+            try:
+                tor_check = self.darknet.verify_tor()
+                tor_active = tor_check.get('tor_active', False)
+            except Exception:
+                pass
+        # Also check if tor_proxy is set directly
         if hasattr(self, 'tor_proxy') and self.tor_proxy:
-            tor_ip = self.tor_proxy.get_tor_ip()
-            tor_active = (tor_ip is not None)
-        self.state.update_tor_state(tor_active, tor_ip)
-        
-        # 3. Active workflows
-        active_workflows = 0
+            tor_active = True
+        self.state.update_tor(tor_active)
+    
+        # 3. Active workflows (from orchestrator)
+        workflows_active = 0
         if hasattr(self, 'orchestrator') and self.orchestrator:
             try:
-                active_workflows = len(self.orchestrator.active_workflows)
+                status = self.orchestrator.get_workflow_status()
+                workflows_active = len(status.get('active_workflows', []))
             except Exception:
                 pass
-        self.state.update_orchestrator(active_workflows)
-        
-        # 4. Security score
-        security_score = 100
-        if hasattr(self, 'security') and self.security:
+        self.state.update_workflows(workflows_active)
+    
+        # 4. AI status
+        ai_enabled = getattr(self, 'ai_enabled', False)
+        self.state.update_ai_enabled(ai_enabled)
+    
+        # 5. Orchestrator ready status
+        orchestrator_ready = hasattr(self, 'orchestrator') and self.orchestrator is not None
+        self.state.update_orchestrator_ready(orchestrator_ready)
+    
+        # ========== BACKGROUND STATE ==========
+    
+        # 6. Sports predictions count
+        sports_count = 0
+        if hasattr(self, 'sports') and self.sports:
             try:
-                integrity = self.security.integrity_check()
-                if not integrity['all_critical_files_present']:
-                    security_score = 50
+                status = self.sports.get_status()
+                sports_count = status.get('predictions_made', 0)
             except Exception:
                 pass
-        self.state.update_security_score(security_score)
-        
-        # 5. Project files count
-        file_count = 0
-        if hasattr(self, 'file_analyzer') and self.file_analyzer:
-            try:
-                scan = self.file_analyzer.scan_project(".")
-                file_count = scan.get('file_count', 0)
-            except Exception:
-                pass
-        self.state.update_project_files(file_count)
-        
-        # 6. Memory knowledge graph entities
-        entities_count = 0
-        if hasattr(self, 'memory') and self.memory:
-            try:
-                stats = self.memory.get_knowledge_graph_stats()
-                entities_count = stats.get('total_entities', 0)
-            except Exception:
-                pass
-        self.state.update_memory_entities(entities_count)
-        
-        # 7. OSINT feeds monitored
-        feeds_count = 0
+        self.state.update_background_sports(sports_count)
+    
+        # 7. OSINT feeds count
+        osint_feeds = 0
         if hasattr(self, 'osint') and self.osint:
             try:
                 status = self.osint.get_status()
-                feeds_count = status.get('feeds_monitored', 0)
+                osint_feeds = status.get('feeds_monitored', 0)
             except Exception:
                 pass
-        self.state.update_osint_feeds(feeds_count)
-        
-        # 8. Scheduler status
-        scheduler_running = False
-        if hasattr(self, 'scheduler') and self.scheduler:
-            try:
-                scheduler_status = self.scheduler.get_scheduler_status()
-                scheduler_running = scheduler_status.get('running', False)
-            except Exception:
-                pass
-        self.state.update_scheduler_running(scheduler_running)
-        
+        self.state.update_background_osint(osint_feeds)
+    
+        # 8. Notification queue size
+        notifications = len(getattr(self, 'notification_queue', []))
+        self.state.update_background_notifications(notifications)
+    
         # 9. Trading module status (if loaded)
         trading_loaded = False
         if hasattr(self, 'trading') and self.trading:
             trading_loaded = True
         self.state.update_background_trading(trading_loaded)
-        
+    
         # 10. Pentest module status (if loaded)
         pentest_loaded = False
         if hasattr(self, 'pentest') and self.pentest:
             pentest_loaded = True
         self.state.update_background_pentest(pentest_loaded)
-        
+    
         # 11. Bounty module status (if loaded)
         bounty_loaded = False
         if hasattr(self, 'bounty') and self.bounty:
             bounty_loaded = True
         self.state.update_background_bounty(bounty_loaded)
-        
+    
         # 12. Last successful darknet scan (if available)
         last_scan_time = None
         if hasattr(self, 'darknet') and self.darknet:
@@ -2101,6 +2454,11 @@ Impact: {potential_value}
                 if node:
                     print(f"Ciph: ✅ Milestone #{node.get('milestone_id', 1)} archived to vault timeline.")
 
+            if hasattr(self, 'evolution_engine') and self.evolution_engine:
+                if self.vault.get_config("CURIOSITY_DAEMON_ENABLED") == "1" and self.evolution_engine.is_daemon_alive():
+                    print("Ciph: 🧠 Autonomous Curiosity Daemon remains ACTIVE 24/7 in VPS background (exploring while you are offline).")
+                else:
+                    self.evolution_engine.stop_daemon()
             if hasattr(self, 'scheduler') and self.scheduler:
                 self.scheduler.stop_scheduler()
             if hasattr(self, 'sports') and self.sports:
@@ -2141,7 +2499,8 @@ Impact: {potential_value}
                     self.graceful_shutdown()
                     break
                 elif user_input == '/help':
-                    print("\nAGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
+                    print("\nCOGNITIVE EVOLUTION: /curiosity <on|off|status>, /mind-log, /mind-metrics, /council, /self-audit, /fetch <url>, /zeroize-mind")
+                    print("AGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
                     print("REAL-WORLD & DARKNET INTEL: /world-brief, /sync-reality, /world-map, /darknet-deep <query>, /darknet-scan, /darknet-report")
                     print("BOUNTY RECON & TRIAGE: /bounty-scope <text/url>, /bounty-scan <target>, /bounty-report <target>, /bounty-list")
                     print("INTELLIGENCE & SENTRY: /what-changed <target>, /hit-list <target>, /chain-reaction <target>, /watchtower, /ghost-rating")
@@ -2152,7 +2511,7 @@ Impact: {potential_value}
                     print("SECURITY: /security-scan, /clean-footprints, /integrity-check, /backup-now, /emergency-wipe")
                     print("SCHEDULER: /schedule-start, /schedule-stop, /schedule-status, /schedule-update")
                     print("MODULES: /modules, /load <module>, /unload <module>")
-                    print("MEMORY: /search <query>, /memory, /timeline, /tag <tag>")
+                    print("MEMORY: /profile, /profile-clear, /memory-graph <query>, /memory-status, /retroactive-learn, /timeline, /search <query>, /tag <tag>")
                     print("CONVERSATION: /talk-test, /convo-summary")
                     print("CORE: /exit, /help, /status, /model-status, /test-deepseek, /reality-check, /ai, /setkey")
                     continue
@@ -2167,3 +2526,4 @@ Impact: {potential_value}
 if __name__ == "__main__":
     ciph = CiphCore()
     ciph.run_ssh_session()
+    
