@@ -34,8 +34,13 @@ quantum.key
 *.tmp
 *.swp
 *~
+*.salt
 system_backup_*.db
 temp_backup.tar
+
+# Bug Bounty Reports (contain sensitive endpoints & tokens)
+bounty_reports/
+bounty_reports/*.md
 
 # Prediction data & logs
 sports_predictions/
