@@ -4,7 +4,7 @@
 
 import sqlite3
 import json
-from cryptography.fernet import Fernet # type: ignore
+from cryptography.fernet import Fernet, MultiFernet # type: ignore
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -17,7 +17,7 @@ class CipherVault:
     """
     Secure, encrypted storage for Ciph's memory and configurations.
     All data is encrypted before being written to the SQLite database.
-    ENHANCED: PBKDF2 key derivation + Exception-raising decryption + strict WAL mode.
+    ENHANCED: PBKDF2 key derivation + MultiFernet backwards compatibility + strict WAL mode.
     """
 
     def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt"):
@@ -28,7 +28,7 @@ class CipherVault:
         self._init_db()
 
     def _init_key(self):
-        """Derive encryption key using PBKDF2HMAC with random salt and passphrase."""
+        """Derive encryption key using PBKDF2HMAC with random salt and passphrase, supporting legacy keys seamlessly."""
         # 1. Manage persistent salt
         if os.path.exists(self.salt_file):
             with open(self.salt_file, 'rb') as f:
@@ -52,7 +52,19 @@ class CipherVault:
             backend=default_backend()
         )
         self.key = base64.urlsafe_b64encode(kdf.derive(passphrase))
-        self.cipher_suite = Fernet(self.key)
+        
+        # 3. Setup MultiFernet for seamless backward compatibility with existing vaults
+        fernet_instances = [Fernet(self.key)]
+        if os.path.exists(self.key_file):
+            try:
+                with open(self.key_file, 'rb') as f:
+                    legacy_key = f.read().strip()
+                if legacy_key and legacy_key != self.key:
+                    fernet_instances.append(Fernet(legacy_key))
+            except Exception:
+                pass
+        
+        self.cipher_suite = MultiFernet(fernet_instances)
 
     def _encrypt(self, data: str) -> str:
         """Encrypt a string."""
@@ -247,7 +259,10 @@ class CipherVault:
         row = c.fetchone()
         conn.close()
         if row and row[0]:
-            return self._decrypt(row[0])
+            try:
+                return self._decrypt(row[0])
+            except Exception:
+                return None
         return None
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
