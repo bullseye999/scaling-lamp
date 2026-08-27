@@ -227,10 +227,10 @@ Top signals:
             'full_report': report_text
         }
 
-    # ==== MONETIZATION METHODS ====
+    # ==== VULNERABILITY TRIAGE & BOUNTY OPPORTUNITIES ====
 
     def find_monetizable_threats(self) -> List[Dict]:
-        """Find threats that can be monetized - SIMPLE WORKING VERSION"""
+        """Find high-priority bounty and research opportunities"""
         try:
             # Get fresh intelligence
             intel = self.monitor_all_feeds()
@@ -317,13 +317,13 @@ Top signals:
         # Get intelligence
         intel = self.monitor_all_feeds()
         
-        # Find money opportunities
+        # Find bounty and research opportunities
         money_ops = self.find_monetizable_threats()
         
         # Store results
         self.vault.store_conversation(
             "OSINT_CYCLE_COMPLETE",
-            f"Alerts: {intel['total_alerts']} | Money ops: {len(money_ops)}",
+            f"Alerts: {intel['total_alerts']} | Bounty ops: {len(money_ops)}",
             "osint_cycle"
         )
         
@@ -339,7 +339,7 @@ Top signals:
             'threats_analyzed': intel['total_alerts'],
             'critical_threats': sum(1 for a in intel['top_alerts'] 
                                   if a.get('threat_score', 0) >= 3),
-            'money_opportunities': len(money_ops),
+            'bounty_opportunities': len(money_ops),
             'total_potential_value': total_value_str,
             'timestamp': datetime.now().isoformat()
         }
