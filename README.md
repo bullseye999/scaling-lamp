@@ -8,6 +8,8 @@
 [![Storage](https://img.shields.io/badge/Storage-AES--256%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
 [![Intelligence](https://img.shields.io/badge/Engine-OpenAI--Compatible%20%2F%20LLM-412991?style=flat-square)](https://platform.openai.com)
 [![CVSS](https://img.shields.io/badge/Standard-CVSS%20v3.1-critical?style=flat-square)](https://www.first.org/cvss/)
+[![State Machine](https://img.shields.io/badge/State%20Machine-Epistemic%20CAS-008080?style=flat-square)](https://sqlite.org)
+[![Verification](https://img.shields.io/badge/Verification-Empirical%20AST%20%7C%20Receipts-success?style=flat-square)](https://github.com/pendragon360/scaling-lamp)
 [![License](https://img.shields.io/badge/License-MIT-black?style=flat-square)](LICENSE)
 
 <p align="center">
@@ -69,6 +71,8 @@ When initialized, CIPH executes proactive terminal telemetry—detecting its Git
 | **13. Sovereign Neural Memory & Entity Graph** | `smart_memory.py`, `cipher_vault.py` | Encrypted operator identity management, episodic session narrative milestones, associative semantic entity graphs (Targets ↔ CVEs ↔ Tool Results), and retroactive conversation learning (`/retroactive-learn`). |
 | **14. Wealth Operations & Trading** *[Experimental]* | `trading_engine.py` | Real-time market data feeds, cross-exchange spread monitoring, momentum tracking, and quantitative indicators *(In Active Development)*. |
 | **15. Sports Analytics Engine** *[Experimental]* | `sports_predictor.py`, `sports_performance.py` | Multi-factor probabilistic modeling (Poisson distribution + xG metrics + historical form), result tracking, and automated performance summaries *(In Active Development)*. |
+| **16. Grounded Epistemic State Machine & Anti-Hallucination Receipts** | `ciph_kernel_v3.py`, `intent_resolver.py`, `cipher_vault.py` | 3-tier cryptographic runtime receipts (`DISPATCH`, `PROGRESS`, `COMPLETION` with SHA-256 integrity proofs), `HYPOTHESIS ➔ VERIFIED_REAL` state machine, Tabu Graveyard negative memory, Atomic CAS concurrency locks, and self-exhaustive pronoun/intent resolution. |
+| **17. Empirical Benchmarking & Evolution Bridge** | `ciph_benchmark.py`, `evolution_bridge.py` | Curiosity-to-code hypothesis converter (`SelfRelevanceAnalyzer`), isolated subprocess cold-load latency benchmarking, AST validation, and head-to-head empirical delta scorecards. |
 
 ---
 
@@ -346,12 +350,60 @@ You: /web-scan https://api.internal-target.com
   • Access-Control-Allow-Origin: * (Wildcard with Credentials)
 ```
 
+### 9. Grounded Autonomy & Self-Exhaustive Intent Resolution
+```text
+You: "what about the ones with teeth?"
+
+[IntentResolver] Scanning active runtime receipts and verified CVE disclosures...
+[Resolved] Target: ServiceNow CVSS 10.0 unauthenticated RCE, cPanel root takeover (Confidence: 0.95)
+
+Ciph: 🏛️ GROUNDED SITREP (VERIFIED RUNTIME RECEIPTS):
+      1. VERIFIED REALITY:
+         • ServiceNow (CVE-2024-4577): Critical unauthenticated RCE confirmed across 3 perimeter assets.
+         • cPanel Root Vector: Unclaimed DNS alias verified via receipt rcpt_comp_a56207de.
+      2. INFERENCE & BLAST RADIUS:
+         • High probability of lateral movement if external authentication bypass is chained with existing assets.
+      3. PROPOSED ACTION (KERNEL-SUBORDINATE):
+         • Stage passive vulnerability template verification against target in-scope endpoints.
+         • Run /bounty-scan stripe-sandbox.com to confirm perimeter boundary isolation.
+```
+
+### 10. Empirical Subprocess Benchmark Scorecard
+```text
+You: /benchmark-proposals
+
+🧪 EMPIRICAL BENCHMARK: 8 Historical Upgrade Proposals Audited
+═════════════════════════════════════════════════════════════════════
+• UP-006_brain_router_expansion.py: ✅ Syntax (LOC: 14, Latency: 0.16ms)
+• UP-007_brain_router_expansion.py: ✅ Syntax (LOC: 25, Latency: 0.18ms)
+• UP-008_ollama_optimizer.py:       ✅ Syntax (LOC: 15, Latency: 0.19ms)
+• UP-009_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.16ms)
+• UP-010_ollama_optimizer.py:       ✅ Syntax (LOC: 20, Latency: 0.16ms)
+• UP-011_hallucination_guard.py:    ✅ Syntax (LOC: 22, Latency: 0.19ms)
+• UP-012_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.21ms)
+• UP-013_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.16ms)
+
+┌─────────────────────────────────────────────────────────────────┐
+│ 🧪 CIPH EMPIRICAL BENCHMARK SCORECARD                           │
+├─────────────────────────────────────────────────────────────────┤
+│ Verdict       : ✅ IMPROVED (Recommendation: PROMOTE)           │
+│ Performance   : Baseline: 912.91ms  |  Candidate: 867.20ms      │
+│ Delta Score   : +5.01% latency improvement                      │
+│ Diagnostic    : Candidate is 5.01% faster with 0 syntax errors. │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 🕹️ Categorized Command Catalog
 
-### 🧠 Cognitive Evolution
+### 🧠 Cognitive Evolution & Grounded Epistemics
 * `/curiosity <on|off|status>` — 24/7 background research daemon
+* `/hypotheses` — View structured engineering hypotheses formulated by curiosity expeditions
+* `/bridge-status` — Inspect curiosity-to-code cognitive bridge & capability mappings
+* `/reanalyze-blueprints` — Retroactively mine historical blueprints and extract testable hypotheses
+* `/benchmark-proposals` — Run empirical AST and latency benchmarks across upgrade proposals
+* `/provenance <claim_id>` — Reconstruct full causal audit trail of evidence and state transitions
 * `/mind-log` — Recent cognitive discovery blueprints
 * `/mind-metrics` — Cognitive knowledge topology and growth dashboard
 * `/council` — Strategic dialectic synthesis
@@ -440,20 +492,24 @@ You: /web-scan https://api.internal-target.com
 run_ciph.py (Launcher & Dependency Verification)
   └── ciph_core.py (Session Core, Router & Telemetry Event Loop)
         ├── ciph_router.py ─────────► OpenAI-Compatible / Sovereign LLM Cognitive Engine
+        ├── intent_resolver.py ─────► Self-Exhaustive Pronoun & Context Target Resolver
+        ├── ciph_kernel_v3.py ──────► Epistemic State Machine, CAS Concurrency Locks & Receipts
+        ├── evolution_bridge.py ────► Curiosity-to-Code Self-Relevance & Hypothesis Analyzer
+        ├── ciph_benchmark.py ──────► Subprocess AST Syntax & Cold-Load Latency Benchmarker
         ├── ghost_transport.py ─────► Fail-Closed Tor SOCKS5h & DoH DNS Resolver
         ├── bounty_hunter.py ───────► Takeover, GraphQL, Parameter & CT Recon
         │     └── cvss_calculator.py  ► Deterministic FIRST.org CVSS v3.1 Engine
         ├── darknet_monitor.py ─────► Tor Hidden Service Threat Intelligence
         ├── world_telemetry.py ─────► 24/7 Clearnet CVE & Tor Sensory Engine
         ├── smart_memory.py ────────► Sovereign Neural Memory (Callsign & Entity Graph)
-        ├── code_staging.py ────────► Auto-Sandbox, Pip Resolver & Hot-Patching
+        ├── code_staging.py ────────► Auto-Sandbox, Pip Resolver & Empirical Scorecards
         ├── pentest_engine.py ──────► Port Scanner, Header Audit & CORS Analyzer
         ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
         ├── ciph_evolution.py ──────► 24/7 Polymath Curiosity Daemon & Knowledge Engine
         ├── ciph_link_reader.py ────► OPSEC Link Fetcher & Canary Blocker
         ├── book_engine.py ─────────► High-Speed Inverted Index Strategic Wisdom
         ├── self_awareness.py ──────► AST Code Auditor & Upgrade Proposals
-        ├── cipher_vault.py ────────► High-Concurrency WAL SQLite, AES-256 Storage
+        ├── cipher_vault.py ────────► Epistemic Ledger, Runtime Receipts & AES-256 SQLite
         ├── module_manager.py ──────► Dynamic Module Lifecycle Manager
         └── security_layer.py ──────► GPG Backup Archive & Footprint Sanitizer
 ```
