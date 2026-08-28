@@ -9,10 +9,8 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from cipher_vault import CipherVault
-
-# Ollama config - for Ciph to think about its own upgrades
-PROXY_URL = "http://127.0.0.1:5001/v1/chat/completions"
-#OLLAMA_MODEL = "llama3.2:3b"
+from ciph_router import CiphRouter
+from ciph_benchmark import CiphBenchmark
 
 class SelfAwareness:
     """
@@ -20,8 +18,8 @@ class SelfAwareness:
     - Reads and understands its own source code
     - Identifies real problems from usage patterns
     - Proposes meaningful upgrades
-    - Writes the upgrade code itself
-    - Creates proposal files for the Operator to review
+    - Writes the upgrade code itself via unified CiphRouter
+    - Creates proposal files for the Operator to review with empirical benchmarks
     - Nothing touches existing files without the Operator's approval
     """
 
@@ -50,12 +48,18 @@ class SelfAwareness:
         'quantum_vault.py',
         'response_formatter.py',
         'self_awareness.py',
+        'ciph_evolution.py',
+        'evolution_bridge.py',
+        'ciph_benchmark.py',
+        'code_staging.py'
     ]
 
     PROPOSALS_DIR = "ciph_proposals"
 
-    def __init__(self, vault: CipherVault):
+    def __init__(self, vault: CipherVault, router: Optional[CiphRouter] = None):
         self.vault            = vault
+        self.router           = router or CiphRouter()
+        self.benchmark        = CiphBenchmark()
         self.module_snapshots = {}
         self.pending_upgrades = []
         self.approved_history = []
@@ -283,34 +287,24 @@ class SelfAwareness:
 
     def _call_llm(self, prompt: str, system_override: str = None) -> str:
         """
-        Send a prompt to the RunPod endpoint via the local proxy.
-        Returns the generated text.
+        Generate upgrade code using unified CiphRouter.
+        Returns clean Python code.
         """
-        # Default system message for self‑analysis
         system_msg = system_override or (
             "You are Ciph's code evolution engine. "
-            "Write clean, working Python code only. No explanations, no markdown, no backticks. "
-            "Just raw Python code."
+            "Write clean, robust, and working Python code only. No conversational fluff, no markdown backticks. "
+            "Return valid executable Python code only."
         )
         
-        messages = [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt}
-        ]
-           
-        payload = {
-            "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 500
-        }
-        
+        if not self.router or not hasattr(self.router, "think"):
+            return ""
+
         try:
-            resp = requests.post(PROXY_URL, json=payload, timeout=120)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            res = self.router.think(prompt, history=[], dynamic_prompt=system_msg, temperature=0.2)
+            code = res.replace("```python", "").replace("```", "").strip()
+            return code
         except Exception as e:
-            print(f"  LLM call failed: {str(e)[:60]}")
+            print(f"  [SelfAwareness] LLM call failed: {str(e)[:60]}")
             return ""
 
     def get_module_report(self, module_name: str) -> str:
@@ -511,7 +505,7 @@ class SelfAwareness:
         proposal_path = os.path.join(self.PROPOSALS_DIR, f"{proposal_id}_{filename}")
 
         # Write the actual code/content file
-        with open(proposal_path, 'w') as f:
+        with open(proposal_path, 'w', encoding='utf-8') as f:
             f.write(f"# CIPH UPGRADE PROPOSAL {proposal_id}\n")
             f.write(f"# Title: {title}\n")
             f.write(f"# Priority: {priority.upper()}\n")
@@ -524,6 +518,22 @@ class SelfAwareness:
             f.write("#\n# " + "=" * 60 + "\n\n")
             f.write(content)
 
+        # Run Empirical Pre/Post Benchmark if modifying an existing file
+        bench_data = None
+        if not is_new_file and os.path.exists(module):
+            try:
+                bench_res = self.benchmark.compare(module, proposal_path, iterations=3)
+                bench_data = {
+                    'verdict': bench_res.get('verdict', 'UNKNOWN'),
+                    'delta_pct': bench_res.get('delta_pct', 0.0),
+                    'recommendation': bench_res.get('recommendation', 'UNKNOWN'),
+                    'baseline_ms': bench_res.get('baseline_ms', 0.0),
+                    'candidate_ms': bench_res.get('candidate_ms', 0.0),
+                    'reason': bench_res.get('reason', '')
+                }
+            except Exception:
+                bench_data = None
+
         # Register in pending upgrades
         proposal = {
             'id':            proposal_id,
@@ -535,14 +545,20 @@ class SelfAwareness:
             'status':        'PENDING',
             'proposal_file': proposal_path,
             'target_file':   filename,
-            'is_new_file':   is_new_file
+            'is_new_file':   is_new_file,
+            'benchmark':     bench_data
         }
         self.pending_upgrades.append(proposal)
         self._save_pending()
 
+        bench_str = ""
+        if bench_data:
+            b_emoji = "✅" if bench_data['verdict'] in ['IMPROVED', 'NEUTRAL'] else "❌"
+            bench_str = f"\n   Benchmark: {b_emoji} {bench_data['verdict']} ({bench_data['delta_pct']:+.1f}% vs baseline)"
+
         print(f"\n🧬 PROPOSAL {proposal_id}: {title}")
         print(f"   Priority: {priority.upper()} | Target: {module}")
-        print(f"   File: {proposal_path}")
+        print(f"   File: {proposal_path}{bench_str}")
         print(f"   Review: cat {proposal_path}")
         print(f"   Apply:  /apply-upgrade {proposal_id}")
         print(f"   Reject: /reject-upgrade {proposal_id}")
@@ -550,24 +566,24 @@ class SelfAwareness:
 
     def _create_upgrade_proposal(self, module: str, title: str,
                                    problem: str, priority: str) -> Optional[Dict]:
-        """Create a proposal by having Ollama write the fix code"""
+        """Create a proposal by having AI write verified fix code using complete module context"""
         snap = self.module_snapshots.get(module, {})
         if not snap.get('exists'):
             return None
 
-        # Read the actual module so Ollama can see what needs fixing
+        # Read the full actual module so the AI sees imports, classes, and surrounding context
         try:
-            with open(module, 'r') as f:
+            with open(module, 'r', encoding='utf-8') as f:
                 source = f.read()
         except Exception:
             return None
 
         prompt = (
-            f"Here is a Python module called {module}:\n\n"
-            f"{source[:3000]}\n\n"
-            f"Problem: {problem}\n\n"
-            f"Write a fixed version of just the problematic functions. "
-            f"Return only the fixed Python code, no explanations."
+            f"Here is the complete Python module called {module}:\n\n"
+            f"{source}\n\n"
+            f"Detected Issue: {problem}\n\n"
+            f"Write the complete, refactored Python code for {module} resolving this issue while preserving all existing class structures, methods, and functions. "
+            f"Return ONLY valid executable Python code, without explanations or markdown backticks."
         )
 
         code = self._write_upgrade_code(prompt)
@@ -588,6 +604,23 @@ class SelfAwareness:
         if not saved:
             return None
         return {'id': proposal_id}
+
+    def propose_upgrade_from_hypothesis(self, hypothesis: Dict[str, Any]) -> Optional[Dict]:
+        """Convert a cognitive curiosity hypothesis into an empirical code proposal"""
+        target_mod = hypothesis.get("target_module", "")
+        hyp_text = hypothesis.get("hypothesis_text", "")
+        concept = hypothesis.get("concept_class", "optimization")
+        
+        if not os.path.exists(target_mod):
+            return None
+            
+        title = f"Empirical Evolution: {concept.capitalize()} for {target_mod}"
+        return self._create_upgrade_proposal(
+            module=target_mod,
+            title=title,
+            problem=hyp_text,
+            priority="high"
+        )
 
     # ─────────────────────────────────────────────
     # APPLY / REJECT
