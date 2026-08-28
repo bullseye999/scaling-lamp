@@ -249,6 +249,24 @@ class CodeStagingManager:
         # 3. Sandbox test
         sandbox_res = self.run_sandbox_test(code_content, base_name)
 
+        # 4. Empirical Benchmark comparison against baseline if modifying existing file
+        benchmark_data = None
+        if not is_new_file and os.path.exists(target_file):
+            try:
+                from ciph_benchmark import CiphBenchmark
+                bench = CiphBenchmark()
+                bench_comp = bench.compare(target_file, staged_filepath, iterations=3)
+                benchmark_data = {
+                    'verdict': bench_comp.get('verdict', 'UNKNOWN'),
+                    'delta_pct': bench_comp.get('delta_pct', 0.0),
+                    'recommendation': bench_comp.get('recommendation', 'UNKNOWN'),
+                    'baseline_ms': bench_comp.get('baseline_ms', 0.0),
+                    'candidate_ms': bench_comp.get('candidate_ms', 0.0),
+                    'reason': bench_comp.get('reason', '')
+                }
+            except Exception:
+                benchmark_data = None
+
         line_count = len(code_content.split('\n'))
 
         artifact = {
@@ -264,6 +282,7 @@ class CodeStagingManager:
             'sandbox_passed': sandbox_res['passed'],
             'sandbox_runtime_sec': sandbox_res['runtime_sec'],
             'sandbox_error': sandbox_res.get('error'),
+            'benchmark': benchmark_data,
             'staged_at': datetime.now().isoformat(),
             'status': 'PENDING'
         }
@@ -283,10 +302,17 @@ class CodeStagingManager:
         deps = artifact.get('dependencies', [])
         sandbox_pass = artifact.get('sandbox_passed', False)
         runtime = artifact.get('sandbox_runtime_sec', 0.0)
+        bench = artifact.get('benchmark')
 
         dep_str = ", ".join(deps) if deps else "None (Pure Standard Library)"
         dep_status = "✅ All installed in venv" if artifact.get('dependencies_installed', True) else "⚠️ Some dependencies failed"
         sandbox_str = f"✅ PASSED ({runtime}s runtime, zero errors)" if sandbox_pass else f"❌ FAILED ({artifact.get('sandbox_error', 'Execution error')[:40]})"
+
+        bench_block = ""
+        if bench:
+            b_emoji = "✅" if bench['verdict'] in ['IMPROVED', 'NEUTRAL'] else "❌"
+            bench_str = f"{b_emoji} {bench['verdict']} ({bench['delta_pct']:+.1f}% vs baseline)"
+            bench_block = f"│ Benchmark:    {bench_str:<49} │\n"
 
         card = f"""
 ┌─────────────────────────────────────────────────────────────────┐
@@ -296,7 +322,7 @@ class CodeStagingManager:
 │ Dependencies: {dep_str:<49} │
 │   → {dep_status:<59} │
 │ Sandbox Test: {sandbox_str:<49} │
-│ Description: {desc[:50]:<50} │
+{bench_block}│ Description: {desc[:50]:<50} │
 │ Status: PENDING OPERATOR APPROVAL                               │
 │                                                                 │
 │ Actions:                                                        │
