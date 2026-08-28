@@ -130,12 +130,13 @@ class SmartMemory:
 
         # 2. Operator's Strategic Profile (Implicit Long-Term Facts)
         try:
+            op_name = self.vault.get_operator_name() or "Operator"
             profile_facts = self.vault.get_profile_facts()
             if profile_facts:
                 p_lines = []
                 for f in profile_facts[:6]:
                     p_lines.append(f"• [{f['category'].upper()}] {f['key']}: {f['value']}")
-                context_parts.append("Operator's Profile & Strategic Boundaries:\n" + "\n".join(p_lines))
+                context_parts.append(f"{op_name}'s Profile & Strategic Boundaries:\n" + "\n".join(p_lines))
         except Exception:
             pass
 
@@ -258,25 +259,26 @@ class SmartMemory:
             extracted_facts.append({"key": "communication_tone", "value": "Direct & Concise"})
 
         # 2. Deterministic Target & CVE Entity Extraction
+        op_name = self.vault.get_operator_name() or "Operator"
         cves = re.findall(r'CVE-\d{4}-\d{4,7}', user_input, re.IGNORECASE)
         for cve in cves:
             cve_upper = cve.upper()
             link_id = f"link_{int(time.time())}_{cve_upper}"
-            self.vault.store_entity_link(link_id, "Operator", "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
-            extracted_links.append({"source": "Operator", "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
+            self.vault.store_entity_link(link_id, op_name, "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
+            extracted_links.append({"source": op_name, "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
 
         # Software / Target Names
         for target_kw in ['sharepoint', 'wordpress', 'confluence', 'gitlab', 'jenkins', 'aws', 'cloudflare', 'nginx', 'apache', 'scaling-lamp']:
             if target_kw in lower_input:
                 target_name = target_kw.capitalize()
                 link_id = f"link_target_{target_kw}_{int(time.time())}"
-                self.vault.store_entity_link(link_id, "Operator", "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
-                extracted_links.append({"source": "Operator", "relation": "WORKING_ON_TARGET", "target": target_name})
+                self.vault.store_entity_link(link_id, op_name, "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
+                extracted_links.append({"source": op_name, "relation": "WORKING_ON_TARGET", "target": target_name})
 
         # 3. Decision Outcome Feedback
         if any(kw in lower_input for kw in ["that worked", "exploit succeeded", "payload worked", "bounty accepted", "finding verified"]):
             dec_id = f"dec_succ_{int(time.time())}"
-            self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "SUCCESS", "Executed and confirmed effective by Operator.")
+            self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "SUCCESS", f"Executed and confirmed effective by {op_name}.")
         elif any(kw in lower_input for kw in ["that failed", "payload blocked", "exploit failed", "was patched", "didn't work", "did not work"]):
             dec_id = f"dec_fail_{int(time.time())}"
             self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "FAILURE", "Defensive obstruction or failed execution. Adapt vector.")
