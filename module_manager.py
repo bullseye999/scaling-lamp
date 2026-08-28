@@ -47,8 +47,6 @@ class ModuleManager:
                         if name != 'orchestrator':  # Don't include self
                             modules_for_orchestrator[name] = mod
                     
-                    print(f"🔧 Passing {len(modules_for_orchestrator)} modules to orchestrator: {list(modules_for_orchestrator.keys())}")
-                    
                     # Initialize orchestrator with all loaded modules
                     self.active_modules[module_name] = module_class(self.vault, modules_for_orchestrator)
                 else:
