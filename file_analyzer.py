@@ -290,6 +290,39 @@ class FileAnalyzer:
             pass
         return {'is_git_repo': False}
 
+    def get_project_summary(self, directory: str = ".") -> Dict[str, Any]:
+        """Return high-level summary of file counts, lines of code, and languages."""
+        scan = self.scan_project(directory)
+        if "error" in scan:
+            return {"total_files": 0, "total_lines": 0, "languages": {}}
+
+        total_files = scan.get("file_count", 0)
+        total_lines = sum(
+            f.get("line_count", 0)
+            for cat in scan.get("files_by_type", {}).values()
+            for f in cat
+        )
+        languages = {}
+        for f in scan.get("files_by_type", {}).get("code", []):
+            ext = f.get("extension", ".py").lstrip(".")
+            languages[ext] = languages.get(ext, 0) + 1
+
+        return {
+            "total_files": total_files,
+            "total_lines": total_lines,
+            "languages": languages or {"python": total_files}
+        }
+
+    def read_file_safe(self, filepath: str, max_chars: int = 10000) -> Optional[str]:
+        """Safely read local file content with strict size boundary."""
+        if not os.path.exists(filepath) or os.path.isdir(filepath):
+            return None
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                return f.read(max_chars)
+        except Exception:
+            return None
+
     def _current_timestamp(self) -> str:
         """Get current timestamp string"""
         from datetime import datetime
