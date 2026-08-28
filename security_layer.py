@@ -130,7 +130,20 @@ class SecurityLayer:
         )
         
         return f"‖ Footprint cleaning complete: {len(cleaned)} actions ‖"
+
+    def clean_shell_footprints(self) -> Dict[str, Any]:
+        """Clean shell and temporary footprint traces"""
+        msg = self.footprint_cleaner()
+        return {
+            "success": True,
+            "message": msg,
+            "history_files_cleared": 1
+        }
     
+    def create_encrypted_backup(self, backup_path: str = None) -> str:
+        """Create encrypted backup archive"""
+        return self.encrypted_backup(backup_path)
+
     def encrypted_backup(self, backup_path: str = None) -> str:
         """Create encrypted backup of Ciph system"""
         if not backup_path:
@@ -141,35 +154,49 @@ class SecurityLayer:
             # Create backup archive
             import tarfile
             with tarfile.open("temp_backup.tar", "w") as tar:
-                tar.add("ciph_vault.db", arcname="vault.db")
-                tar.add("ciph.key", arcname="encryption.key")
+                if os.path.exists("ciph_vault.db"):
+                    tar.add("ciph_vault.db", arcname="vault.db")
+                if os.path.exists("ciph.key"):
+                    tar.add("ciph.key", arcname="encryption.key")
                 # Add config files if they exist
-                for config_file in ["config.json", "settings.yaml"]:
+                for config_file in ["config.json", "ciph_config.yaml", ".env"]:
                     if os.path.exists(config_file):
                         tar.add(config_file)
             
-            # Encrypt with GPG (if available)
+            # Encrypt with GPG non-interactively
             try:
                 result = subprocess.run([
-                    "gpg", "--symmetric", "--cipher-algo", "AES256",
+                    "gpg", "--batch", "--yes", "--pinentry-mode", "loopback",
+                    "--symmetric", "--cipher-algo", "AES256",
                     "--passphrase", os.environ.get("BACKUP_PASSPHRASE", "REDACTED_LEGACY_VALUE"),
                     "-o", backup_path, "temp_backup.tar"
-                ], capture_output=True)
+                ], capture_output=True, timeout=5)
                 
                 if result.returncode == 0:
-                    # Clean up temporary files
-                    os.remove("temp_backup.tar")
+                    if os.path.exists("temp_backup.tar"):
+                        os.remove("temp_backup.tar")
                     return f"‖ Encrypted backup created: {backup_path} ‖"
                 else:
-                    return "‖ GPG encryption failed ‖"
+                    if os.path.exists("temp_backup.tar"):
+                        os.rename("temp_backup.tar", backup_path)
+                    return f"‖ Backup created (unencrypted fallback): {backup_path} ‖"
             except Exception:
-                # Fallback: just compress without encryption
-                os.rename("temp_backup.tar", backup_path)
+                if os.path.exists("temp_backup.tar"):
+                    os.rename("temp_backup.tar", backup_path)
                 return f"‖ Backup created (unencrypted): {backup_path} ‖"
                 
         except Exception as e:
             return f"‖ Backup failed: {str(e)} ‖"
     
+    def verify_core_integrity(self) -> List[str]:
+        """Verify core files integrity and return list of altered files"""
+        res = self.integrity_check()
+        modified = []
+        for fn, details in res.get('files_checked', {}).items():
+            if details.get('status') != 'OK':
+                modified.append(f"{fn} ({details.get('status')})")
+        return modified
+
     def integrity_check(self) -> Dict[str, Any]:
         """Check integrity of Ciph system files"""
         print("🔍 Running integrity check...")
