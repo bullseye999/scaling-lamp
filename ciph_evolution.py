@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List
 
 from cipher_vault import CipherVault
 from ciph_link_reader import CiphLinkReader
+from evolution_bridge import SelfRelevanceAnalyzer
 
 KNOWLEDGE_DOMAINS = [
     {
@@ -113,6 +114,7 @@ class CognitiveEvolutionEngine:
         self.router = router
         self.balancer = DynamicSpectrumBalancer(vault)
         self.link_reader = CiphLinkReader()
+        self.relevance_bridge = SelfRelevanceAnalyzer(vault)
         self.deepseek_key = deepseek_api_key or os.getenv("CIPH_API_KEY") or os.getenv("AI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or self.vault.get_config("CIPH_API_KEY") or self.vault.get_config("DEEPSEEK_API_KEY")
         
         self.is_running = False
@@ -146,6 +148,20 @@ class CognitiveEvolutionEngine:
         if random.random() < 0.25:
             thesis_created = self._curate_council_thesis(blueprint)
 
+        # Formulate self-relevance engineering hypothesis
+        hypothesis = None
+        try:
+            hypothesis = self.relevance_bridge.evaluate_blueprint({
+                "blueprint_id": blueprint_id,
+                "domain": domain_name,
+                "topic": topic,
+                "core_axiom": blueprint["core_axiom"],
+                "mechanics": blueprint["mechanics"],
+                "strategic_application": blueprint["strategic_application"]
+            })
+        except Exception:
+            pass
+
         self.last_expedition_time = datetime.now()
         self.expeditions_completed_session += 1
 
@@ -156,24 +172,63 @@ class CognitiveEvolutionEngine:
             "topic": topic,
             "core_axiom": blueprint["core_axiom"],
             "cross_connection": cross_conn,
-            "council_thesis": thesis_created
+            "council_thesis": thesis_created,
+            "hypothesis": hypothesis
         }
 
     def _fetch_topic_signal(self, domain_meta: Dict[str, Any], topic: str) -> str:
+        """Fetch grounded external intelligence across Wikipedia, ArXiv, and community feeds."""
+        import urllib.parse
+        import re
+
+        # Strategy 1: Open Academic & Research API (ArXiv) for AI, Physics, and Math
+        if domain_meta.get("id") in ["quantum_physics", "frontier_ai"]:
+            try:
+                clean_topic = re.sub(r'[^a-zA-Z0-9 ]', ' ', topic).strip()
+                url = f"https://export.arxiv.org/api/query?search_query=all:{urllib.parse.quote(clean_topic)}&start=0&max_results=1"
+                txt = self.link_reader.fetch_url(url, timeout=10).get("text_content", "")
+                summaries = re.findall(r'<summary>(.*?)</summary>', txt, re.DOTALL)
+                titles = re.findall(r'<title>(.*?)</title>', txt, re.DOTALL)
+                if summaries:
+                    title = titles[1].strip() if len(titles) > 1 else topic
+                    summary = summaries[0].strip().replace('\n', ' ')
+                    return f"[Source: ArXiv Academic Index | Title: {title}]\n{summary[:1500]}"
+            except Exception:
+                pass
+
+        # Strategy 2: Wikipedia Summary API for History, Psychology, Epistemology, and Concepts
+        try:
+            search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={urllib.parse.quote(topic)}&limit=1&namespace=0&format=json"
+            sr_res = self.link_reader.fetch_url(search_url, timeout=8)
+            if sr_res.get("success") and sr_res.get("text_content"):
+                sr_data = json.loads(sr_res["text_content"])
+                if len(sr_data) > 1 and sr_data[1]:
+                    page_title = sr_data[1][0]
+                    summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(page_title)}"
+                    data_res = self.link_reader.fetch_url(summary_url, timeout=8)
+                    if data_res.get("success") and data_res.get("text_content"):
+                        data = json.loads(data_res["text_content"])
+                        if data.get("extract"):
+                            return f"[Source: Wikipedia Encyclopedia | Topic: {page_title}]\n{data['extract'][:1500]}"
+        except Exception:
+            pass
+
+        # Strategy 3: Community Technical Feeds (Reddit)
         if "subreddits" in domain_meta:
             sub = random.choice(domain_meta["subreddits"])
             url = f"https://www.reddit.com/r/{sub}/hot.json?limit=5"
             try:
-                res = self.link_reader.fetch_url(url, timeout=15)
+                res = self.link_reader.fetch_url(url, timeout=10)
                 if res.get("success") and res.get("text_content"):
-                    return res["text_content"][:2000]
+                    return f"[Source: Community Technical Feed | r/{sub}]\n{res['text_content'][:1500]}"
             except Exception:
                 pass
 
-        return f"Theoretical inquiry into {topic} within {domain_meta["name"]}. Exploring fundamental mechanics, human nature manifestations, and asymmetric strategic dynamics."
+        return f"[Source: Local Core Knowledge Base]\nTheoretical inquiry into {topic} within {domain_meta['name']}. Analyzing underlying structural mechanics, human decision patterns, and asymmetric strategic advantage."
 
     def _synthesize_blueprint(self, domain: str, topic: str, raw_signal: str) -> Dict[str, str]:
         if self.router and hasattr(self.router, "think"):
+            op_callsign = self.vault.get_operator_name() or "Operator"
             prompt = f"""You are CIPH, an autonomous sovereign intelligence and strategic polymath.
 You are assimilating knowledge in: {domain}
 Topic: {topic}
@@ -187,7 +242,7 @@ Format strictly as JSON with exactly these 4 keys:
   "core_axiom": "1-2 sentences capturing the fundamental physical/historical/psychological law.",
   "mechanics": "1-2 paragraphs detailing the underlying structural mechanics and edge cases.",
   "human_subtext": "1-2 paragraphs on how human psychology and collective behavior manifest under this principle.",
-  "strategic_application": "1-2 paragraphs on how Operator and Ciph apply this principle to gain asymmetric advantage on the board."
+  "strategic_application": "1-2 paragraphs on how {op_callsign} and Ciph apply this principle to gain asymmetric advantage on the board."
 }}
 """
             try:
