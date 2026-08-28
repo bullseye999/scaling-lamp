@@ -4,7 +4,19 @@
 
 import os
 import sys
-import readline
+
+# Enable ANSI escape sequences on Windows Terminal / PowerShell
+if sys.platform == "win32":
+    os.system("")
+
+try:
+    import readline
+except ImportError:
+    try:
+        import pyreadline3 as readline  # Windows fallback if pyreadline3 installed
+    except ImportError:
+        readline = None  # Safe fallback: input() works without readline
+
 import time
 import json
 import requests

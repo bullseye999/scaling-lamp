@@ -395,10 +395,10 @@ Format strictly as JSON with exactly these 4 keys:
                 with open(pid_file, "r") as f:
                     pid = int(f.read().strip())
                 import signal
-                os.kill(pid, signal.SIGTERM)
+                os.kill(pid, getattr(signal, "SIGTERM", 15))
                 time.sleep(0.5)
                 if self.is_daemon_alive():
-                    os.kill(pid, signal.SIGKILL)
+                    os.kill(pid, getattr(signal, "SIGKILL", getattr(signal, "SIGTERM", 15)))
                 stopped = True
             except Exception:
                 pass
