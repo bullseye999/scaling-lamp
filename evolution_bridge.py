@@ -50,7 +50,7 @@ class SelfRelevanceAnalyzer:
     def evaluate_blueprint(self, blueprint: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Analyze a cognitive blueprint to determine architectural self-relevance to Ciph.
-        Returns a structured Engineering Hypothesis if relevant.
+        Returns a structured Engineering Hypothesis if relevant, or None if no direct code mutation applies.
         """
         text_corpus = f"{blueprint.get('topic', '')} {blueprint.get('core_axiom', '')} {blueprint.get('mechanics', '')} {blueprint.get('strategic_application', '')}".lower()
         
@@ -63,9 +63,9 @@ class SelfRelevanceAnalyzer:
                 best_score = score
                 matched_concept = concept
 
-        # If no strong match, default to resilience/optimization
+        # Epistemic Honesty: If no capability matches, do not force-feed a random mutation.
         if not matched_concept or best_score == 0:
-            matched_concept = random.choice(list(self.CAPABILITY_MAPPINGS.keys()))
+            return None
 
         concept_meta = self.CAPABILITY_MAPPINGS[matched_concept]
         target_file = random.choice(concept_meta["targets"])
@@ -93,6 +93,16 @@ class SelfRelevanceAnalyzer:
         # Store hypothesis in vault
         self._record_hypothesis(hypothesis)
         return hypothesis
+
+    def reanalyze_historical_blueprints(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retroactively analyze stored blueprints in vault and extract testable hypotheses."""
+        blueprints = self.vault.get_cognitive_blueprints(limit=limit)
+        formulated = []
+        for bp in blueprints:
+            hyp = self.evaluate_blueprint(bp)
+            if hyp:
+                formulated.append(hyp)
+        return formulated
 
     def _inspect_target_module(self, filepath: str) -> Dict[str, Any]:
         """Perform static analysis on the target file"""
@@ -129,6 +139,27 @@ class SelfRelevanceAnalyzer:
         except Exception:
             return False
 
+    def format_hypothesis_card(self, hyp: Dict[str, Any]) -> str:
+        """Format an ASCII hypothesis card for display"""
+        hid = hyp.get("hypothesis_id", "UNKNOWN")
+        mod = hyp.get("target_module", "unknown.py")
+        concept = hyp.get("concept_class", "general").upper()
+        text = hyp.get("hypothesis_text", "")
+        domain = hyp.get("domain", "General")
+        b_id = hyp.get("blueprint_id", "EXP-UNKNOWN")
+
+        card = f"""
+┌─────────────────────────────────────────────────────────────────┐
+│ 💡 CIPH ENGINEERING HYPOTHESIS: {hid:<32}│
+├─────────────────────────────────────────────────────────────────┤
+│ Target Module : {mod:<48}│
+│ Capability    : {concept:<48}│
+│ Source Domain : {domain[:48]:<48}│
+│ Blueprint ID  : {b_id:<48}│
+│ Hypothesis    : {text[:60]:<48}│
+└─────────────────────────────────────────────────────────────────┘"""
+        return card.strip()
+
 if __name__ == "__main__":
     vault = CipherVault()
     analyzer = SelfRelevanceAnalyzer(vault)
@@ -142,4 +173,4 @@ if __name__ == "__main__":
     }
     hyp = analyzer.evaluate_blueprint(sample_bp)
     print("Formulated Hypothesis:")
-    print(json.dumps(hyp, indent=2))
+    print(analyzer.format_hypothesis_card(hyp) if hyp else "No direct code relevance found.")
