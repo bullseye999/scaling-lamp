@@ -38,6 +38,12 @@ quantum.key
 system_backup_*.db
 temp_backup.tar
 
+# Staging, Backups & Proposals
+ciph_staging/
+ciph_backups/
+ciph_proposals/
+!ciph_staging/.gitkeep
+
 # Bug Bounty Reports (contain sensitive endpoints & tokens)
 bounty_reports/
 bounty_reports/*.md
@@ -48,8 +54,9 @@ sports_logs/
 system_proposals/
 *.json  # (but keep example configs)
 code_index.json
+!test_audit_results.json
 !requirements.txt
-!ciph_version.json   # optional, you may keep
+!ciph_version.json
 
 # Environment & secrets
 .env
