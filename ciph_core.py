@@ -442,25 +442,61 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
         elif user_input in ['/test-runpod', '/runpod-test', '/testrunpod', '/ping-runpod'] or user_input.startswith('/test-runpod'):
             return "‖ CIPH is running on unified Sovereign AI. Use /model-status or /test-model. ‖"
 
-        elif user_input == '/status':
-            ai_status = "Active" if self.ai_enabled else "Disabled"
+        elif user_input in ['/status', '/system-status']:
+            ai_status = "Active (Sovereign)" if self.ai_enabled else "Local Offline (/setkey)"
             kg_stats = self.memory.get_knowledge_graph_stats() if self.memory else {}
-            osint_status = self.osint.get_status() if self.osint else {}
-            scheduler_status = self.scheduler.get_scheduler_status()
-            
             entity_count = kg_stats.get('total_entities', 0) if kg_stats else 0
-            feed_count = osint_status.get('feeds_monitored', 0) if osint_status else 0
-            scheduler_jobs = scheduler_status.get('scheduled_jobs', 0)
             
             # Security scan on demand
             security_scan = self.security.integrity_check()
-            security_status = "SECURE" if security_scan['all_critical_files_present'] else "COMPROMISED"
+            security_status = "SECURE" if security_scan.get('all_critical_files_present') else "COMPROMISED"
             
             # Project scan status
             project_scan = self.file_analyzer.scan_project(".")
-            project_status = f"{project_scan['file_count']} files" if 'file_count' in project_scan else "UNKNOWN"
+            file_count = project_scan.get('file_count', 0)
             
-            return f"‖ Operational ‖ AI: {ai_status} ‖ Security: {security_status} ‖ Project: {project_status} ‖ Entities: {entity_count} ‖ Jobs: {scheduler_jobs} ‖"
+            # Storage & Telemetry
+            db_size_kb = os.path.getsize('ciph_vault.db') / 1024.0 if os.path.exists('ciph_vault.db') else 0.0
+            wal_size_kb = os.path.getsize('ciph_vault.db-wal') / 1024.0 if os.path.exists('ciph_vault.db-wal') else 0.0
+            
+            # Process RAM
+            try:
+                import resource
+                rss_val = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                ram_mb = (rss_val / 1024.0) if sys.platform != 'darwin' else (rss_val / (1024.0 * 1024.0))
+            except Exception:
+                ram_mb = 0.0
+                
+            # Tor Status
+            tor_active = self.tor.is_connected() if hasattr(self, 'tor') and hasattr(self.tor, 'is_connected') else False
+            tor_status = "ACTIVE" if tor_active else "OFFLINE (Local Mode)"
+            
+            # Curiosity Daemon PID
+            daemon_status = "INACTIVE"
+            if os.path.exists("curiosity_daemon.pid"):
+                try:
+                    with open("curiosity_daemon.pid", "r") as f:
+                        pid = int(f.read().strip())
+                    os.kill(pid, 0)
+                    daemon_status = f"ACTIVE (PID {pid})"
+                except Exception:
+                    daemon_status = "INACTIVE"
+
+            card = f"""
+╔══════════════════════════════════════════════════════════════════╗
+║                  CIPH 3.0 SYSTEM TELEMETRY                       ║
+╠══════════════════════════════════════════════════════════════════╣
+║ • Core Status   : OPERATIONAL                                    ║
+║ • Security      : {security_status:<47}║
+║ • AI Engine     : {ai_status:<47}║
+║ • Tor Circuit   : {tor_status:<47}║
+║ • Curiosity Loop: {daemon_status:<47}║
+║ • Process RAM   : {f"{ram_mb:.1f} MB":<47}║
+║ • Vault Storage : {f"{db_size_kb:.1f} KB (WAL: {wal_size_kb:.1f} KB)":<47}║
+║ • Codebase      : {f"{file_count} files indexed":<47}║
+║ • Neural Graph  : {f"{entity_count} entities linked":<47}║
+╚══════════════════════════════════════════════════════════════════╝"""
+            return card.strip()
         
         elif user_input == '/reality-check':
             """Show ACTUAL system status – NO LLM INVOLVED, pure truth."""
@@ -468,24 +504,36 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             # Get system state directly from state manager
             system = self.state.get_system_state_raw()
             background = self.state.get_background_summary()
+
+            # Storage & Process metrics
+            db_size_kb = os.path.getsize('ciph_vault.db') / 1024.0 if os.path.exists('ciph_vault.db') else 0.0
+            wal_size_kb = os.path.getsize('ciph_vault.db-wal') / 1024.0 if os.path.exists('ciph_vault.db-wal') else 0.0
+            try:
+                import resource
+                rss_val = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                ram_mb = (rss_val / 1024.0) if sys.platform != 'darwin' else (rss_val / (1024.0 * 1024.0))
+            except Exception:
+                ram_mb = 0.0
     
             # Build report
             lines = []
             lines.append("═" * 50)
-            lines.append("SYSTEM STATE (Truth - No LLM)")
+            lines.append("SYSTEM STATE (Ground Truth - Zero Hallucination)")
             lines.append("═" * 50)
-            lines.append(f"  Loaded modules: {system['loaded_modules']}")
-            lines.append(f"  Tor: {'✅ ACTIVE' if system['tor'] else '❌ INACTIVE'}")
-            lines.append(f"  Active workflows: {system['active_workflows']}")
-            lines.append(f"  AI: {'✅ ENABLED' if system['ai_enabled'] else '❌ DISABLED'}")
-            lines.append(f"  Orchestrator: {'✅ READY' if system['orchestrator_ready'] else '❌ NOT READY'}")
+            lines.append(f"  Loaded modules    : {system['loaded_modules']}")
+            lines.append(f"  Tor Connectivity  : {'✅ ACTIVE' if system['tor'] else '❌ INACTIVE'}")
+            lines.append(f"  Active workflows  : {system['active_workflows']}")
+            lines.append(f"  AI Core Engine    : {'✅ CONFIGURED' if system['ai_enabled'] else '❌ NOT CONFIGURED'}")
+            lines.append(f"  Orchestrator      : {'✅ READY' if system['orchestrator_ready'] else '❌ NOT READY'}")
+            lines.append(f"  Process Memory    : {ram_mb:.1f} MB")
+            lines.append(f"  Encrypted Storage : {db_size_kb:.1f} KB (WAL: {wal_size_kb:.1f} KB)")
     
             lines.append("\n" + "═" * 50)
-            lines.append("BACKGROUND TASKS (Not visible to AI)")
+            lines.append("BACKGROUND TASKS (Live System State)")
             lines.append("═" * 50)
-            lines.append(f"  Sports predictions stored: {background['sports_predictions']}")
-            lines.append(f"  OSINT feeds monitored: {background['osint_feeds']}")
-            lines.append(f"  Pending notifications: {background['notifications']}")
+            lines.append(f"  Sports predictions: {background['sports_predictions']}")
+            lines.append(f"  OSINT threat feeds: {background['osint_feeds']}")
+            lines.append(f"  Pending alerts    : {background['notifications']}")
     
             lines.append("\n" + "═" * 50)
             lines.append(f"Last snapshot: {system['last_updated']}")
@@ -1689,9 +1737,28 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "\n".join(lines)
 
         # MODULE MANAGER COMMANDS
-        elif user_input == '/modules':
+        elif user_input in ['/modules', '/module-list']:
             modules = self.module_manager.list_modules()
-            return f"‖ Available: {modules['available']} ‖ Active: {modules['active']} ‖"
+            core_mods = ['memory', 'osint', 'bounty', 'pentest', 'orchestrator']
+            exp_mods = ['trading', 'sports']
+            active = modules.get('active', [])
+            
+            lines = [
+                "╔══════════════════════════════════════════════════════════════════╗",
+                "║                 CIPH 3.0 MODULE ARCHITECTURE                     ║",
+                "╠══════════════════════════════════════════════════════════════════╣",
+                "║ 🛡️ CORE SOVEREIGN SECURITY PLATFORM:                            ║"
+            ]
+            for m in core_mods:
+                status = "✅ ACTIVE" if m in active else "⚪ STANDBY (/load)"
+                lines.append(f"║ • {m:<15} : {status:<44}║")
+            lines.append("║                                                                  ║")
+            lines.append("║ 🧪 EXPERIMENTAL EXTENSIONS:                                      ║")
+            for m in exp_mods:
+                status = "✅ ACTIVE" if m in active else "⚪ STANDBY (/load)"
+                lines.append(f"║ • {m:<15} : {status:<44}║")
+            lines.append("╚══════════════════════════════════════════════════════════════════╝")
+            return "\n".join(lines)
         
         elif user_input.startswith('/load '):
             module_name = user_input[6:].strip()
