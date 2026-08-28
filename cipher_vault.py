@@ -4,6 +4,9 @@
 
 import sqlite3
 import json
+import hashlib
+import uuid
+import time
 from cryptography.fernet import Fernet, MultiFernet # type: ignore
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -12,6 +15,22 @@ import base64
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+
+def generate_claim_snapshot_hash(claim: Dict[str, Any]) -> str:
+    """
+    Computes a deterministic SHA-256 hash across immutable claim fields.
+    Uses canonical JSON (sorted keys, compact separators, UTF-8 encoded).
+    """
+    canonical_payload = {
+        "claim_id": str(claim.get("claim_id", "")),
+        "subject": str(claim.get("subject", "")),
+        "predicate": str(claim.get("predicate", "")),
+        "condition": str(claim.get("condition") or ""),
+        "verifying_receipt_id": str(claim.get("verifying_receipt_id") or ""),
+        "created_at": str(claim.get("created_at", ""))
+    }
+    serialized = json.dumps(canonical_payload, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
 class CipherVault:
     """
@@ -258,6 +277,121 @@ class CipherVault:
                 updated_at REAL
             )
         ''')
+        
+        # ─────────────────────────────────────────────────────────────
+        # EPISTEMIC OPERATING SYSTEM: REALITY, CLAIMS, ACTIONS & MEMORY
+        # ─────────────────────────────────────────────────────────────
+        
+        # 1. Immutable Evidence Ledger
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS evidence_ledger (
+                receipt_id TEXT PRIMARY KEY,
+                tool_name TEXT NOT NULL,
+                target_identifier TEXT NOT NULL,
+                raw_output_enc TEXT NOT NULL,
+                sha256_hash TEXT NOT NULL,
+                exit_code INTEGER NOT NULL,
+                observed_at REAL NOT NULL,
+                recorded_at REAL NOT NULL
+            )
+        ''')
+
+        # 2. Epistemic Claim Registry (with CHECK constraint)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS epistemic_claims (
+                claim_id TEXT PRIMARY KEY,
+                subject_enc TEXT NOT NULL,
+                predicate_enc TEXT NOT NULL,
+                condition_enc TEXT,
+                state TEXT NOT NULL,
+                verifying_receipt_id TEXT,
+                supersedes_claim_id TEXT,
+                retirement_reason TEXT,
+                calculated_confidence_tier TEXT NOT NULL DEFAULT 'TIER_0_UNKNOWN',
+                created_at REAL NOT NULL,
+                expires_at REAL,
+                sha256_snapshot TEXT NOT NULL,
+                CONSTRAINT check_verified_must_have_receipt 
+                    CHECK (state != 'VERIFIED_REAL' OR verifying_receipt_id IS NOT NULL),
+                FOREIGN KEY(verifying_receipt_id) REFERENCES evidence_ledger(receipt_id),
+                FOREIGN KEY(supersedes_claim_id) REFERENCES epistemic_claims(claim_id)
+            )
+        ''')
+
+        # 3. Many-to-Many Evidence Junction
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS claim_evidence (
+                claim_id TEXT NOT NULL,
+                receipt_id TEXT NOT NULL,
+                relationship TEXT NOT NULL,
+                weight REAL DEFAULT 1.0,
+                linked_at REAL NOT NULL,
+                PRIMARY KEY (claim_id, receipt_id),
+                FOREIGN KEY(claim_id) REFERENCES epistemic_claims(claim_id),
+                FOREIGN KEY(receipt_id) REFERENCES evidence_ledger(receipt_id)
+            )
+        ''')
+
+        # 4. Staged Actions with Atomic Concurrency
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS staged_actions (
+                action_id TEXT PRIMARY KEY,
+                claim_id TEXT,
+                action_source TEXT NOT NULL,
+                tool_command_enc TEXT NOT NULL,
+                status TEXT NOT NULL,
+                locked_by TEXT,
+                locked_at REAL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY(claim_id) REFERENCES epistemic_claims(claim_id)
+            )
+        ''')
+
+        # 5. Tabu Graveyard (Refuted Hypothesis Negative Cache)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS tabu_graveyard (
+                graveyard_id TEXT PRIMARY KEY,
+                subject_enc TEXT NOT NULL,
+                predicate_enc TEXT NOT NULL,
+                condition_enc TEXT,
+                refuting_receipt_id TEXT NOT NULL,
+                refuted_at REAL NOT NULL,
+                FOREIGN KEY(refuting_receipt_id) REFERENCES evidence_ledger(receipt_id)
+            )
+        ''')
+
+        # 6. Win History (Confirmed Intuition Ledger)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS win_history (
+                win_id TEXT PRIMARY KEY,
+                claim_id TEXT NOT NULL,
+                domain_vector TEXT NOT NULL,
+                verifying_receipt_id TEXT NOT NULL,
+                verified_at REAL NOT NULL,
+                FOREIGN KEY(claim_id) REFERENCES epistemic_claims(claim_id),
+                FOREIGN KEY(verifying_receipt_id) REFERENCES evidence_ledger(receipt_id)
+            )
+        ''')
+        
+        # 7. 3-Tier Runtime Receipts (Dispatch, Progress, Completion)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS runtime_receipts (
+                receipt_id TEXT PRIMARY KEY,
+                job_id TEXT NOT NULL,
+                receipt_type TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                target TEXT NOT NULL,
+                phase TEXT,
+                event TEXT,
+                exit_code INTEGER DEFAULT 0,
+                payload_enc TEXT NOT NULL,
+                sha256_hash TEXT NOT NULL,
+                created_at REAL NOT NULL
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_runtime_receipts_job ON runtime_receipts(job_id);')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_runtime_receipts_type ON runtime_receipts(receipt_type);')
+        
         conn.commit()
         conn.close()
 
@@ -1357,6 +1491,705 @@ class CipherVault:
             return []
 
 # Enhanced example usage with new features
+
+    def store_dispatch_receipt(
+        self,
+        job_id: str,
+        tool_name: str,
+        target: str,
+        initial_params: Optional[Dict[str, Any]] = None,
+        receipt_id: Optional[str] = None
+    ) -> str:
+        """Store a DISPATCH_RECEIPT verifying that a task was physically accepted and launched."""
+        receipt_id = receipt_id or f"rcpt_disp_{uuid.uuid4().hex[:8]}"
+        created_at = time.time()
+        payload_str = json.dumps(initial_params or {}, sort_keys=True)
+        sha256_hash = hashlib.sha256(payload_str.encode('utf-8')).hexdigest()
+        payload_enc = self._encrypt(payload_str)
+
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO runtime_receipts (
+                    receipt_id, job_id, receipt_type, tool_name, target,
+                    phase, event, exit_code, payload_enc, sha256_hash, created_at
+                ) VALUES (?, ?, 'DISPATCH_RECEIPT', ?, ?, 'DISPATCHED', 'Task queued and launched in runtime', 0, ?, ?, ?)
+            ''', (receipt_id, job_id, tool_name, target, payload_enc, sha256_hash, created_at))
+            conn.commit()
+            return receipt_id
+        finally:
+            conn.close()
+
+    def store_progress_receipt(
+        self,
+        job_id: str,
+        tool_name: str,
+        target: str,
+        phase: str,
+        event: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        receipt_id: Optional[str] = None
+    ) -> str:
+        """Store a PROGRESS_RECEIPT verifying an intermediate execution milestone."""
+        receipt_id = receipt_id or f"rcpt_prog_{uuid.uuid4().hex[:8]}"
+        created_at = time.time()
+        payload_str = json.dumps(metadata or {}, sort_keys=True)
+        sha256_hash = hashlib.sha256(payload_str.encode('utf-8')).hexdigest()
+        payload_enc = self._encrypt(payload_str)
+
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO runtime_receipts (
+                    receipt_id, job_id, receipt_type, tool_name, target,
+                    phase, event, exit_code, payload_enc, sha256_hash, created_at
+                ) VALUES (?, ?, 'PROGRESS_RECEIPT', ?, ?, ?, ?, 0, ?, ?, ?)
+            ''', (receipt_id, job_id, tool_name, target, phase, event, payload_enc, sha256_hash, created_at))
+            conn.commit()
+            return receipt_id
+        finally:
+            conn.close()
+
+    def store_completion_receipt(
+        self,
+        job_id: str,
+        tool_name: str,
+        target: str,
+        results: Dict[str, Any],
+        exit_code: int = 0,
+        receipt_id: Optional[str] = None
+    ) -> str:
+        """Store a COMPLETION_RECEIPT verifying the final finished output and SHA-256 payload hash."""
+        receipt_id = receipt_id or f"rcpt_comp_{uuid.uuid4().hex[:8]}"
+        created_at = time.time()
+        payload_str = json.dumps(results or {}, sort_keys=True)
+        sha256_hash = hashlib.sha256(payload_str.encode('utf-8')).hexdigest()
+        payload_enc = self._encrypt(payload_str)
+
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO runtime_receipts (
+                    receipt_id, job_id, receipt_type, tool_name, target,
+                    phase, event, exit_code, payload_enc, sha256_hash, created_at
+                ) VALUES (?, ?, 'COMPLETION_RECEIPT', ?, ?, 'COMPLETED', 'Task finished execution', ?, ?, ?, ?)
+            ''', (receipt_id, job_id, tool_name, target, exit_code, payload_enc, sha256_hash, created_at))
+            
+            # Mirror into immutable evidence_ledger for epistemic claims linking
+            c.execute('''
+                INSERT OR IGNORE INTO evidence_ledger (
+                    receipt_id, tool_name, target_identifier, raw_output_enc,
+                    sha256_hash, exit_code, observed_at, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (receipt_id, tool_name, target, payload_enc, sha256_hash, exit_code, created_at, created_at))
+
+            conn.commit()
+            return receipt_id
+        finally:
+            conn.close()
+
+    def get_active_job_receipts(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Returns active jobs that have DISPATCH/PROGRESS receipts but NO COMPLETION receipt.
+        Includes the latest verified phase and event.
+        """
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT r.job_id, r.tool_name, r.target, r.receipt_type, r.phase, r.event, r.created_at
+                FROM runtime_receipts r
+                WHERE r.job_id NOT IN (
+                    SELECT job_id FROM runtime_receipts WHERE receipt_type = 'COMPLETION_RECEIPT'
+                )
+                ORDER BY r.created_at DESC LIMIT ?
+            ''', (limit * 2,))
+            rows = c.fetchall()
+            
+            seen_jobs = {}
+            for r in rows:
+                jid = r[0]
+                if jid not in seen_jobs:
+                    seen_jobs[jid] = {
+                        'job_id': r[0],
+                        'tool_name': r[1],
+                        'target': r[2],
+                        'receipt_type': r[3],
+                        'phase': r[4],
+                        'event': r[5],
+                        'updated_at': r[6],
+                        'status': 'RUNNING' if r[3] == 'PROGRESS_RECEIPT' else 'DISPATCHED'
+                    }
+                if len(seen_jobs) >= limit:
+                    break
+            return list(seen_jobs.values())
+        finally:
+            conn.close()
+
+    def get_recent_completion_receipts(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Retrieve recent completed operational receipts."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT receipt_id, job_id, tool_name, target, phase, event, exit_code, payload_enc, sha256_hash, created_at
+                FROM runtime_receipts
+                WHERE receipt_type = 'COMPLETION_RECEIPT'
+                ORDER BY created_at DESC LIMIT ?
+            ''', (limit,))
+            rows = c.fetchall()
+            
+            receipts = []
+            for r in rows:
+                raw_payload = self._decrypt(r[7])
+                try:
+                    payload_obj = json.loads(raw_payload)
+                except Exception:
+                    payload_obj = raw_payload
+                    
+                receipts.append({
+                    'receipt_id': r[0],
+                    'job_id': r[1],
+                    'tool_name': r[2],
+                    'target': r[3],
+                    'phase': r[4],
+                    'event': r[5],
+                    'exit_code': r[6],
+                    'results': payload_obj,
+                    'sha256_hash': r[8],
+                    'created_at': r[9]
+                })
+            return receipts
+        finally:
+            conn.close()
+
+    def get_job_receipt_chain(self, job_id: str) -> List[Dict[str, Any]]:
+        """Retrieve the complete chronological lifecycle receipt chain for a specific job."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT receipt_id, job_id, receipt_type, tool_name, target, phase, event, exit_code, payload_enc, sha256_hash, created_at
+                FROM runtime_receipts
+                WHERE job_id = ?
+                ORDER BY created_at ASC
+            ''', (job_id,))
+            rows = c.fetchall()
+            
+            chain = []
+            for r in rows:
+                raw_payload = self._decrypt(r[8])
+                try:
+                    payload_obj = json.loads(raw_payload)
+                except Exception:
+                    payload_obj = raw_payload
+                    
+                chain.append({
+                    'receipt_id': r[0],
+                    'job_id': r[1],
+                    'receipt_type': r[2],
+                    'tool_name': r[3],
+                    'target': r[4],
+                    'phase': r[5],
+                    'event': r[6],
+                    'exit_code': r[7],
+                    'payload': payload_obj,
+                    'sha256_hash': r[9],
+                    'created_at': r[10]
+                })
+            return chain
+        finally:
+            conn.close()
+
+    def store_evidence_receipt(
+        self,
+        tool_name: str,
+        target_identifier: str,
+        raw_output: str,
+        exit_code: int = 0,
+        observed_at: Optional[float] = None,
+        receipt_id: Optional[str] = None
+    ) -> str:
+        """Store an append-only raw physical observation receipt with SHA-256 integrity hash."""
+        receipt_id = receipt_id or f"rcpt_{uuid.uuid4().hex[:8]}"
+        observed_at = observed_at or time.time()
+        recorded_at = time.time()
+        raw_output = raw_output or ""
+        
+        sha256_hash = hashlib.sha256(raw_output.encode('utf-8')).hexdigest()
+        raw_output_enc = self._encrypt(raw_output)
+        
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO evidence_ledger (
+                    receipt_id, tool_name, target_identifier, raw_output_enc,
+                    sha256_hash, exit_code, observed_at, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                receipt_id, tool_name, target_identifier, raw_output_enc,
+                sha256_hash, exit_code, observed_at, recorded_at
+            ))
+            conn.commit()
+            return receipt_id
+        finally:
+            conn.close()
+
+    def get_evidence_receipt(self, receipt_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve and verify a physical evidence receipt."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT receipt_id, tool_name, target_identifier, raw_output_enc,
+                       sha256_hash, exit_code, observed_at, recorded_at
+                FROM evidence_ledger WHERE receipt_id = ?
+            ''', (receipt_id,))
+            row = c.fetchone()
+            if not row:
+                return None
+                
+            raw_output = self._decrypt(row[3])
+            calc_hash = hashlib.sha256(raw_output.encode('utf-8')).hexdigest()
+            tamper_detected = (calc_hash != row[4])
+            
+            return {
+                'receipt_id': row[0],
+                'tool_name': row[1],
+                'target_identifier': row[2],
+                'raw_output': raw_output,
+                'sha256_hash': row[4],
+                'exit_code': row[5],
+                'observed_at': row[6],
+                'recorded_at': row[7],
+                'tamper_detected': tamper_detected
+            }
+        finally:
+            conn.close()
+
+    def create_epistemic_claim(
+        self,
+        subject: str,
+        predicate: str,
+        condition: Optional[str] = None,
+        state: str = "UNKNOWN",
+        verifying_receipt_id: Optional[str] = None,
+        supersedes_claim_id: Optional[str] = None,
+        expires_at: Optional[float] = None,
+        calculated_confidence_tier: str = "TIER_0_UNKNOWN",
+        claim_id: Optional[str] = None
+    ) -> str:
+        """Create a new epistemic claim with canonical snapshot hash."""
+        claim_id = claim_id or f"claim_{uuid.uuid4().hex[:8]}"
+        created_at = time.time()
+        
+        if state == "VERIFIED_REAL" and not verifying_receipt_id:
+            raise ValueError("VERIFIED_REAL claims must have a valid verifying_receipt_id.")
+            
+        claim_meta = {
+            "claim_id": claim_id,
+            "subject": subject,
+            "predicate": predicate,
+            "condition": condition or "",
+            "verifying_receipt_id": verifying_receipt_id or "",
+            "created_at": created_at
+        }
+        sha256_snapshot = generate_claim_snapshot_hash(claim_meta)
+        
+        subject_enc = self._encrypt(subject)
+        predicate_enc = self._encrypt(predicate)
+        condition_enc = self._encrypt(condition) if condition else None
+        
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO epistemic_claims (
+                    claim_id, subject_enc, predicate_enc, condition_enc,
+                    state, verifying_receipt_id, supersedes_claim_id,
+                    retirement_reason, calculated_confidence_tier,
+                    created_at, expires_at, sha256_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                claim_id, subject_enc, predicate_enc, condition_enc,
+                state, verifying_receipt_id, supersedes_claim_id,
+                None, calculated_confidence_tier,
+                created_at, expires_at, sha256_snapshot
+            ))
+            
+            if verifying_receipt_id:
+                c.execute('''
+                    INSERT OR REPLACE INTO claim_evidence (
+                        claim_id, receipt_id, relationship, weight, linked_at
+                    ) VALUES (?, ?, 'supports', 1.0, ?)
+                ''', (claim_id, verifying_receipt_id, created_at))
+                
+            conn.commit()
+            return claim_id
+        finally:
+            conn.close()
+
+    def link_claim_evidence(
+        self,
+        claim_id: str,
+        receipt_id: str,
+        relationship: str = "supports",
+        weight: float = 1.0
+    ) -> bool:
+        """Link an evidence receipt to a claim in the many-to-many junction table."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT OR REPLACE INTO claim_evidence (
+                    claim_id, receipt_id, relationship, weight, linked_at
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', (claim_id, receipt_id, relationship, weight, time.time()))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"‖ Vault Error linking claim evidence: {e} ‖")
+            return False
+        finally:
+            conn.close()
+
+    def update_claim_state(
+        self,
+        claim_id: str,
+        new_state: str,
+        verifying_receipt_id: Optional[str] = None,
+        supersedes_claim_id: Optional[str] = None,
+        retirement_reason: Optional[str] = None,
+        calculated_confidence_tier: Optional[str] = None
+    ) -> bool:
+        """Update the epistemic state and provenance links for an existing claim."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('SELECT verifying_receipt_id, calculated_confidence_tier FROM epistemic_claims WHERE claim_id = ?', (claim_id,))
+            row = c.fetchone()
+            if not row:
+                return False
+                
+            current_receipt = row[0]
+            eff_receipt = verifying_receipt_id if verifying_receipt_id is not None else current_receipt
+            
+            if new_state == "VERIFIED_REAL" and not eff_receipt:
+                raise ValueError("VERIFIED_REAL claims must have a valid verifying_receipt_id.")
+                
+            c.execute('''
+                UPDATE epistemic_claims
+                SET state = ?,
+                    verifying_receipt_id = COALESCE(?, verifying_receipt_id),
+                    supersedes_claim_id = COALESCE(?, supersedes_claim_id),
+                    retirement_reason = COALESCE(?, retirement_reason),
+                    calculated_confidence_tier = COALESCE(?, calculated_confidence_tier)
+                WHERE claim_id = ?
+            ''', (new_state, verifying_receipt_id, supersedes_claim_id, retirement_reason, calculated_confidence_tier, claim_id))
+            
+            if verifying_receipt_id:
+                c.execute('''
+                    INSERT OR REPLACE INTO claim_evidence (
+                        claim_id, receipt_id, relationship, weight, linked_at
+                    ) VALUES (?, ?, 'supports', 1.0, ?)
+                ''', (claim_id, verifying_receipt_id, time.time()))
+                
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    def get_claim_with_evidence(self, claim_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a claim along with its full evidence chain from the junction table."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT claim_id, subject_enc, predicate_enc, condition_enc,
+                       state, verifying_receipt_id, supersedes_claim_id,
+                       retirement_reason, calculated_confidence_tier,
+                       created_at, expires_at, sha256_snapshot
+                FROM epistemic_claims WHERE claim_id = ?
+            ''', (claim_id,))
+            row = c.fetchone()
+            if not row:
+                return None
+                
+            claim = {
+                'claim_id': row[0],
+                'subject': self._decrypt(row[1]),
+                'predicate': self._decrypt(row[2]),
+                'condition': self._decrypt(row[3]) if row[3] else None,
+                'state': row[4],
+                'verifying_receipt_id': row[5],
+                'supersedes_claim_id': row[6],
+                'retirement_reason': row[7],
+                'calculated_confidence_tier': row[8],
+                'created_at': row[9],
+                'expires_at': row[10],
+                'sha256_snapshot': row[11]
+            }
+            
+            c.execute('''
+                SELECT ce.receipt_id, ce.relationship, ce.weight, ce.linked_at,
+                       el.tool_name, el.target_identifier, el.raw_output_enc, el.exit_code, el.observed_at
+                FROM claim_evidence ce
+                JOIN evidence_ledger el ON ce.receipt_id = el.receipt_id
+                WHERE ce.claim_id = ?
+            ''', (claim_id,))
+            evidence_rows = c.fetchall()
+            
+            evidence_list = []
+            for er in evidence_rows:
+                evidence_list.append({
+                    'receipt_id': er[0],
+                    'relationship': er[1],
+                    'weight': er[2],
+                    'linked_at': er[3],
+                    'tool_name': er[4],
+                    'target_identifier': er[5],
+                    'raw_output': self._decrypt(er[6]),
+                    'exit_code': er[7],
+                    'observed_at': er[8]
+                })
+            claim['evidence'] = evidence_list
+            return claim
+        finally:
+            conn.close()
+
+    def get_claims_by_state(self, states: List[str], limit: int = 50) -> List[Dict[str, Any]]:
+        """Retrieve claims filtered by state enums."""
+        if not states:
+            return []
+        placeholders = ','.join('?' for _ in states)
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(f'''
+                SELECT claim_id, subject_enc, predicate_enc, condition_enc,
+                       state, verifying_receipt_id, supersedes_claim_id,
+                       retirement_reason, calculated_confidence_tier,
+                       created_at, expires_at, sha256_snapshot
+                FROM epistemic_claims
+                WHERE state IN ({placeholders})
+                ORDER BY created_at DESC LIMIT ?
+            ''', (*states, limit))
+            rows = c.fetchall()
+            
+            claims = []
+            for r in rows:
+                claims.append({
+                    'claim_id': r[0],
+                    'subject': self._decrypt(r[1]),
+                    'predicate': self._decrypt(r[2]),
+                    'condition': self._decrypt(r[3]) if r[3] else None,
+                    'state': r[4],
+                    'verifying_receipt_id': r[5],
+                    'supersedes_claim_id': r[6],
+                    'retirement_reason': r[7],
+                    'calculated_confidence_tier': r[8],
+                    'created_at': r[9],
+                    'expires_at': r[10],
+                    'sha256_snapshot': r[11]
+                })
+            return claims
+        finally:
+            conn.close()
+
+    def get_active_real_claims(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retrieve active VERIFIED_REAL claims."""
+        return self.get_claims_by_state(['VERIFIED_REAL'], limit=limit)
+
+    def stage_action(
+        self,
+        tool_command: str,
+        action_source: str = "operator_manual",
+        claim_id: Optional[str] = None,
+        action_id: Optional[str] = None
+    ) -> str:
+        """Stage an intent action in the queue."""
+        action_id = action_id or f"act_{uuid.uuid4().hex[:8]}"
+        created_at = time.time()
+        tool_command_enc = self._encrypt(tool_command)
+        
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO staged_actions (
+                    action_id, claim_id, action_source, tool_command_enc,
+                    status, locked_by, locked_at, created_at
+                ) VALUES (?, ?, ?, ?, 'STAGED', NULL, NULL, ?)
+            ''', (action_id, claim_id, action_source, tool_command_enc, created_at))
+            conn.commit()
+            return action_id
+        finally:
+            conn.close()
+
+    def acquire_action_cas_lock(self, action_id: str, worker_id: str) -> bool:
+        """
+        Atomic Compare-And-Swap.
+        Transitions state from 'STAGED' -> 'EXECUTING' with worker lock.
+        Returns True if lock acquired, False if already acquired or not staged.
+        """
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                UPDATE staged_actions
+                SET status = 'EXECUTING',
+                    locked_by = ?,
+                    locked_at = ?
+                WHERE action_id = ? AND status = 'STAGED'
+            ''', (worker_id, time.time(), action_id))
+            conn.commit()
+            return c.rowcount > 0
+        finally:
+            conn.close()
+
+    def complete_staged_action(self, action_id: str, status: str = "COMPLETED") -> bool:
+        """Mark a staged action as completed or cancelled."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                UPDATE staged_actions
+                SET status = ?
+                WHERE action_id = ?
+            ''', (status, action_id))
+            conn.commit()
+            return c.rowcount > 0
+        finally:
+            conn.close()
+
+    def add_to_graveyard(
+        self,
+        subject: str,
+        predicate: str,
+        refuting_receipt_id: str,
+        condition: Optional[str] = None,
+        graveyard_id: Optional[str] = None
+    ) -> str:
+        """Tombstone a refuted hypothesis to the Tabu Graveyard negative cache."""
+        graveyard_id = graveyard_id or f"gy_{uuid.uuid4().hex[:8]}"
+        refuted_at = time.time()
+        
+        subject_enc = self._encrypt(subject)
+        predicate_enc = self._encrypt(predicate)
+        condition_enc = self._encrypt(condition) if condition else None
+        
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO tabu_graveyard (
+                    graveyard_id, subject_enc, predicate_enc, condition_enc,
+                    refuting_receipt_id, refuted_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            ''', (graveyard_id, subject_enc, predicate_enc, condition_enc, refuting_receipt_id, refuted_at))
+            conn.commit()
+            return graveyard_id
+        finally:
+            conn.close()
+
+    def is_in_graveyard(self, subject: str, predicate: str) -> bool:
+        """Check if a subject/predicate pair exists in the Tabu Graveyard."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('SELECT subject_enc, predicate_enc FROM tabu_graveyard')
+            rows = c.fetchall()
+            for r in rows:
+                dec_sub = self._decrypt(r[0])
+                dec_pred = self._decrypt(r[1])
+                if dec_sub.lower() == subject.lower() and dec_pred.lower() == predicate.lower():
+                    return True
+            return False
+        finally:
+            conn.close()
+
+    def get_recent_graveyard(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve recent items from the Tabu Graveyard."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT graveyard_id, subject_enc, predicate_enc, condition_enc,
+                       refuting_receipt_id, refuted_at
+                FROM tabu_graveyard
+                ORDER BY refuted_at DESC LIMIT ?
+            ''', (limit,))
+            rows = c.fetchall()
+            items = []
+            for r in rows:
+                items.append({
+                    'graveyard_id': r[0],
+                    'subject': self._decrypt(r[1]),
+                    'predicate': self._decrypt(r[2]),
+                    'condition': self._decrypt(r[3]) if r[3] else None,
+                    'refuting_receipt_id': r[4],
+                    'refuted_at': r[5]
+                })
+            return items
+        finally:
+            conn.close()
+
+    def record_win(
+        self,
+        claim_id: str,
+        domain_vector: str,
+        verifying_receipt_id: str,
+        win_id: Optional[str] = None
+    ) -> str:
+        """Record a confirmed hypothesis into the Win History."""
+        win_id = win_id or f"win_{uuid.uuid4().hex[:8]}"
+        verified_at = time.time()
+        
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO win_history (
+                    win_id, claim_id, domain_vector,
+                    verifying_receipt_id, verified_at
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', (win_id, claim_id, domain_vector, verifying_receipt_id, verified_at))
+            conn.commit()
+            return win_id
+        finally:
+            conn.close()
+
+    def get_recent_wins(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve recent confirmed wins."""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                SELECT win_id, claim_id, domain_vector,
+                       verifying_receipt_id, verified_at
+                FROM win_history
+                ORDER BY verified_at DESC LIMIT ?
+            ''', (limit,))
+            rows = c.fetchall()
+            wins = []
+            for r in rows:
+                wins.append({
+                    'win_id': r[0],
+                    'claim_id': r[1],
+                    'domain_vector': r[2],
+                    'verifying_receipt_id': r[3],
+                    'verified_at': r[4]
+                })
+            return wins
+        finally:
+            conn.close()
+
+# Enhanced example usage with new features
+
 if __name__ == "__main__":
     vault = CipherVault()
 
