@@ -83,7 +83,7 @@ class CiphCore:
         self.link_reader = CiphLinkReader()
         self.evolution_engine = CognitiveEvolutionEngine(self.vault, router=self.ciph_router)
         self.module_manager = ModuleManager(self.vault)
-        self.awareness = SelfAwareness(self.vault)
+        self.awareness = SelfAwareness(self.vault, router=self.ciph_router)
         index_file = "code_index.json"
         if os.path.exists(index_file):
             try:
