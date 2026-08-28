@@ -8,7 +8,7 @@ import uuid
 from typing import Dict, Any, Optional, Tuple, Callable, List
 
 class CiphKernelV3:
-    def __init__(self, modules, darknet, trading, sports, pentest, bounty, orchestrator, state_manager=None):
+    def __init__(self, modules, darknet, trading, sports, pentest, bounty, orchestrator, state_manager=None, vault=None):
         self.modules = modules
         self.darknet = darknet
         self.trading = trading
@@ -17,6 +17,7 @@ class CiphKernelV3:
         self.bounty = bounty
         self.orchestrator = orchestrator
         self.state_manager = state_manager  # Optional, passed from ciph_core
+        self.vault = vault or getattr(modules, 'vault', None)
         self.execution_log = []
         self.brain = None
         
@@ -302,3 +303,267 @@ Be helpful, direct, and grounded in the reality snapshot above."""
         
         # 6. Otherwise return chat response
         return intent.get("content", raw_response)
+
+    # ─────────────────────────────────────────────────────────────
+    # EPISTEMIC STATE MACHINE & TRANSITION CONTROLLER (PHASE 2)
+    # ─────────────────────────────────────────────────────────────
+
+    def resolve_hypothesis(
+        self,
+        claim_id: str,
+        receipt_id: str,
+        success: bool,
+        reason: str = ""
+    ) -> Tuple[str, str]:
+        """
+        Kernel-owned state transition for hypotheses.
+        Only runtime execution receipts can trigger promotion or refutation.
+        """
+        if not self.vault:
+            return "ERROR", "No vault connected to kernel."
+            
+        claim = self.vault.get_claim_with_evidence(claim_id)
+        if not claim:
+            return "ERROR", f"Claim {claim_id} not found."
+            
+        receipt = self.vault.get_evidence_receipt(receipt_id)
+        if not receipt:
+            return "ERROR", f"Receipt {receipt_id} not found."
+            
+        if success:
+            # Observation confirmed -> promote to VERIFIED_REAL
+            self.vault.update_claim_state(
+                claim_id=claim_id,
+                new_state="VERIFIED_REAL",
+                verifying_receipt_id=receipt_id,
+                calculated_confidence_tier="TIER_4_VERIFIED_RECEIPT"
+            )
+            # Record in win history
+            domain_vector = f"{claim['subject']}:{claim['predicate']}"
+            self.vault.record_win(
+                claim_id=claim_id,
+                domain_vector=domain_vector,
+                verifying_receipt_id=receipt_id
+            )
+            msg = f"✓ Claim {claim_id} ({claim['subject']}) promoted to VERIFIED_REAL via receipt {receipt_id}."
+            self.log("resolve_hypothesis", {"claim_id": claim_id, "receipt_id": receipt_id}, msg, True)
+            return "VERIFIED_REAL", msg
+        else:
+            # Hypothesis refuted -> move to Graveyard
+            self.vault.update_claim_state(
+                claim_id=claim_id,
+                new_state="REFUTED",
+                retirement_reason="refuted_by_receipt"
+            )
+            self.vault.add_to_graveyard(
+                subject=claim['subject'],
+                predicate=claim['predicate'],
+                refuting_receipt_id=receipt_id,
+                condition=claim['condition']
+            )
+            msg = f"✗ Claim {claim_id} refuted by receipt {receipt_id} -> Tombstoned to Graveyard."
+            self.log("resolve_hypothesis", {"claim_id": claim_id, "receipt_id": receipt_id}, msg, True)
+            return "REFUTED", msg
+
+    def resolve_contradiction(self, claim_a_id: str, claim_b_id: str) -> Dict[str, Any]:
+        """
+        Deterministically resolves conflicting observations between two claims.
+        Evaluates source receipt weights, direct execution vs passive signals, and recency.
+        """
+        if not self.vault:
+            return {"status": "ERROR", "message": "No vault connected"}
+            
+        claim_a = self.vault.get_claim_with_evidence(claim_a_id)
+        claim_b = self.vault.get_claim_with_evidence(claim_b_id)
+        if not claim_a or not claim_b:
+            return {"status": "ERROR", "message": "One or both claims not found"}
+            
+        # Deterministic scoring based on evidence weight and recency
+        score_a = sum(e.get('weight', 1.0) for e in claim_a.get('evidence', []))
+        score_b = sum(e.get('weight', 1.0) for e in claim_b.get('evidence', []))
+        
+        # If weights equal, compare newest receipt timestamp
+        time_a = max([e.get('observed_at', 0) for e in claim_a.get('evidence', [])] or [claim_a['created_at']])
+        time_b = max([e.get('observed_at', 0) for e in claim_b.get('evidence', [])] or [claim_b['created_at']])
+        
+        if score_a > score_b:
+            winner, loser = claim_a, claim_b
+            winner_reason = f"Higher evidence weight ({score_a:.1f} vs {score_b:.1f})"
+        elif score_b > score_a:
+            winner, loser = claim_b, claim_a
+            winner_reason = f"Higher evidence weight ({score_b:.1f} vs {score_a:.1f})"
+        else:
+            # Tie break on recency
+            if time_a >= time_b:
+                winner, loser = claim_a, claim_b
+                winner_reason = f"More recent observation timestamp ({time_a} >= {time_b})"
+            else:
+                winner, loser = claim_b, claim_a
+                winner_reason = f"More recent observation timestamp ({time_b} > {time_a})"
+                
+        # Winner remains/promotes to VERIFIED_REAL
+        self.vault.update_claim_state(
+            claim_id=winner['claim_id'],
+            new_state="VERIFIED_REAL"
+        )
+        # Loser is marked SUPERSEDED
+        self.vault.update_claim_state(
+            claim_id=loser['claim_id'],
+            new_state="SUPERSEDED",
+            supersedes_claim_id=winner['claim_id'],
+            retirement_reason="superseded"
+        )
+        
+        report = {
+            "status": "RESOLVED",
+            "winning_claim_id": winner['claim_id'],
+            "superseded_claim_id": loser['claim_id'],
+            "reason": winner_reason,
+            "resolved_at": time.time()
+        }
+        self.log("resolve_contradiction", {"claim_a": claim_a_id, "claim_b": claim_b_id}, str(report), True)
+        return report
+
+    def stage_epistemic_action(
+        self,
+        tool_command: str,
+        action_source: str = "hypothesis_verifier",
+        claim_id: Optional[str] = None
+    ) -> str:
+        """Stage an action in the vault queue."""
+        if not self.vault:
+            return ""
+        return self.vault.stage_action(
+            tool_command=tool_command,
+            action_source=action_source,
+            claim_id=claim_id
+        )
+
+    def execute_staged_action(
+        self,
+        action_id: str,
+        executor_func: Callable[[], Tuple[str, bool, int, str]],
+        tool_name: str = "generic_tool",
+        target_identifier: str = "localhost",
+        worker_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Executes a staged action under an atomic CAS lock.
+        Prevents double-firing on live targets and ensures receipt logging.
+        executor_func: returns (summary_msg, success_bool, exit_code, raw_stdout)
+        """
+        if not self.vault:
+            return {"status": "ERROR", "error": "No vault connected"}
+            
+        worker_id = worker_id or f"worker_{uuid.uuid4().hex[:6]}"
+        
+        # 1. Acquire Atomic CAS Lock
+        lock_acquired = self.vault.acquire_action_cas_lock(action_id, worker_id)
+        if not lock_acquired:
+            return {
+                "status": "LOCKED",
+                "success": False,
+                "error": "Action already acquired by another worker or not in STAGED state"
+            }
+            
+        # 2. Execute physical tool
+        try:
+            summary_msg, success, exit_code, raw_stdout = executor_func()
+        except Exception as e:
+            self.vault.complete_staged_action(action_id, "FAILED")
+            return {
+                "status": "FAILED",
+                "success": False,
+                "error": f"Execution exception: {str(e)}"
+            }
+            
+        # 3. Store Immutable Evidence Receipt
+        receipt_id = self.vault.store_evidence_receipt(
+            tool_name=tool_name,
+            target_identifier=target_identifier,
+            raw_output=raw_stdout or summary_msg,
+            exit_code=exit_code
+        )
+        
+        # 4. Resolve claim state if linked
+        conn = self.vault._get_connection()
+        claim_id = None
+        try:
+            c = conn.cursor()
+            c.execute('SELECT claim_id FROM staged_actions WHERE action_id = ?', (action_id,))
+            row = c.fetchone()
+            if row:
+                claim_id = row[0]
+        finally:
+            conn.close()
+            
+        resolution = None
+        if claim_id:
+            resolution = self.resolve_hypothesis(claim_id, receipt_id, success)
+            
+        # 5. Mark staged action completed
+        self.vault.complete_staged_action(action_id, "COMPLETED" if success else "FAILED")
+        
+        return {
+            "status": "COMPLETED",
+            "success": success,
+            "receipt_id": receipt_id,
+            "claim_id": claim_id,
+            "resolution": resolution,
+            "summary": summary_msg
+        }
+
+    def evaluate_ttl_and_decay(self, default_ttl_seconds: float = 86400.0) -> Dict[str, List[str]]:
+        """
+        Scans active claims and applies temporal decay / eviction.
+        VERIFIED_REAL claims -> STALE (ttl_expired)
+        CORROBORATED claims -> EXPIRED (ttl_expired)
+        """
+        if not self.vault:
+            return {"decayed": [], "expired": []}
+            
+        current_time = time.time()
+        decayed = []
+        expired = []
+        
+        # Check active VERIFIED_REAL claims
+        real_claims = self.vault.get_claims_by_state(["VERIFIED_REAL"], limit=200)
+        for c in real_claims:
+            exp_time = c.get('expires_at') or (c['created_at'] + default_ttl_seconds)
+            if current_time >= exp_time:
+                self.vault.update_claim_state(
+                    claim_id=c['claim_id'],
+                    new_state="STALE",
+                    retirement_reason="ttl_expired"
+                )
+                decayed.append(c['claim_id'])
+                
+        # Check CORROBORATED claims
+        corroborated_claims = self.vault.get_claims_by_state(["CORROBORATED"], limit=200)
+        for c in corroborated_claims:
+            exp_time = c.get('expires_at') or (c['created_at'] + default_ttl_seconds)
+            if current_time >= exp_time:
+                self.vault.update_claim_state(
+                    claim_id=c['claim_id'],
+                    new_state="EXPIRED",
+                    retirement_reason="ttl_expired"
+                )
+                expired.append(c['claim_id'])
+                
+        return {"decayed": decayed, "expired": expired}
+
+    def get_epistemic_grounding(self) -> Dict[str, Any]:
+        """Provides a grounded snapshot of verified reality, negative cache, and win stats."""
+        if not self.vault:
+            return {"real_facts": [], "graveyard": [], "wins_count": 0}
+            
+        real_facts = self.vault.get_active_real_claims(limit=20)
+        graveyard = self.vault.get_recent_graveyard(limit=10)
+        wins = self.vault.get_recent_wins(limit=10)
+        
+        return {
+            "real_facts": real_facts,
+            "graveyard": graveyard,
+            "wins_count": len(wins),
+            "recent_wins": wins
+        }

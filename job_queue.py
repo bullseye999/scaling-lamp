@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# job_queue.py - Background job queue and multi-threaded worker pool
+# job_queue.py - Background job queue for long-running tasks
 
 import time
 import uuid
@@ -10,9 +10,10 @@ from datetime import datetime
 from queue import Queue
 
 class JobQueue:
-    """Asynchronous background job queue with thread workers to prevent blocking interactive chat."""
+    """Background job queue. Long tasks don't block chat and produce verifiable receipts."""
 
-    def __init__(self):
+    def __init__(self, vault=None):
+        self.vault = vault
         self.jobs: Dict[str, Dict] = {}
         self.queue = Queue()
         self.worker_thread = None
@@ -31,7 +32,6 @@ class JobQueue:
     def stop(self):
         """Stop all workers."""
         self.running = False
-        # Clear queue to unblock workers
         while not self.queue.empty():
             try:
                 self.queue.get_nowait()
@@ -39,7 +39,7 @@ class JobQueue:
                 break
 
     def _worker_loop(self):
-        """Worker thread: processes jobs from queue."""
+        """Worker thread: processes jobs from queue and records progress/completion receipts."""
         while self.running:
             try:
                 job = self.queue.get(timeout=1)
@@ -50,41 +50,123 @@ class JobQueue:
                 func = job['func']
                 args = job.get('args', [])
                 kwargs = job.get('kwargs', {})
+                tool_name = job.get('tool_name', 'tool')
+                target = job.get('target', 'general')
                 
-                # Update job status
+                # Update job status & record progress
                 self.jobs[job_id]['status'] = 'running'
                 self.jobs[job_id]['started_at'] = time.time()
+                
+                if self.vault and hasattr(self.vault, 'store_progress_receipt'):
+                    try:
+                        self.vault.store_progress_receipt(
+                            job_id=job_id,
+                            tool_name=tool_name,
+                            target=target,
+                            phase='STARTED',
+                            event='Execution worker started processing payload'
+                        )
+                    except Exception:
+                        pass
                 
                 try:
                     result = func(*args, **kwargs)
                     self.jobs[job_id]['status'] = 'completed'
                     self.jobs[job_id]['result'] = result
                     self.jobs[job_id]['completed_at'] = time.time()
+                    
+                    if self.vault and hasattr(self.vault, 'store_completion_receipt'):
+                        try:
+                            res_dict = result if isinstance(result, dict) else {"output": str(result)}
+                            self.vault.store_completion_receipt(
+                                job_id=job_id,
+                                tool_name=tool_name,
+                                target=target,
+                                results=res_dict,
+                                exit_code=0
+                            )
+                        except Exception:
+                            pass
                 except Exception as e:
                     self.jobs[job_id]['status'] = 'failed'
                     self.jobs[job_id]['error'] = str(e)
                     self.jobs[job_id]['completed_at'] = time.time()
+                    
+                    if self.vault and hasattr(self.vault, 'store_completion_receipt'):
+                        try:
+                            self.vault.store_completion_receipt(
+                                job_id=job_id,
+                                tool_name=tool_name,
+                                target=target,
+                                results={"error": str(e)},
+                                exit_code=1
+                            )
+                        except Exception:
+                            pass
                 
             except Exception:
                 pass
 
-    def submit(self, func: Callable, *args, **kwargs) -> str:
-        """Submit a job to be executed in background. Returns job_id."""
-        job_id = str(uuid.uuid4())[:8]
+    def submit(self, func: Callable, *args, tool_name: str = "", target: str = "", **kwargs) -> str:
+        """Submit a job to be executed in background. Returns job_id and logs DISPATCH_RECEIPT."""
+        prefix = tool_name[:3].upper() if tool_name else "JOB"
+        job_id = f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+        tool_name = tool_name or getattr(func, '__name__', 'task')
+        target = target or (str(args[0]) if args else "general")
+        
         self.jobs[job_id] = {
             'job_id': job_id,
             'status': 'queued',
             'created_at': time.time(),
-            'func_name': func.__name__,
+            'tool_name': tool_name,
+            'target': target,
+            'func_name': getattr(func, '__name__', 'task'),
             'args': str(args)[:100],
         }
+        
+        # Log DISPATCH_RECEIPT
+        if self.vault and hasattr(self.vault, 'store_dispatch_receipt'):
+            try:
+                self.vault.store_dispatch_receipt(
+                    job_id=job_id,
+                    tool_name=tool_name,
+                    target=target,
+                    initial_params={"args": str(args)[:100], "kwargs": str(kwargs)[:100]}
+                )
+            except Exception:
+                pass
+
         self.queue.put({
             'job_id': job_id,
             'func': func,
             'args': args,
-            'kwargs': kwargs
+            'kwargs': kwargs,
+            'tool_name': tool_name,
+            'target': target
         })
         return job_id
+
+    def update_progress(self, job_id: str, phase: str, message: str = "", metadata: Optional[Dict[str, Any]] = None):
+        """Update progress on a running job and log PROGRESS_RECEIPT."""
+        if job_id in self.jobs:
+            self.jobs[job_id]['phase'] = phase
+            self.jobs[job_id]['progress_message'] = message
+            
+            tool_name = self.jobs[job_id].get('tool_name', 'tool')
+            target = self.jobs[job_id].get('target', 'general')
+            
+            if self.vault and hasattr(self.vault, 'store_progress_receipt'):
+                try:
+                    self.vault.store_progress_receipt(
+                        job_id=job_id,
+                        tool_name=tool_name,
+                        target=target,
+                        phase=phase,
+                        event=message,
+                        metadata=metadata
+                    )
+                except Exception:
+                    pass
 
     def get_status(self, job_id: str) -> Optional[Dict]:
         """Get job status."""
@@ -108,12 +190,6 @@ class JobQueue:
         elif job['status'] == 'running':
             return f"Job {job_id} is currently running"
         return f"Job {job_id} already {job['status']}"
-
-    def update_progress(self, job_id: str, progress: int, message: str = ""):
-        """Update progress on a running job"""
-        if job_id in self.jobs:
-            self.jobs[job_id]['progress'] = progress
-            self.jobs[job_id]['progress_message'] = message
 
     def get_pending_count(self) -> int:
         """Get number of pending jobs."""
