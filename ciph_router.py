@@ -41,63 +41,49 @@ except ImportError:
                     os.environ.setdefault(k.strip(), v.strip().strip("'").strip('"'))
 
 
-# DeepSeek V4 Pro Configuration (PRIMARY)
-DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
-
-# [DEPRECATED RUNPOD CONFIGURATION - KEPT FOR REFERENCE]
-# DEFAULT_PROXY_URL = "http://127.0.0.1:5001/v1"
-# DEFAULT_8B_MODEL = "llama3.1:8b"
-# DEFAULT_DEEPSEEK_V4_MODEL = "deepseek-ai/DeepSeek-V4"
+# Default AI Configuration
+DEFAULT_API_BASE_URL = os.environ.get("CIPH_BASE_URL", os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"))
+DEFAULT_MODEL = os.environ.get("CIPH_MODEL", os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"))
 
 
 class CiphRouter:
     """
-    Direct-Engine Router for CIPH powered by DeepSeek V4 Pro.
-    Routes all queries directly to DeepSeek V4 Pro API.
+    Direct-Engine Router for CIPH Sovereign AI.
+    Routes queries to the configured LLM API endpoint.
     """
+    _warned_missing_key = False
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        # [DEPRECATED RUNPOD ARGS - KEPT FOR SIGNATURE BACKWARD COMPATIBILITY]
         proxy_url: Optional[str] = None,
         endpoint_deepseek_id: Optional[str] = None,
         base_url_deepseek: Optional[str] = None,
         model_8b: Optional[str] = None,
         model_deepseek: Optional[str] = None,
     ):
-        # DeepSeek API Configuration
+        # API Configuration
         self.api_key = (
             api_key 
+            or os.environ.get("CIPH_API_KEY", "")
+            or os.environ.get("AI_API_KEY", "")
             or os.environ.get("DEEPSEEK_API_KEY", "") 
+            or os.environ.get("OPENAI_API_KEY", "")
             or os.environ.get("RUNPOD_API_KEY", "")
         ).strip()
         
-        raw_base = base_url or os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
+        raw_base = base_url or DEFAULT_API_BASE_URL
         self.base_url = raw_base.rstrip("/")
         if not self.base_url.endswith("/v1"):
             self.base_url = self.base_url + "/v1"
             
-        self.model = model or os.environ.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
+        self.model = model or DEFAULT_MODEL
 
-        # [DEPRECATED RUNPOD CONFIG - KEPT FOR REFERENCE]
-        # self.proxy_url = proxy_url or os.environ.get("LOCAL_PROXY_URL", DEFAULT_PROXY_URL)
-        # self.model_8b = model_8b or os.environ.get("RUNPOD_8B_MODEL", DEFAULT_8B_MODEL)
-        # self.endpoint_deepseek_id = endpoint_deepseek_id or os.environ.get("RUNPOD_DEEPSEEK_ENDPOINT_ID", "")
-        # self.client_8b: Optional[OpenAI] = None
-
-        # Primary Client (DeepSeek V4 Pro)
+        # Primary Client
         self.client_deepseek: Optional[OpenAI] = None
         self._init_clients()
-
-        # [DEPRECATED RUNPOD HEAVY TASK PATTERNS - KEPT FOR REFERENCE]
-        # self.heavy_patterns = {
-        #     "code_generation": [r"\bwrite\s+code\b", ...],
-        #     "refactoring_optimization": [r"\brefactor\b", ...],
-        # }
 
         # Metrics Tracking
         self.stats: Dict[str, Any] = {
@@ -111,7 +97,7 @@ class CiphRouter:
         }
 
     def _init_clients(self) -> None:
-        """Initialize DeepSeek V4 Pro OpenAI client."""
+        """Initialize OpenAI-compatible AI client."""
         if self.api_key:
             try:
                 self.client_deepseek = OpenAI(
@@ -120,25 +106,10 @@ class CiphRouter:
                     timeout=90.0
                 )
             except Exception as e:
-                print(f"⚠️ [CiphRouter] Failed to initialize DeepSeek V4 Pro client: {e}")
+                print(f"⚠️ [CiphRouter] Failed to initialize AI client: {e}")
                 self.client_deepseek = None
         else:
-            print("⚠️ [CiphRouter] DEEPSEEK_API_KEY is not set in .env!")
             self.client_deepseek = None
-
-        # [DEPRECATED RUNPOD 8B CLIENT INIT - KEPT FOR REFERENCE]
-        # try:
-        #     self.client_8b = OpenAI(
-        #         api_key="not-needed",
-        #         base_url=self.proxy_url,
-        #         timeout=60.0
-        #     )
-        # except Exception as e:
-        #     self.client_8b = None
-
-    # [DEPRECATED: is_heavy_task() routing logic - bypassed as DeepSeek V4 Pro handles all tasks]
-    # def is_heavy_task(self, user_input: str, history: Optional[List[Dict[str, str]]] = None) -> Tuple[bool, str]:
-    #     ...
 
     def _call_client(
         self,
@@ -148,7 +119,7 @@ class CiphRouter:
         temperature: float = 0.3,
         max_tokens: int = 2048
     ) -> str:
-        """Execute chat completion request against DeepSeek OpenAI endpoint."""
+        """Execute chat completion request against API endpoint."""
         response = client.chat.completions.create(
             model=model,
             messages=messages,  # type: ignore
@@ -170,7 +141,6 @@ class CiphRouter:
     ) -> str:
         """
         Main routing entry point.
-        ALL requests route directly to DeepSeek V4 Pro ("The Brain").
         """
         start_t = time.time()
         self.stats["total_requests"] += 1
@@ -185,9 +155,8 @@ class CiphRouter:
         messages.append({"role": "user", "content": user_input})
 
         response_text = ""
-        route_taken = "DeepSeek-V4-Pro"
+        route_taken = "AI-Core"
 
-        # Direct Route to DeepSeek V4 Pro
         if self.client_deepseek:
             try:
                 response_text = self._call_client(
@@ -200,19 +169,15 @@ class CiphRouter:
                 if response_text:
                     self.stats["routes_deepseek_v4"] += 1
             except Exception as e:
-                print(f"⚠️ [CiphRouter] DeepSeek V4 Pro request failed ({e})")
+                print(f"⚠️ [CiphRouter] AI API request failed ({e})")
                 self.stats["failed_requests"] += 1
-                response_text = f"[CiphRouter Error: DeepSeek API request failed: {e}]"
+                response_text = f"[CiphRouter Error: AI API request failed: {e}]"
         else:
             self.stats["failed_requests"] += 1
             response_text = (
-                "[CiphRouter Error: DeepSeek V4 Pro client not initialized. "
-                "Please ensure DEEPSEEK_API_KEY is configured in .env.]"
+                "[AI Engine Notice: API key not configured. "
+                "Set your API key via /setkey <key> to enable generative AI reasoning.]"
             )
-
-        # [DEPRECATED RUNPOD DUAL-ENGINE FALLBACK - KEPT FOR REFERENCE]
-        # if not response_text and self.client_8b:
-        #     ...
 
         # Track metrics
         latency = (time.time() - start_t) * 1000.0
@@ -224,10 +189,10 @@ class CiphRouter:
 
         return response_text
 
-    def test_deepseek(self) -> Dict[str, Any]:
-        """Send a test health ping to DeepSeek V4 Pro API."""
+    def test_ai(self) -> Dict[str, Any]:
+        """Send a test health ping to the AI API."""
         if not self.api_key:
-            return {"success": False, "error": "DEEPSEEK_API_KEY is missing in .env"}
+            return {"success": False, "error": "API key is not configured. Set it via /setkey <key> or in .env."}
 
         try:
             t0 = time.time()
@@ -245,7 +210,7 @@ class CiphRouter:
                     "model": self.model,
                     "base_url": self.base_url,
                     "latency_ms": latency,
-                    "message": "✅ DeepSeek V4 Pro API Active & Connected"
+                    "message": "✅ AI Engine Active & Connected"
                 }
             return {
                 "success": False,
@@ -255,23 +220,23 @@ class CiphRouter:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # [DEPRECATED: RunPod test method - kept for reference]
-    # def test_runpod(self, target_endpoint_id: Optional[str] = None) -> Dict[str, Any]:
-    #     ...
+    def test_deepseek(self) -> Dict[str, Any]:
+        """Alias for backward compatibility."""
+        return self.test_ai()
 
     def check_health(self) -> Dict[str, Any]:
-        """Check status of DeepSeek V4 Pro endpoint."""
+        """Check status of AI endpoint."""
         return {
-            "deepseek_v4_status": "online" if self.client_deepseek else "missing_key",
+            "ai_status": "online" if self.client_deepseek else "missing_key",
             "model": self.model,
             "base_url": self.base_url
         }
 
     def get_status(self) -> Dict[str, Any]:
-        """Return DeepSeek routing configuration, metrics, and health."""
+        """Return AI routing configuration, metrics, and health."""
         uptime = round(time.time() - self.stats["start_time"], 1)
         return {
-            "primary_engine": "DeepSeek V4 Pro",
+            "primary_engine": "Sovereign AI",
             "model": self.model,
             "base_url": self.base_url,
             "api_key_configured": bool(self.api_key),
@@ -283,10 +248,10 @@ class CiphRouter:
     def get_status_formatted(self) -> str:
         """Return formatted summary for CLI and status displays."""
         s = self.stats
-        key_preview = (self.api_key[:6] + "..." + self.api_key[-4:]) if len(self.api_key) > 10 else "NOT SET"
+        key_preview = (self.api_key[:6] + "..." + self.api_key[-4:]) if len(self.api_key) > 10 else "NOT CONFIGURED"
         return (
-            "‖ CIPH ENGINE STATUS (DEEPSEEK V4 PRO) ‖\n"
-            f"• Active Model      : {self.model} (DeepSeek V4 Pro)\n"
+            "‖ CIPH AI ENGINE STATUS ‖\n"
+            f"• Active Model      : {self.model}\n"
             f"• Endpoint Base URL : {self.base_url}\n"
             f"• API Key (.env)    : {key_preview}\n"
             f"• Total Requests    : {s['total_requests']} (Success: {s['routes_deepseek_v4']} | Failed: {s['failed_requests']})\n"
