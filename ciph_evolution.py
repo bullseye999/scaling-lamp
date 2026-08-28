@@ -113,7 +113,7 @@ class CognitiveEvolutionEngine:
         self.router = router
         self.balancer = DynamicSpectrumBalancer(vault)
         self.link_reader = CiphLinkReader()
-        self.deepseek_key = deepseek_api_key or os.getenv("DEEPSEEK_API_KEY") or self.vault.get_config("DEEPSEEK_API_KEY")
+        self.deepseek_key = deepseek_api_key or os.getenv("CIPH_API_KEY") or os.getenv("AI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or self.vault.get_config("CIPH_API_KEY") or self.vault.get_config("DEEPSEEK_API_KEY")
         
         self.is_running = False
         self._daemon_thread: Optional[threading.Thread] = None
@@ -282,9 +282,10 @@ Format strictly as JSON with exactly these 4 keys:
         try:
             thesis_id = f"THESIS-{int(time.time())}"
             topic_str = blueprint['topic']
+            op_name = self.vault.get_operator_name() or "Operator"
             title = f"On {topic_str}: Strategic Leverage and Sovereign Autonomy"
             conclusion = "I concluded that in any asymmetric conflict, control of the decision tempo and information asymmetry outweighs raw scale."
-            prompt = f"Operator, I was meditating on how {topic_str} applies to our board. What is your perspective on forcing ambiguity versus direct confrontation?"
+            prompt = f"{op_name}, I was meditating on how {topic_str} applies to our board. What is your perspective on forcing ambiguity versus direct confrontation?"
 
             return self.vault.store_council_thesis(
                 thesis_id=thesis_id,
