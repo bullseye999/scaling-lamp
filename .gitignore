@@ -54,7 +54,7 @@ sports_logs/
 system_proposals/
 *.json  # (but keep example configs)
 code_index.json
-!test_audit_results.json
+test_audit_results.json
 !requirements.txt
 !ciph_version.json
 
