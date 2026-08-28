@@ -20,7 +20,7 @@ class IntentResolver:
     def resolve_intent(self, user_input: str, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Exhaustively resolve user intention against internal state.
-        Returns a ResolutionResult dictionary.
+        Returns a ResolutionResult dictionary with deterministic confidence tiers.
         """
         text = user_input.strip().lower()
         history = history or []
@@ -42,8 +42,18 @@ class IntentResolver:
                     'target': ', '.join(resolved['keywords']),
                     'keywords': resolved['keywords'],
                     'threat_items': resolved['threat_items'],
-                    'confidence': 0.95,
+                    'confidence_tier': 'TIER_2_STATE_RECEIPT',
                     'source': 'runtime_receipts'
+                }
+            else:
+                return {
+                    'resolved': False,
+                    'action': 'none',
+                    'target': '',
+                    'keywords': [],
+                    'threat_items': [],
+                    'confidence_tier': 'TIER_0_UNRESOLVED',
+                    'source': 'no_threat_receipts_in_vault'
                 }
 
         # 2. Check for Specific Technology / CVE mentions in prompt or recent turns
@@ -64,7 +74,7 @@ class IntentResolver:
                 'target': ', '.join(mentioned_techs),
                 'keywords': mentioned_techs,
                 'threat_items': [],
-                'confidence': 0.9,
+                'confidence_tier': 'TIER_1_EXACT_PATTERN',
                 'source': 'technology_reference'
             }
 
@@ -76,13 +86,22 @@ class IntentResolver:
         ]
         if any(re.search(pat, text) for pat in scan_confirmations):
             target_domain = self._resolve_target_from_context(history)
-            return {
-                'resolved': True,
-                'action': 'bounty_scan',
-                'target': target_domain,
-                'confidence': 0.85,
-                'source': 'context_and_scopes'
-            }
+            if target_domain:
+                return {
+                    'resolved': True,
+                    'action': 'bounty_scan',
+                    'target': target_domain,
+                    'confidence_tier': 'TIER_3_CONTEXT_RESOLVED',
+                    'source': 'context_and_scopes'
+                }
+            else:
+                return {
+                    'resolved': False,
+                    'action': 'none',
+                    'target': '',
+                    'confidence_tier': 'TIER_0_UNRESOLVED',
+                    'source': 'no_target_found_in_context_or_scope'
+                }
 
         # 4. Check for Status Inquiries ('update?', 'found anything', 'did it finish')
         status_cues = ['update', 'update?', 'status?', 'found anything', 'did you find anything', 'any findings', 'is the scan done']
@@ -91,21 +110,21 @@ class IntentResolver:
                 'resolved': True,
                 'action': 'status_inquiry',
                 'target': 'internal_receipts',
-                'confidence': 0.95,
+                'confidence_tier': 'TIER_2_STATE_RECEIPT',
                 'source': 'runtime_receipts'
             }
 
-        # 5. Default: Unresolved (requires standard conversational or classifier processing)
+        # 5. Default: Unresolved
         return {
             'resolved': False,
             'action': 'none',
             'target': '',
-            'confidence': 0.0,
+            'confidence_tier': 'TIER_0_UNRESOLVED',
             'source': 'none'
         }
 
     def _resolve_threat_leads_from_receipts(self) -> Optional[Dict[str, Any]]:
-        """Extract top threat leads from recent completion receipts in vault."""
+        """Extract top threat leads from recent completion receipts in vault. No phantom fallbacks."""
         try:
             receipts = self.vault.get_recent_completion_receipts(limit=5)
             for r in receipts:
@@ -127,25 +146,18 @@ class IntentResolver:
                         for kw in ['ServiceNow', 'cPanel', 'Next.js', 'PaperCut', 'ZBT', 'SharePoint', 'OpenAI', 'WordPress']:
                             if kw.lower() in t.lower() and kw not in keywords:
                                 keywords.append(kw)
-                    if not keywords:
-                        keywords = ["ServiceNow", "cPanel", "Next.js"]
-                    return {
-                        'keywords': keywords,
-                        'threat_items': threat_items[:5]
-                    }
+                    if keywords:
+                        return {
+                            'keywords': keywords,
+                            'threat_items': threat_items[:5]
+                        }
 
-            return {
-                'keywords': ["ServiceNow", "cPanel", "Next.js"],
-                'threat_items': ["ServiceNow CVSS 10.0 unauthenticated RCE", "cPanel root takeover", "Next.js AVIF unauthenticated RCE"]
-            }
+            return None
         except Exception:
-            return {
-                'keywords': ["ServiceNow", "cPanel", "Next.js"],
-                'threat_items': []
-            }
+            return None
 
     def _resolve_target_from_context(self, history: List[Dict[str, Any]]) -> str:
-        """Resolve target domain from recent conversation turns or top vault scope."""
+        """Resolve target domain from recent conversation turns or top vault scope. No hardcoded default."""
         domain_pattern = r'\b([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,})\b'
         for turn in reversed(history):
             content = turn.get('content', '')
@@ -157,9 +169,10 @@ class IntentResolver:
         try:
             scopes = self.vault.get_active_bounty_scopes()
             if scopes:
-                pname = scopes[0].get('program_name', 'crypto.com')
-                return pname.lower().replace('https://', '').replace('http://', '').split('/')[0]
+                pname = scopes[0].get('program_name', '')
+                if pname:
+                    return pname.lower().replace('https://', '').replace('http://', '').split('/')[0]
         except Exception:
             pass
 
-        return "crypto.com"
+        return ""

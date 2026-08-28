@@ -54,10 +54,10 @@ class CiphConversation:
             role = turn.get('role')
             content = turn.get('content', '')
             if role == 'assistant':
-                if content.startswith('[TOOL OUTPUT') or content.startswith('[EXECUTION RECEIPT') or content.startswith('🏛️ EPISTEMIC PROVENANCE'):
+                if content.startswith('[TOOL OUTPUT') or content.startswith('[EXECUTION RECEIPT') or content.startswith('🏛️ EPISTEMIC PROVENANCE') or content.startswith('[VERIFIED'):
                     rehydrated.append({'role': role, 'content': content})
                 else:
-                    rehydrated.append({'role': role, 'content': content})
+                    rehydrated.append({'role': role, 'content': f"[UNVERIFIED SPECULATION / PAST CONVERSATION]\n{content}"})
             else:
                 rehydrated.append({'role': role, 'content': content})
         return rehydrated

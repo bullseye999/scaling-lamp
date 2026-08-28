@@ -27,7 +27,7 @@ class AutonomousActionAgent:
         Single-turn autonomous loop:
         1. Evaluate conversational intent via Self-Exhaustive IntentResolver
         2. Fallback to Action Classifier LLM if needed
-        3. Execute tool
+        3. Execute tool with strict fail-closed receipt tracking
         4. Synthesize Epistemic Quadruple response with Kernel-subordinate action proposals
         """
         if self._is_pure_chatter(user_input):
@@ -42,9 +42,9 @@ class AutonomousActionAgent:
 
         # 1. First Pass: Self-Exhaustive Intent Resolution against internal SQLite state
         resolved = self.intent_resolver.resolve_intent(user_input, history_ctx)
-        if resolved['resolved'] and resolved['action'] != 'none':
+        if resolved.get('resolved') and resolved.get('action') != 'none':
             tool = resolved['action']
-            target = resolved['target']
+            target = resolved.get('target', '')
         else:
             # 2. Second Pass: LLM Action Classifier
             history_snippet = ""
@@ -57,7 +57,8 @@ class AutonomousActionAgent:
                 scopes = self.core.vault.get_active_bounty_scopes()
                 if scopes:
                     pnames = [s.get('program_name') for s in scopes if s.get('program_name')]
-                    active_scopes_str = f"Active registered targets in vault: {', '.join(set(pnames))}\n"
+                    if pnames:
+                        active_scopes_str = f"Active registered targets in vault: {', '.join(set(pnames))}\n"
             except Exception:
                 pass
 
@@ -110,17 +111,22 @@ class AutonomousActionAgent:
         exec_res = self._execute_tool(tool, target, user_input)
         tool_output = exec_res.get('output_str', '')
         rcpt_id = exec_res.get('receipt_id', 'rcpt_direct')
+        is_success = (exec_res.get('status') == 'completed')
+
+        receipt_header = "[VERIFIED RUNTIME COMPLETION RECEIPT]" if is_success else "[VERIFIED RUNTIME FAILURE RECEIPT]"
+        exit_status_str = "• Exit Status: COMPLETED (Verified in SQLite runtime)" if is_success else f"• Exit Status: FAILED (Verified in SQLite runtime) - Reason: {exec_res.get('error_reason', 'Execution failed')}"
 
         synth_prompt = (
             get_worldview(mood_context, memory_context, book_context) +
-            "\n\n[VERIFIED RUNTIME COMPLETION RECEIPT]\n" +
+            f"\n\n{receipt_header}\n" +
             f"• Receipt ID: {rcpt_id}\n" +
-            f"• Tool: {tool} (Target: {target})\n" +
-            "• Exit Status: COMPLETED (Verified in SQLite runtime)\n" +
+            f"• Tool: {tool} (Target: {target or 'unspecified'})\n" +
+            f"{exit_status_str}\n" +
             f"• Technical Output:\n{tool_output}\n\n" +
             "CRITICAL INSTRUCTIONS FOR SYNTHESIS (EPISTEMIC QUADRUPLE):\n" +
+            ("- If the tool FAILED or target was UNRESOLVED: State clearly that the action failed or requires explicit target registration. Do NOT fabricate completed scan findings or hallucinate open ports/vulnerabilities.\n" if not is_success else "") +
             "- Structure your response cleanly around the Epistemic Quadruple:\n" +
-            "  1. VERIFIED REALITY: The factual advisories and physical asset matches from the receipt.\n" +
+            "  1. VERIFIED REALITY: The factual advisories, physical asset matches, or failure reason from the receipt.\n" +
             "  2. INFERENCE / DEDUCTION: Strategic interpretation (e.g. potential attack surface / blast radius).\n" +
             "  3. UNKNOWN / GAPS: Missing variables that require physical testing (e.g. unverified version numbers).\n" +
             "  4. PROPOSED ACTION: A specific, kernel-subordinate passive verification proposal.\n" +
@@ -147,20 +153,53 @@ class AutonomousActionAgent:
 
     def _execute_tool(self, tool: str, target: str, raw_input: str) -> Dict[str, Any]:
         tgt = target
+        job_id = f"JOB-{tool[:3].upper()}-{uuid.uuid4().hex[:6].upper()}"
         try:
-            job_id = f"JOB-{tool[:3].upper()}-{uuid.uuid4().hex[:6].upper()}"
             res_obj = {}
 
-            if tool == "bounty_scan":
+            # Fail-closed target resolution for bounty tools (No phantom defaults)
+            if tool in ["bounty_scan", "what_changed", "hit_list", "chain_reaction", "bounty_report"]:
                 tgt = target or getattr(self.core.bounty, 'last_scan_target', None)
                 if not tgt:
                     scopes = self.core.vault.get_active_bounty_scopes()
                     if scopes:
-                        tgt = scopes[0].get('program_name', 'crypto.com').lower()
-                    else:
-                        tgt = "crypto.com"
+                        pname = scopes[0].get('program_name', '')
+                        if pname:
+                            tgt = pname.lower().replace("https://", "").replace("http://", "").split("/")[0].strip()
+
+                if not tgt:
+                    err_msg = f"Cannot execute {tool}: No target domain provided and zero active bug bounty scopes registered in vault. Use /bounty-scope <domain> to register a target."
+                    rcpt_id = self.core.vault.store_completion_receipt(
+                        job_id=job_id,
+                        tool_name=tool,
+                        target="unresolved_target",
+                        results={"error": err_msg},
+                        exit_code=1
+                    )
+                    return {
+                        "status": "failed",
+                        "receipt_type": "COMPLETION_RECEIPT",
+                        "receipt_id": rcpt_id,
+                        "job_id": job_id,
+                        "tool": tool,
+                        "target": "unresolved_target",
+                        "error_reason": "No target domain or registered scope",
+                        "output_str": err_msg
+                    }
+
                 tgt = tgt.replace("https://", "").replace("http://", "").split("/")[0].strip()
-                res_obj = self.core.bounty.deep_scan(tgt)
+
+                if tool == "bounty_scan":
+                    res_obj = self.core.bounty.deep_scan(tgt)
+                elif tool == "what_changed":
+                    res_obj = self.core.bounty.get_historical_diffs(tgt)
+                elif tool == "hit_list":
+                    res_obj = self.core.bounty.generate_hit_list(tgt)
+                elif tool == "chain_reaction":
+                    res_obj = self.core.bounty.map_exploit_chains(tgt)
+                elif tool == "bounty_report":
+                    res_obj = self.core.bounty.generate_elite_report(tgt)
+
             elif tool == "threat_deep_dive":
                 kw_str = target or raw_input
                 raw_keywords = [w.strip("?,.:;!'\"()") for w in kw_str.split() if len(w) > 2]
@@ -168,8 +207,26 @@ class AutonomousActionAgent:
                 for kw in raw_keywords:
                     if kw.lower() not in ['ones', 'teeth', 'ahead', 'with', 'what', 'find', 'tell', 'that', 'have', 'deep', 'dive', 'lead', 'leads']:
                         keywords.append(kw)
+
                 if not keywords:
-                    keywords = ["ServiceNow", "cPanel", "Next.js"]
+                    err_msg = "Cannot execute threat deep-dive: No technology/CVE keywords provided and zero threat completion receipts found in database."
+                    rcpt_id = self.core.vault.store_completion_receipt(
+                        job_id=job_id,
+                        tool_name=tool,
+                        target="unresolved_keywords",
+                        results={"error": err_msg},
+                        exit_code=1
+                    )
+                    return {
+                        "status": "failed",
+                        "receipt_type": "COMPLETION_RECEIPT",
+                        "receipt_id": rcpt_id,
+                        "job_id": job_id,
+                        "tool": tool,
+                        "target": "unresolved_keywords",
+                        "error_reason": "No threat keywords or active leads",
+                        "output_str": err_msg
+                    }
 
                 threat_searches = {}
                 for kw in keywords[:3]:
@@ -198,15 +255,7 @@ class AutonomousActionAgent:
                     "vault_asset_correlations": correlations,
                     "war_room_vector_evaluation": stress_summary
                 }
-            elif tool == "what_changed":
-                tgt = target or getattr(self.core.bounty, 'last_scan_target', None) or "crypto.com"
-                res_obj = self.core.bounty.get_historical_diffs(tgt)
-            elif tool == "hit_list":
-                tgt = target or getattr(self.core.bounty, 'last_scan_target', None) or "crypto.com"
-                res_obj = self.core.bounty.generate_hit_list(tgt)
-            elif tool == "chain_reaction":
-                tgt = target or getattr(self.core.bounty, 'last_scan_target', None) or "crypto.com"
-                res_obj = self.core.bounty.map_exploit_chains(tgt)
+
             elif tool == "ghost_audit":
                 res_obj = self.core.bounty.audit_ghost_opsec()
                 self.core.vault.store_opsec_audit(res_obj['score'], res_obj['exit_ip'], res_obj['latency_ms'], res_obj['status'])
@@ -218,9 +267,6 @@ class AutonomousActionAgent:
             elif tool == "war_room":
                 tgt = target or raw_input
                 res_obj = self.core.war_room.stress_test(tgt)
-            elif tool == "bounty_report":
-                tgt = target or getattr(self.core.bounty, 'last_scan_target', None) or "crypto.com"
-                res_obj = self.core.bounty.generate_elite_report(tgt)
             elif tool == "daily_brief":
                 brief = self.core.get_daily_briefing()
                 res_obj = {"briefing": brief}
@@ -250,12 +296,25 @@ class AutonomousActionAgent:
 
         except Exception as e:
             err_str = f"Execution error: {str(e)}"
+            rcpt_id = "rcpt_failed"
+            try:
+                rcpt_id = self.core.vault.store_completion_receipt(
+                    job_id=job_id,
+                    tool_name=tool,
+                    target=tgt or "unknown",
+                    results={"error": err_str},
+                    exit_code=1
+                )
+            except Exception:
+                pass
+
             return {
                 "status": "failed",
-                "receipt_type": "FAILED",
-                "receipt_id": "rcpt_failed",
-                "job_id": "JOB-FAILED",
+                "receipt_type": "COMPLETION_RECEIPT",
+                "receipt_id": rcpt_id,
+                "job_id": job_id,
                 "tool": tool,
                 "target": tgt or "unknown",
+                "error_reason": err_str,
                 "output_str": err_str
             }
