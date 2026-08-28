@@ -3,6 +3,11 @@
 
 import os
 import sys
+
+# Enable ANSI escape sequences on Windows
+if sys.platform == "win32":
+    os.system("")
+
 import time
 from ciph_core import CiphCore
 
