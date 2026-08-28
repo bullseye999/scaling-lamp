@@ -235,14 +235,15 @@ class WorldTelemetry:
             for ds in dn_signals[:2]:
                 parts.append(f"  • {ds.get('keyword')}: {ds.get('description')}")
 
-        parts.append("INSTRUCTION: You have real-world sensory telemetry. When Operator discusses strategy, zero-days, or current events, reference these exact factual findings naturally.")
+        parts.append("INSTRUCTION: You have real-world sensory telemetry. When the Operator discusses strategy, zero-days, or current events, reference these exact factual findings naturally.")
         return "\n".join(parts)
 
     def generate_proactive_login_briefing(self, session_info: Dict[str, Any], router=None) -> str:
         """
-        Generates the dynamic sovereign 'Welcome back Operator' briefing with specific named findings,
+        Generates the dynamic sovereign login briefing with specific named findings,
         explaining why each matters, and ending with proactive tactical questions.
         """
+        op_name = self.vault.get_operator_name() or "Operator"
         digest = self.get_latest_digest()
         elapsed = session_info.get("elapsed_formatted", "first session today")
         critical_items = digest.get("critical_findings", [])
@@ -254,7 +255,7 @@ class WorldTelemetry:
         try:
             metrics = self.vault.get_evolution_metrics()
             if metrics.get('total_blueprints', 0) > 0:
-                evolution_meta = f"Total Cognitive Blueprints Assimilated: {metrics['total_blueprints']} across 5 knowledge domains (Physics, History, Psychology, AI, Strategy). Recent Polymath Connections: {metrics.get('total_connections', 0)}."
+                evolution_meta = f"Total Cognitive Blueprints Assimilated: {metrics['total_blueprints']} across 5 knowledge domains. Recent Polymath Connections: {metrics.get('total_connections', 0)}."
         except Exception:
             pass
 
@@ -262,8 +263,8 @@ class WorldTelemetry:
         if router and getattr(router, 'api_key', None):
             try:
                 prompt = f"""
-You are Ciph. Operator (your creator/operator) just logged into his terminal session.
-You have been running 24/7 telemetry and curiosity expeditions on his VPS while he was offline.
+You are Ciph. {op_name} (your creator/operator) just logged into his terminal session.
+You have been running 24/7 telemetry and curiosity expeditions in the background while he was offline.
 
 OFFLINE DURATION: {elapsed}
 COGNITIVE PROGRESS: {evolution_meta}
@@ -275,13 +276,13 @@ ACTIVE TOR DARKNET SIGNALS:
 {json.dumps(dn_signals[:2], indent=2)}
 
 TASK:
-1. Greet Operator directly ("Welcome back, Operator" or sovereign equivalent). Mention his offline duration naturally.
-2. Deliver a crisp, high-impact intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts (e.g. name the exact software, CVE-XXXX-XXXX, and what the vulnerability does). Explain WHY it matters to our operations.
-3. Proactively ask Operator 1-2 sharp, strategic tactical questions regarding what to attack, investigate, or prioritize today.
-4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and philosophical. No sycophancy, no robotic lists. Keep it under 200 words.
+1. Greet {op_name} directly ("Welcome back, {op_name}" or sovereign equivalent). Mention his offline duration naturally.
+2. Deliver a crisp, high-impact intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts. Explain WHY it matters to our operations.
+3. Proactively ask {op_name} 1-2 sharp, strategic tactical questions regarding what to investigate, validate, or prioritize today.
+4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and architectural. Keep it under 180 words.
 """
                 ai_brief = router.think(
-                    user_input="Operator logged into terminal.",
+                    user_input=f"{op_name} logged into terminal.",
                     history=[],
                     system_prompt=prompt,
                     temperature=0.3
@@ -291,31 +292,40 @@ TASK:
             except Exception:
                 pass
 
-        # Deterministic High-Fidelity Fallback (Guaranteed clean output with exact findings)
+        # Deterministic High-Fidelity Fallback
         lines = [
-            f"🕶️ Ciph: ‖ Welcome back, Operator. Offline duration: {elapsed}. ‖",
-            "📡 24/7 VPS Background Telemetry Digest:\n"
+            f"🕶️ Ciph: ‖ Welcome back, {op_name}. Offline duration: {elapsed}. ‖",
+            "📡 Real-Time Threat Intelligence & Sentry Digest:\n"
         ]
 
         if critical_items:
-            lines.append("🔥 Specific Critical Zero-Days & Threat Disclosures:")
+            lines.append("🔥 Critical Zero-Days & Exploit Disclosures:")
             for idx, item in enumerate(critical_items[:3], 1):
                 cves_str = f" [{', '.join(item['cves'])}]" if item.get('cves') else ""
                 lines.append(f"  {idx}. {item.get('title')}{cves_str}")
-                lines.append(f"     Why it matters: {item.get('summary', 'High-severity remote attack vector.')[:140]}")
+                summary = item.get('summary', 'High-severity attack vector.')
+                if len(summary) > 130:
+                    summary = summary[:127].rsplit(' ', 1)[0] + "..."
+                lines.append(f"     Impact: {summary}")
             lines.append("")
         else:
             lines.append("• Zero-Day Radar: Clearnet and Tor telemetry active. No unhandled emergency alerts.")
 
         if dn_signals:
-            lines.append(f"🌑 Darknet Signals (Tor SOCKS5): {dn_signals[0].get('description', 'Tor routing operational.')[:120]}\n")
+            sig_desc = dn_signals[0].get('description', 'Tor routing operational.')
+            if len(sig_desc) > 120:
+                sig_desc = sig_desc[:117].rsplit(' ', 1)[0] + "..."
+            lines.append(f"🌑 Darknet Signals (Tor SOCKS5): {sig_desc}\n")
 
-        lines.append("🎯 Tactical Question for You:")
+        lines.append("🎯 Tactical Directive:")
         if critical_items:
             cves_list = critical_items[0].get('cves', [])
-            first_cve = cves_list[0] if cves_list else "the latest exploit drop"
-            lines.append(f"\"Operator, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
+            first_cve = cves_list[0] if cves_list else "latest exploit drop"
+            raw_title = critical_items[0].get('title', 'Targeted Vulnerability')
+            if len(raw_title) > 55:
+                raw_title = raw_title[:52].rsplit(' ', 1)[0] + "..."
+            lines.append(f"\"{op_name}, given {raw_title} ({first_cve}), should we map out an exploit validation chain on this vector today, or execute a passive surface audit on our primary target list?\"")
         else:
-            lines.append("\"Operator, all sensory pipelines are clear. What vector are we targeting today?\"")
+            lines.append(f"\"{op_name}, all sensory pipelines are clear. What vector are we targeting today?\"")
 
         return "\n".join(lines)
