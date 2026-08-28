@@ -346,6 +346,17 @@ class CipherVault:
                 return None
         return None
 
+    def get_operator_name(self) -> Optional[str]:
+        """Get the authenticated operator's callsign/name from encrypted vault."""
+        return self.get_config("OPERATOR_NAME")
+
+    def set_operator_name(self, name: str) -> bool:
+        """Store the operator's callsign/name encrypted in vault."""
+        if not name or not name.strip():
+            return False
+        self.set_config("OPERATOR_NAME", name.strip())
+        return True
+
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         """Parse various date formats from feeds - FIXED TYPE HINT"""
         if not date_str:
