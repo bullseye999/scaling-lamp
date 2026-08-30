@@ -134,7 +134,7 @@ class CiphPersonality:
     def _remove_bullet_points(self, text: str) -> str:
         """
         Convert bullet/numbered lists to natural prose.
-        Ciph doesn't write lists — he talks.
+        Convert list-like output into natural prose when conversational mode requests it.
         """
         lines = text.split('\n')
         cleaned = []

@@ -39,10 +39,11 @@ class CipherVault:
     ENHANCED: PBKDF2 key derivation + MultiFernet backwards compatibility + strict WAL mode.
     """
 
-    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt"):
+    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt", legacy_key_file: str = "ciph.legacy.key"):
         self.db_path = db_path
         self.key_file = key_file
         self.salt_file = salt_file
+        self.legacy_key_file = legacy_key_file
         self._init_key()
         self._init_db()
 
@@ -61,28 +62,69 @@ class CipherVault:
             except Exception:
                 pass
 
-        # 2. Derive key from passphrase using PBKDF2HMAC (SHA256, 480,000 iterations)
-        passphrase = os.getenv("CIPH_VAULT_PASSPHRASE", "REDACTED_LEGACY_VALUE").encode()
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=480000,
-            backend=default_backend()
-        )
-        self.key = base64.urlsafe_b64encode(kdf.derive(passphrase))
-        
-        # 3. Setup MultiFernet for seamless backward compatibility with existing vaults
-        fernet_instances = [Fernet(self.key)]
+        # 2. Prefer an operator-supplied passphrase. Without one, use a
+        # random per-installation key stored in the ignored key file.
+        passphrase_value = os.getenv("CIPH_VAULT_PASSPHRASE")
+        stored_key = None
         if os.path.exists(self.key_file):
             try:
                 with open(self.key_file, 'rb') as f:
-                    legacy_key = f.read().strip()
-                if legacy_key and legacy_key != self.key:
-                    fernet_instances.append(Fernet(legacy_key))
+                    stored_key = f.read().strip()
+                if stored_key:
+                    Fernet(stored_key)  # Validate before use.
+            except Exception:
+                stored_key = None
+
+        # Optional ignored migration key ring keeps existing local vaults
+        # readable without embedding retired passphrases in public source.
+        legacy_keys = []
+        if self.legacy_key_file and os.path.exists(self.legacy_key_file):
+            try:
+                with open(self.legacy_key_file, 'rb') as f:
+                    candidates = [line.strip() for line in f if line.strip()]
+                for candidate in candidates:
+                    Fernet(candidate)
+                    if candidate not in legacy_keys:
+                        legacy_keys.append(candidate)
+            except Exception:
+                legacy_keys = []
+
+        fernet_instances = []
+        active_keys = []
+        if passphrase_value:
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=480000,
+                backend=default_backend()
+            )
+            self.key = base64.urlsafe_b64encode(kdf.derive(passphrase_value.encode()))
+            fernet_instances.append(Fernet(self.key))
+            active_keys.append(self.key)
+            if stored_key and stored_key != self.key:
+                fernet_instances.append(Fernet(stored_key))
+                active_keys.append(stored_key)
+        elif stored_key:
+            self.key = stored_key
+            fernet_instances.append(Fernet(self.key))
+            active_keys.append(self.key)
+        else:
+            self.key = Fernet.generate_key()
+            with open(self.key_file, 'wb') as f:
+                f.write(self.key)
+            try:
+                os.chmod(self.key_file, 0o600)
             except Exception:
                 pass
-        
+            fernet_instances.append(Fernet(self.key))
+            active_keys.append(self.key)
+
+        for legacy_key in legacy_keys:
+            if legacy_key not in active_keys:
+                fernet_instances.append(Fernet(legacy_key))
+                active_keys.append(legacy_key)
+
         self.cipher_suite = MultiFernet(fernet_instances)
 
     def _encrypt(self, data: str) -> str:
@@ -1052,7 +1094,7 @@ class CipherVault:
             conn = self._get_connection()
             c = conn.cursor()
             c.execute('''
-                INSERT OR REPLACE INTO operator_council_vault 
+                INSERT OR REPLACE INTO operator_council_vault
                 (id, thesis_title_enc, ciph_conclusion_enc, dialogue_prompt_enc, discussed_with_operator, created_at)
                 VALUES (?, ?, ?, ?, 0, ?)
             ''', (

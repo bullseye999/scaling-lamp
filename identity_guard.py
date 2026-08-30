@@ -59,7 +59,7 @@ class IdentityGuard:
     def setup_passphrase(self, passphrase: str, challenge_question: str = None,
                           challenge_answer: str = None) -> str:
         """
-        First time setup. the Operator sets his passphrase and optional challenge.
+        First-time setup for an operator passphrase and optional challenge.
         Passphrase stored as SHA256 hash — never plain text.
         """
         if len(passphrase) < 6:

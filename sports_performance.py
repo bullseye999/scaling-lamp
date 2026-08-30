@@ -419,6 +419,6 @@ if __name__ == "__main__":
     vault   = CipherVault()
     tracker = SportsPerformance(vault)
     print(tracker.terminal_report())
-    print("\nSetup: /setup-email from@gmail.com APP_PASSWORD to@gmail.com")
+    print("\nSetup: /setup-email sender@example.invalid APP_PASSWORD recipient@example.invalid")
     print("Then:  /start-daily-reports")
     print("Then:  /send-report")

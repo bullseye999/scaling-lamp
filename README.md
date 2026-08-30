@@ -214,7 +214,7 @@ python run_ciph.py
 ```text
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                  CIPH 3.0 • SOVEREIGN AUTONOMOUS INTELLIGENCE                  ║
-║    Repo: scaling-lamp (main@896ec7c) • Session: SSH Remote (102.88.110.233)    ║
+║    Repo: scaling-lamp (main@example) • Session: SSH Remote (203.0.113.42)      ║
 ║   Operator: Operator • AI: Active (Sovereign) • Tor: ACTIVE • Vault: ENCRYPTED ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 
@@ -247,7 +247,7 @@ Callsign > Spectre
 You: /bounty-scan stripe-sandbox.com
 
 [BountyHunter] Scanning target: stripe-sandbox.com
-[GhostTransport] Tor SOCKS5 active. Identity: 104.244.76.13
+[GhostTransport] Tor SOCKS5 active. Identity: 198.51.100.42
 [Phase 1] Passive Subdomain Cascade (AlienVault, Wayback, crt.sh):
   • api-dev.stripe-sandbox.com (200 OK)
   • static-assets.stripe-sandbox.com (404 Not Found - Azure Blob CNAME)
