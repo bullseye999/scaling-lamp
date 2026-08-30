@@ -1,24 +1,24 @@
 <div align="center">
 
-# ⚫️ CIPH 3.0
-### Sovereign Autonomous Intelligence, Offensive Reconnaissance & Tactical Operations Platform
+# ⚫️ CIPH 4.0
+### Unified Cognitive Nervous System & Autonomous Security Operations Runtime
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Tor](https://img.shields.io/badge/Network-Tor%20SOCKS5h-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Tests](https://img.shields.io/badge/Tests-52%2F52%20Passing-success?style=flat-square)](test_ciph_contracts.py)
 [![Storage](https://img.shields.io/badge/Storage-AES--256%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
-[![Intelligence](https://img.shields.io/badge/Engine-OpenAI--Compatible%20%2F%20LLM-412991?style=flat-square)](https://platform.openai.com)
-[![CVSS](https://img.shields.io/badge/Standard-CVSS%20v3.1-critical?style=flat-square)](https://www.first.org/cvss/)
-[![State Machine](https://img.shields.io/badge/State%20Machine-Epistemic%20CAS-008080?style=flat-square)](https://sqlite.org)
-[![Verification](https://img.shields.io/badge/Verification-Empirical%20AST%20%7C%20Receipts-success?style=flat-square)](https://github.com/pendragon360/scaling-lamp)
+[![Network Policy](https://img.shields.io/badge/Network-Tor%20SOCKS5h%20%7C%20DoH-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
+[![State Machine](https://img.shields.io/badge/Epistemic%20FSM-9--State%20DAG-008080?style=flat-square)](ciph/kernel/transmutation_dag.py)
+[![Predicate Safety](https://img.shields.io/badge/AST%20Validator-Zero%20eval()-critical?style=flat-square)](ciph/planner/predicates.py)
 [![License](https://img.shields.io/badge/License-MIT-black?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="#-what-is-ciph-30">Architecture</a> •
-  <a href="#-the-core-operational-engines">Core Engines</a> •
-  <a href="#-installation--quickstart">Quickstart & Installation</a> •
-  <a href="#-interactive-cli--demonstrations">Interactive Demos</a> •
-  <a href="#-categorized-command-catalog">Command Catalog</a> •
-  <a href="#-system-architecture-map">System Map</a> •
+  <a href="#-what-is-ciph-40">Overview</a> •
+  <a href="#-the-5-execution-lanes">Execution Lanes</a> •
+  <a href="#-architecture--core-subsystems">Architecture</a> •
+  <a href="#-verified-test-matrix">Verification</a> •
+  <a href="#-installation--quickstart">Installation</a> •
+  <a href="#-command-catalog">Command Catalog</a> •
+  <a href="#-security-boundaries--opsec">Security Boundaries</a> •
   <a href="#-fuel-the-build--support-ciph">Donate</a> •
   <a href="#-sovereign-contact">Contact</a>
 </p>
@@ -27,68 +27,128 @@
 
 ---
 
-## 🧠 What is CIPH 3.0?
+## 🧠 What is CIPH 4.0?
 
-**CIPH 3.0** is a sovereign, terminal-native autonomous intelligence operative designed for security researchers, bug bounty hunters, and tactical operators. Built for local execution and strict operational security, CIPH unifies real-time threat telemetry, Tor-routed passive reconnaissance, encrypted memory persistence, and multi-perspective strategic simulation into a single command-line interface.
+**CIPH 4.0** is an open-source, operator-governed cognitive runtime and autonomous security operations platform. Designed for vulnerability researchers, penetration testers, and security engineers, CIPH replaces sprawling tool monoliths with a **disciplined, decoupled nervous system**.
 
-Unlike generic AI chat wrappers, CIPH is deeply coupled with host system utilities, encrypted local storage, and an isolated SOCKS5h Tor transport layer. It operates under a **Fail-Closed** security architecture: zero external telemetry, local AES-256 encrypted SQLite databases, and autonomous background monitors that track live CVE disclosures, zero-day threat feeds, and attack surface changes.
+Every action within CIPH follows a deterministic operating grammar:
 
-When initialized, CIPH executes proactive terminal telemetry—detecting its Git repository remote, commit state, and incoming SSH/TTY environment. On first run, it guides the operator through an encrypted identity registry. On subsequent logins, CIPH calculates offline elapsed time, synthesizes critical vulnerability alerts, and bridges slash-command tool executions directly into conversational memory to eliminate AI context drift.
+$$\text{Intent} \longrightarrow \text{Risk Lane} \longrightarrow \text{Policy Check} \longrightarrow \text{Plan (AST Safe)} \longrightarrow \text{Worker Daemon} \longrightarrow \text{Execution Receipt} \longrightarrow \text{Red Team Gate} \longrightarrow \text{Epistemic DAG} \longrightarrow \text{Materialized Worldview}$$
+
+### Key Architectural Shifts in CIPH 4.0:
+* **Decoupled Limb Architecture**: Core coordinate runtime (`ciph.runtime`) interfaces with capabilities through formal typed manifests (`CapabilityManifest`) and dynamic registries (`CapabilityRegistry`).
+* **Cryptographic Event Store**: All state mutations are append-only and linked via SHA-256 tamper-evident hash chaining.
+* **Separation of Job and Claim States**: Operational machine execution (`JobState`: `QUEUED`, `LEASED`, `EXECUTING`, `SUCCEEDED`) is decoupled from epistemic belief state (`EpistemicCategory`: `OBSERVED`, `SUPPORTED`, `DISPUTED`, `SUPERSEDED`).
+* **Anti-TOCTOU Concurrency Leases**: Running workers pin claims to prevent race conditions during state supersessions.
+* **Two-Phase Invalidation Circuit Breakers**: Contradicting observations transition claims to `DISPUTED` before executing recursive invalidation cascades, protecting the knowledge base against transient network glitches.
+* **Zero-`eval()` AST Predicates**: Plan success conditions and policy guards evaluate strictly through Python AST validation.
 
 ---
 
-## ⚡ The Core Operational Engines
+## 🚦 The 5 Execution Lanes
 
-```
-                                  ┌───────────────────┐
-                                  │     CIPH 3.0      │
-                                  │ SOVEREIGN RUNTIME │
-                                  └─────────┬─────────┘
-        ┌───────────────────┬───────────────┼───────────────┬───────────────────┐
-        ▼                   ▼               ▼               ▼                   ▼
-┌───────────────┐   ┌───────────────┐ ┌───────────┐ ┌───────────────┐   ┌───────────────┐
-│ RECON & OPSEC │   │ THREAT INTEL  │ │ STRATEGY  │ │ COGNITIVE MEM │   │ DEV & STAGING │
-│ - GhostTor    │   │ - 24/7 Radar  │ │ - War Room│ │ - Neural Graph│   │ - Auto-Sandbox│
-│ - Takeovers   │   │ - Darknet Tor │ │ - Inverted│ │ - Callsign Id │   │ - Code Staging│
-│ - Subdomains  │   │ - CVE Feeds   │ │ - Red/Blue│ │ - Retroactive │   │ - Hot-Patching│
-└───────────────┘   └───────────────┘ └───────────┘ └───────────────┘   └───────────────┘
+CIPH routes incoming commands through five distinct risk lanes to eliminate unnecessary latency and enforce strict isolation:
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   CIPH 4.0 EXECUTION LANES                                       │
+├─────────────────────┬──────────────────┬─────────────────┬───────────────────┬───────────────────┤
+│ Lane                │ Risk / Reversib. │ Network Policy  │ Authorization     │ Handled Subsystem │
+├─────────────────────┼──────────────────┼─────────────────┼───────────────────┼───────────────────┤
+│ LANE 1: READ-ONLY   │ NONE / READ_ONLY │ OFFLINE_ONLY    │ AUTO              │ Vault & Memory    │
+│ LANE 2: LOCAL MATH  │ NONE / READ_ONLY │ OFFLINE_ONLY    │ AUTO              │ CVSS & Predictors │
+│ LANE 3: OBSERVATION │ LOW / READ_ONLY  │ TOR_MANDATORY   │ AUTO              │ OSINT & CT Recon  │
+│ LANE 4: CONSEQUENCE │ MED / REVERSIBLE │ LOCAL_ONLY      │ AUTO / BATCH      │ Staging & DB Rows │
+│ LANE 5: AUTONOMOUS  │ HIGH / COMPENS.  │ DIRECT_APPROVED │ MANDATORY_INTERR. │ Multi-Step DAGs   │
+└─────────────────────┴──────────────────┴─────────────────┴───────────────────┴───────────────────┘
 ```
 
-| Engine | Primary Modules | Operational Capabilities |
+---
+
+## 🏛️ Architecture & Core Subsystems
+
+```text
+                               ┌──────────────────────────────────────────────┐
+                               │                 CIPH RUNTIME                 │
+                               │        (Unified Cognitive Coordinator)       │
+                               └──────────────────────┬───────────────────────┘
+                                                      │
+         ┌───────────────────┬────────────────────────┼────────────────────────┬───────────────────┐
+         ▼                   ▼                        ▼                        ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐ ┌─────────────────┐
+│ PERCEPTION BUS  │ │   WORLDVIEW     │      │  DAG PLANNER &  │      │ DURABLE WORKER  │ │   REMEDIATION   │
+│   (Sensory)     │ │    MEMORY       │      │ SKILL REGISTRY  │      │     SERVICE     │ │  & ROLLBACK     │
+│                 │ │                 │      │                 │      │                 │ │                 │
+│ • Telemetry     │ │ • Active Forget │      │ • Fast-Path DAG │      │ • Out-of-Proc   │ │ • Failure       │
+│ • Darknet Tor   │ │ • 9-State FSM   │      │ • AST Safe Pred │      │   Daemon        │ │   Quarantine    │
+│ • CVE Feeds     │ │ • Transmutation │      │ • Parameterized │      │ • Canonical     │ │ • Deterministic │
+│ • System State  │ │   Belief DAG    │      │   Skill Cache   │      │   Receipts      │ │   Backups (T₀)  │
+│ • Git / Files   │ │ • Event Store   │      │ • Policy Engine │      │ • Red Team Gate │ │ • Compensations │
+└────────┬────────┘ └────────┬────────┘      └────────┬────────┘      └────────┬────────┘ └────────┬────────┘
+         │                   │                        │                        │                   │
+         └───────────────────┴────────────────────────┼────────────────────────┴───────────────────┘
+                                                      │
+                                                      ▼
+                                       ┌──────────────────────────────┐
+                                       │    OPERATOR SYNC ENGINE      │
+                                       │ • Deep-State Focus Cadence   │
+                                       │ • Interrupt Budget Batching  │
+                                       │ • Epistemic Dialogue Cards   │
+                                       └──────────────────────────────┘
+```
+
+| Package / Module | Description | Core Responsibilities |
 | :--- | :--- | :--- |
-| **1. Ghost Transport & OPSEC Routing** | `ghost_transport.py`, `tor_proxy.py`, `ciph_link_reader.py` | SOCKS5h Tor session pooling (`127.0.0.1:9050`), DoH remote DNS resolution over Tor, tracking parameter sanitization (`utm_*`, `fbclid=`), canary token and IP logger blocking, and fail-closed clearnet isolation. |
-| **2. Passive Bug Bounty Recon & Sentry** | `bounty_hunter.py`, `cvss_calculator.py` | Passive subdomain discovery cascade (AlienVault OTX, Wayback CDX, crt.sh), automated dangling CNAME takeover detection across 10+ cloud providers, GraphQL `__schema` introspection, historical surface diffs, and FIRST.org CVSS v3.1 scoring. |
-| **3. 24/7 Threat Radar & Sensory Telemetry** | `world_telemetry.py` | Continuous sensory sweeps across NVD NIST CVE feeds, PacketStorm, Exploit-DB, BleepingComputer, HackerNews, and security advisories. |
-| **4. Darknet Threat Intelligence** | `darknet_monitor.py` | Tor hidden service searching (Ahmia index), zero-day disclosure monitoring, ransomware data leak tracking, and technical breach correlation. |
-| **5. Proactive Terminal & Context Memory Bridge** | `ciph_core.py`, `enhanced_conversation.py` | Session offline time-away calculation, proactive login intelligence briefing, dynamic Git & SSH environment introspection, and seamless tool-to-memory context bridging. |
-| **6. Code Staging & Auto-Sandbox** | `code_staging.py` | Isolated code artifact generation (`ciph_staging/`), AST syntax verification, dependency resolution, subprocess sandbox execution tests, and 1-click atomic application with pre-write backups (`ciph_backups/`). |
-| **7. OSINT & Intelligence Mining** | `osint_miner.py`, `osint_catalog.py` | Live RSS threat feed aggregation, security advisory parsing, target profiling, and 3-tier failover feeds. |
-| **8. Network Pentest & Header Auditing** | `pentest_engine.py` | Local subnet host discovery, multi-threaded TCP port scanning, service banner grabbing, HTTP security header auditing, and CORS misconfiguration testing. |
-| **9. Adversarial War Room** | `war_room.py` | 3-perspective adversarial plan stress-testing (*The Hunter* / Red Team, *The Stoic* / Blue Team Risk, *The Arbiter* / CIPH Strategic Synthesis). |
-| **10. Cognitive Evolution & Knowledge Synthesis** | `ciph_evolution.py` | Autonomous background research exploration across philosophy, strategy, computer science, and systems design; structured blueprint synthesis and cross-domain knowledge linking. |
-| **11. High-Performance Knowledge Index** | `book_engine.py`, `file_analyzer.py` | In-memory inverted keyword indexing, local PDF/document library ingestion, and strategic knowledge synthesis. |
-| **12. Self-Awareness & Code Health** | `self_awareness.py` | Continuous AST code scanning, architectural stub detection, and automated upgrade proposals (`ciph_proposals/`) with safe review workflows. |
-| **13. Sovereign Neural Memory & Entity Graph** | `smart_memory.py`, `cipher_vault.py` | Encrypted operator identity management, episodic session narrative milestones, associative semantic entity graphs (Targets ↔ CVEs ↔ Tool Results), and retroactive conversation learning (`/retroactive-learn`). |
-| **14. Wealth Operations & Trading** *[Experimental]* | `trading_engine.py` | Real-time market data feeds, cross-exchange spread monitoring, momentum tracking, and quantitative indicators *(In Active Development)*. |
-| **15. Sports Analytics Engine** *[Experimental]* | `sports_predictor.py`, `sports_performance.py` | Multi-factor probabilistic modeling (Poisson distribution + xG metrics + historical form), result tracking, and automated performance summaries *(In Active Development)*. |
-| **16. Grounded Epistemic State Machine & Anti-Hallucination Receipts** | `ciph_kernel_v3.py`, `intent_resolver.py`, `cipher_vault.py` | 3-tier cryptographic runtime receipts (`DISPATCH`, `PROGRESS`, `COMPLETION` with SHA-256 integrity proofs), `HYPOTHESIS ➔ VERIFIED_REAL` state machine, Tabu Graveyard negative memory, Atomic CAS concurrency locks, and self-exhaustive pronoun/intent resolution. |
-| **17. Empirical Benchmarking & Evolution Bridge** | `ciph_benchmark.py`, `evolution_bridge.py` | Curiosity-to-code hypothesis converter (`SelfRelevanceAnalyzer`), isolated subprocess cold-load latency benchmarking, AST validation, and head-to-head empirical delta scorecards. |
+| **`ciph.kernel`** | Policy & Epistemic Engine | `NetworkPolicy`, `ReversibilityClass`, `TransmutationDAG` (9-state FSM), algorithmic `calculate_assurance_score()`, and `AdversarialRedTeamGate`. |
+| **`ciph.memory`** | Cryptographic Event Sourcing | SQLite WAL `EventStore` with SHA-256 hash chaining, composite `ClaimLeaseManager` (Anti-TOCTOU), `MaterializedWorldview` ($O(1)$ views), and recursive `ActiveForgettingEngine`. |
+| **`ciph.workers`** | Durable Worker System | Persistent `IPCJobQueue`, 11-state `JobState` machine, `ExecutionReceipt` with payload hashing, and `DurableWorkerDaemon` with background heartbeats. |
+| **`ciph.planner`** | Safe Deterministic Planner | AST-based `SafePredicateEvaluator` (zero `eval()`), `DAGExecutor` with Kahn's topological sort and atomic $T_0$ rollback, and 5-stage `SkillRegistry`. |
+| **`ciph.perception`** | Sensory Ingestion Bus | Canonical `Observation` contracts with freshness TTL checking and central `SensoryBus` pub/sub. |
+| **`ciph.operator`** | Attention & Dialogue Protocol | `DialogueFormatter` across 6 epistemic registers (`[FACT]`, `[OBSERVATION]`, `[INFERENCE]`, etc.) and `CadenceManager` focus rhythms. |
+| **`ciph.capabilities`** | Decoupled Limb Plugins | Uniform `BaseCapability` interface and `CapabilityRegistry` with in-place adapters for `BountyHunter`, `OSINTMiner`, and `SportsPredictor`. |
+| **`ciph/runtime.py`** | Cognitive Runtime Coordinator | Unified runtime dispatching execution across the 5 risk lanes, enforcing fail-closed network policies and authorization gates. |
+
+---
+
+## 🧪 Verified Test Matrix
+
+CIPH 4.0 maintains a comprehensive unit and regression test suite verifying state machines, cryptographic hash chains, concurrency locks, and backward-compatible command handling:
+
+```text
+======================================================================
+  Test Suite                                      Pass / Total   Result
+======================================================================
+  test_ciph_contracts.py (Contracts & Policy)         9 / 9       PASS (0.043s)
+  test_ciph_memory.py (Leases & Multi-Gen Cascade)    5 / 5       PASS (0.174s)
+  test_ciph_workers.py (Daemon & Heartbeat)           2 / 2       PASS (0.563s)
+  test_ciph_planner_operator.py (T0, 5-Stage Skill)   6 / 6       PASS (0.009s)
+  test_auth.py (Authentication & OpSec)               5 / 5       PASS (2.442s)
+  test_ciph_project_suite.py (Full Legacy Audit)     25 / 25      PASS (8.580s)
+======================================================================
+  TOTAL: 52 / 52 Tests Passing (0 Failures, 0 Regressions)
+======================================================================
+```
+
+To run the complete verification harness locally:
+```bash
+python3 test_ciph_contracts.py && python3 test_ciph_memory.py && python3 test_ciph_workers.py && python3 test_ciph_planner_operator.py && python3 test_auth.py && python3 test_ciph_project_suite.py
+```
 
 ---
 
 ## 🚀 Installation & Quickstart
 
-CIPH 3.0 is cross-platform and runs on **Linux**, **WSL2**, **macOS**, and native **Windows**.
+> **Prerequisite**: CIPH 4.0 requires **Python 3.12 or higher**.
 
 ---
 
-### 🐧 Option A: Linux / VPS (Debian, Ubuntu, Arch, Kali - Recommended)
+### 🐧 Option A: Linux / VPS (Debian, Ubuntu, Kali, Arch — Recommended)
 
-#### 1. System Requirements & Tor Setup
+#### 1. Install System Dependencies & Tor Daemon
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip python3-venv git tor curl
 
-# Start & verify Tor daemon
+# Start & verify local Tor daemon
 sudo systemctl enable --now tor
 curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
 ```
@@ -105,13 +165,13 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-#### 3. Configure API Keys & Launch
+#### 3. Launch CIPH 4.0
 ```bash
-# Optional: Set your OpenAI-compatible / DeepSeek API key in .env or via /setkey inside CLI
-nano .env
+# Launch Interactive Cognitive Shell
+python3 run_ciph.py
 
-# Launch CIPH
-python run_ciph.py
+# (Optional) Launch Background Durable Worker Daemon in separate terminal/tmux
+python3 run_worker.py --workers 2
 ```
 
 ---
@@ -122,79 +182,59 @@ python run_ciph.py
 ```powershell
 wsl --install -d Ubuntu
 ```
-*(Restart your machine if prompted, then open Ubuntu terminal)*.
+*(Restart your machine if prompted, then open your Ubuntu terminal)*.
 
-#### 2. Install Dependencies & Native Tor Daemon
+#### 2. Install Dependencies, Setup & Launch
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip python3-venv git tor curl
 sudo systemctl enable --now tor
-```
 
-#### 3. Clone & Setup CIPH
-```bash
 git clone https://github.com/pendragon360/scaling-lamp.git
 cd scaling-lamp
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
-```
 
-#### 4. Launch CIPH in WSL2
-```bash
-python run_ciph.py
+python3 run_ciph.py
 ```
 
 ---
 
-### 🪟 Option C: Windows Installation (Native PowerShell / Command Prompt)
+### 🪟 Option C: Windows Native (PowerShell / Command Prompt)
 
 #### 1. Prerequisites on Windows
-* **Python 3.10+**: Download from [python.org](https://www.python.org/downloads/) *(Ensure **"Add python.exe to PATH"** is checked)* or install via Windows Package Manager:
+* **Python 3.12+**: Download from [python.org](https://www.python.org/downloads/) *(Ensure **"Add python.exe to PATH"** is checked)* or install via Windows Package Manager:
   ```powershell
-  winget install Python.Python.3.11 Git.Git TorProject.Tor
+  winget install Python.Python.3.12 Git.Git TorProject.Tor
   ```
-* **Tor on Windows**: Install the Tor Expert Bundle via `winget` or run the [Tor Browser](https://www.torproject.org/download/) in the background (which provides a local SOCKS5 proxy on `127.0.0.1:9150` or `127.0.0.1:9050`).
+* **Tor on Windows**: Run the Tor Expert Bundle or keep [Tor Browser](https://www.torproject.org/download/) open in the background (provides SOCKS5 on `127.0.0.1:9150` or `127.0.0.1:9050`).
 
-#### 2. Clone the Repository
-```powershell
-git clone https://github.com/pendragon360/scaling-lamp.git
-cd scaling-lamp
-```
-
-#### 3. Create & Activate Virtual Environment
+#### 2. Clone & Setup Environment
 * **PowerShell**:
   ```powershell
+  git clone https://github.com/pendragon360/scaling-lamp.git
+  cd scaling-lamp
   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
   python -m venv venv
   .\venv\Scripts\Activate.ps1
+  pip install -r requirements.txt
+  copy .env.example .env
+  python run_ciph.py
   ```
-* **Command Prompt (CMD)**:
-  ```cmd
-  python -m venv venv
-  venv\Scripts\activate.bat
-  ```
-
-#### 4. Install Dependencies & Launch
-```powershell
-pip install -r requirements.txt
-copy .env.example .env
-python run_ciph.py
-```
 
 ---
 
 ### 🍎 Option D: macOS (Homebrew)
 
-#### 1. Install Prerequisites via Homebrew
+#### 1. Install Prerequisites
 ```bash
 brew install python git tor
 brew services start tor
 ```
 
-#### 2. Clone & Setup
+#### 2. Clone & Launch
 ```bash
 git clone https://github.com/pendragon360/scaling-lamp.git
 cd scaling-lamp
@@ -203,332 +243,55 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-python run_ciph.py
+python3 run_ciph.py
 ```
 
 ---
 
-## 🖥️ Interactive CLI & Demonstrations
+## 📖 Command Catalog
 
-### 1. Dynamic Startup & Telemetry Banner
-```text
-╔════════════════════════════════════════════════════════════════════════════════╗
-║                  CIPH 3.0 • SOVEREIGN AUTONOMOUS INTELLIGENCE                  ║
-║    Repo: scaling-lamp (main@example) • Session: SSH Remote (203.0.113.42)      ║
-║   Operator: Operator • AI: Active (Sovereign) • Tor: ACTIVE • Vault: ENCRYPTED ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+### 🎯 Bug Bounty & Reconnaissance
+* `/bounty-scan <target>` — Execute Tor-routed passive surface audit & subdomain enumeration
+* `/bounty-report <target>` — Generate structured vulnerability report with CVSS scoring
+* `/bounty-programs` — Query active HackerOne/Bugcrowd targets
+* `/bounty-status` — Review current bounty target telemetry
 
-Offline duration: 2 hours 14 minutes.
+### 📡 Real-World Telemetry & Darknet
+* `/darknet-scan` — Query Ahmia Tor index for threat disclosures
+* `/darknet-status` — Review active darknet feed telemetry
+* `/osint` — Trigger real-time threat feed aggregation
+* `/briefing` — Generate proactive login intelligence briefing
 
-While you were away, three critical threads surfaced on the 24/7 wire:
-1. Microsoft SharePoint RCE Chain: Two unpatched vulnerabilities chained for arbitrary code execution.
-2. CISA Red Team Assessment: Dual critical infrastructure compromises analyzed.
-3. OpenSSL Security Advisory: Vulnerability disclosed allowing arbitrary parameter overflow.
+### 🧠 Epistemics, Planning & Memory
+* `/hypotheses` — Review active engineering and intelligence hypotheses
+* `/memory-stats` — Inspect semantic entity and claim counts
+* `/retroactive-learn` — Ingest and link historical conversation entities
+* `/operator-council` — Review dialectic theses and strategic synthesis
+* `/book-advice <topic>` — Query in-memory inverted index of strategy and systems literature
 
-Type /help for commands, /exit to quit
-```
-
-### 2. First-Run Operator Registry Protocol
-```text
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                     CIPH 3.0 • OPERATOR REGISTRY PROTOCOL                    ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-🕶️ Ciph: ‖ Neural core online. Identity registry uninitialized. ‖
-🕶️ Ciph: ‖ Good day, Operator. What callsign or name shall I address you by? ‖
-
-Callsign > Spectre
-
-🕶️ Ciph: ‖ Identity established: Operator 'Spectre'. Knowledge architecture bound to your command. ‖
-```
-
-### 3. Passive Bug Bounty Recon Cascade
-```text
-You: /bounty-scan stripe-sandbox.com
-
-[BountyHunter] Scanning target: stripe-sandbox.com
-[GhostTransport] Tor SOCKS5 active. Identity: 198.51.100.42
-[Phase 1] Passive Subdomain Cascade (AlienVault, Wayback, crt.sh):
-  • api-dev.stripe-sandbox.com (200 OK)
-  • static-assets.stripe-sandbox.com (404 Not Found - Azure Blob CNAME)
-  • graphql.stripe-sandbox.com (200 OK)
-
-[Phase 2] Subdomain Takeover Verification:
-  [CRITICAL] static-assets.stripe-sandbox.com points to unclaimed Azure Blob container!
-  [CVSS Calculator] Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N (Score: 9.1 CRITICAL)
-
-[Phase 3] GraphQL Introspection Probe:
-  • Querying __schema { types { name } }...
-  • Introspection response: 242 types exposed (Sensitive mutations: resetPassword, elevateRole)
-
-[Phase 4] Report Synthesis:
-  • Markdown report compiled: bounty_reports/stripe-sandbox.com_report.md
-```
-
-### 4. Historical Recon Diffing (`/what-changed`)
-```text
-You: /what-changed stripe-sandbox.com
-
-[BountyHunter] Comparing current surface against SQLite baseline (2026-08-20)...
-
-🔄 RECON HISTORICAL DIFF:
-  [+] NEW ASSET: admin-internal.stripe-sandbox.com (First observed 2 hours ago)
-  [+] NEW PORT: api-dev.stripe-sandbox.com:8443 (HTTP/2 Alt-Svc)
-  [-] REMOVED: legacy-portal.stripe-sandbox.com (DNS NXDOMAIN)
-  [!] CHANGE: static-assets.stripe-sandbox.com CNAME updated to CloudFront
-
-Top Recommendation: Focus on newly spawned admin-internal.stripe-sandbox.com.
-```
-
-### 5. Tor-Routed Darknet Threat Hunting
-```text
-You: /darknet-deep "ransomware data leak"
-
-🌑 DARKNET TOR SEARCH RESULTS FOR: 'ransomware data leak'
-════════════════════════════════════════════════════════
-01. LockBit Ransomware Group Leak Blog
-    Onion: http://lockbit7z256lnpr...onion
-02. DarkLeak Repository - Incident Disclosures
-    Onion: http://darkleak3x9a10b...onion
-03. CyberThreat Technical Intelligence Drops
-    Onion: http://intelarchive4y1...onion
-════════════════════════════════════════════════════════
-```
-
-### 6. Autonomous Code Staging & Sandbox Verification
-```text
-You: "write a custom multi-threaded onion proxy scraper script"
-
-Ciph: I've engineered the requested multi-threaded Tor proxy scraper with automated
-      circuit rotation, error backoff, and fail-closed validation.
-
-┌─────────────────────────────────────────────────────────────────┐
-│ 📦 CODE ARTIFACT STAGED: ciph_staging/STG-001_tor_scraper.py    │
-│ Target: tools/tor_scraper.py | Size: 84 lines                   │
-│ Syntax: ✅ VALID                                                │
-│ Dependencies: requests, stem                                    │
-│   → ✅ Installed in virtual environment                         │
-│ Sandbox Test: ✅ PASSED (0.47s runtime, zero errors)            │
-│ Description: Multi-threaded onion scraper with circuit rotation │
-│ Status: PENDING OPERATOR APPROVAL                               │
-│                                                                 │
-│ Actions:                                                        │
-│   /apply STG-001   → Write to workspace (with backup)          │
-│   /review STG-001  → Preview the code cleanly                  │
-│   /reject STG-001  → Discard staged file                       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 7. Adversarial War Room Simulation
-```text
-You: /war-room "Targeting high-bounty enterprise GraphQL endpoints over Tor"
-
-════════════════════════════════════════════════════════════
-⚔️ CIPH WAR ROOM ADVERSARIAL STRESS-TEST
-════════════════════════════════════════════════════════════
-🔴 THE HUNTER (RED TEAM / ADVERSARY):
-- Rate-limiting thresholds: Enterprise WAFs flag burst introspection queries within 15 seconds.
-- Counter: Enforce timing jitter (1.5s - 3.5s) and rotate query field structures.
-
-🔵 THE STOIC (BLUE TEAM / RISK AUDIT):
-- Scope verification: Ensure target is explicitly in-scope before firing schema payloads.
-- Data containment: Never pull live customer records; rely strictly on type definitions.
-
-⚖️ THE ARBITER (CIPH STRATEGIC SYNTHESIS):
-- 1. Execute schema discovery passively through Wayback archives first.
-- 2. Trigger single-query introspection probes only on verified target endpoints.
-- 3. Generate instant CVSS v3.1 reports upon sensitive type confirmation.
-```
-
-### 8. Network Pentest & Header Audit
-```text
-You: /web-scan https://api.internal-target.com
-
-‖ Web scan: 3 vulnerabilities found ‖ Risk: HIGH ‖
-  • Missing Content-Security-Policy (CSP)
-  • Missing Strict-Transport-Security (HSTS)
-  • Access-Control-Allow-Origin: * (Wildcard with Credentials)
-```
-
-### 9. Grounded Autonomy & Self-Exhaustive Intent Resolution
-```text
-You: "what about the ones with teeth?"
-
-[IntentResolver] Scanning active runtime receipts and verified CVE disclosures...
-[Resolved] Target: ServiceNow CVSS 10.0 unauthenticated RCE, cPanel root takeover (Confidence: 0.95)
-
-Ciph: 🏛️ GROUNDED SITREP (VERIFIED RUNTIME RECEIPTS):
-      1. VERIFIED REALITY:
-         • ServiceNow (CVE-2024-4577): Critical unauthenticated RCE confirmed across 3 perimeter assets.
-         • cPanel Root Vector: Unclaimed DNS alias verified via receipt rcpt_comp_a56207de.
-      2. INFERENCE & BLAST RADIUS:
-         • High probability of lateral movement if external authentication bypass is chained with existing assets.
-      3. PROPOSED ACTION (KERNEL-SUBORDINATE):
-         • Stage passive vulnerability template verification against target in-scope endpoints.
-         • Run /bounty-scan stripe-sandbox.com to confirm perimeter boundary isolation.
-```
-
-### 10. Empirical Subprocess Benchmark Scorecard
-```text
-You: /benchmark-proposals
-
-🧪 EMPIRICAL BENCHMARK: 8 Historical Upgrade Proposals Audited
-═════════════════════════════════════════════════════════════════════
-• UP-006_brain_router_expansion.py: ✅ Syntax (LOC: 14, Latency: 0.16ms)
-• UP-007_brain_router_expansion.py: ✅ Syntax (LOC: 25, Latency: 0.18ms)
-• UP-008_ollama_optimizer.py:       ✅ Syntax (LOC: 15, Latency: 0.19ms)
-• UP-009_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.16ms)
-• UP-010_ollama_optimizer.py:       ✅ Syntax (LOC: 20, Latency: 0.16ms)
-• UP-011_hallucination_guard.py:    ✅ Syntax (LOC: 22, Latency: 0.19ms)
-• UP-012_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.21ms)
-• UP-013_brain_router_expansion.py: ✅ Syntax (LOC: 24, Latency: 0.16ms)
-
-┌─────────────────────────────────────────────────────────────────┐
-│ 🧪 CIPH EMPIRICAL BENCHMARK SCORECARD                           │
-├─────────────────────────────────────────────────────────────────┤
-│ Verdict       : ✅ IMPROVED (Recommendation: PROMOTE)           │
-│ Performance   : Baseline: 912.91ms  |  Candidate: 867.20ms      │
-│ Delta Score   : +5.01% latency improvement                      │
-│ Diagnostic    : Candidate is 5.01% faster with 0 syntax errors. │
-└─────────────────────────────────────────────────────────────────┘
-```
+### ⚙️ Runtime, Security & Core
+* `/status` — Display live subsystem operational telemetry
+* `/reality-check` — Verify live runtime assertions and integrity
+* `/modules` — List active decoupled modules
+* `/auth-status` — Inspect operator authorization mode
+* `/help` — Display operational manual
+* `/exit` — Gracefully flush episodic memory and terminate
 
 ---
 
-## 🕹️ Categorized Command Catalog
+## 🛡️ Security Boundaries & OpSec
 
-### 🧠 Cognitive Evolution & Grounded Epistemics
-* `/curiosity <on|off|status>` — 24/7 background research daemon
-* `/hypotheses` — View structured engineering hypotheses formulated by curiosity expeditions
-* `/bridge-status` — Inspect curiosity-to-code cognitive bridge & capability mappings
-* `/reanalyze-blueprints` — Retroactively mine historical blueprints and extract testable hypotheses
-* `/benchmark-proposals` — Run empirical AST and latency benchmarks across upgrade proposals
-* `/provenance <claim_id>` — Reconstruct full causal audit trail of evidence and state transitions
-* `/mind-log` — Recent cognitive discovery blueprints
-* `/mind-metrics` — Cognitive knowledge topology and growth dashboard
-* `/council` — Strategic dialectic synthesis
-* `/self-audit` — 24-hour metaconscious alignment & blind-spot self-audit
-* `/fetch <url>` — Anonymous link extraction & OPSEC audit over Tor
-* `/zeroize-mind` — Emergency cognitive purge & memory wipe
-
-### 🌐 Real-World & Darknet Intel
-* `/world-brief` — Real-time global threat radar & telemetry
-* `/sync-reality` — Instant multi-source sensory synchronization
-* `/world-map` — Clearnet & Tor sensor topology overview
-* `/darknet-scan` — Full asynchronous Tor threat & leak scan
-* `/darknet-deep <query>` — Search onion services & technical threat drops
-* `/darknet-report` — Itemized 3-tier darknet intelligence briefing
-
-### 🎯 Bounty Recon & Sentry
-* `/bounty-scope <text/url>` — Lock program scope & rules of engagement
-* `/bounty-scan <target>` — Comprehensive passive recon & attack surface audit
-* `/bounty-report <target>` — Draft verified HackerOne/Bugcrowd submission
-* `/bounty-list` — View active scopes and generated reports
-* `/what-changed <target>` — Historical recon snapshot diff engine
-* `/hit-list <target>` — Mathematical attack surface prioritization
-* `/chain-reaction <target>` — Multi-stage exploit graph & attack chains
-* `/watchtower` — Passive certificate transparency & sentry cycle
-* `/ghost-rating` — Tor SOCKS5h OPSEC & anonymity verification
-
-### 🤖 Agent Orchestration
-* `/auto-mode` — Launch autonomous intelligence workflows
-* `/start-workflow <name>` — Start specific background operation
-* `/stop-workflow <name>` — Terminate active workflow
-* `/workflow-status` — Inspect orchestrator pipeline state
-* `/stop-all-workflows` — Stop all background tasks
-
-### ⚔️ Strategy & War Room
-* `/daily-brief` — Executive summary of intelligence & operations
-* `/war-room <plan>` — Multi-perspective red team adversarial stress-test
-* `/timeline` — Narrative milestones & session compressions
-
-### 🔍 Pentesting & Code Auditing
-* `/port-scan <target>` — Network port & service enumeration
-* `/web-scan <url>` — Web application vulnerability scan
-* `/security-audit <target>` — Automated infrastructure security audit
-* `/network-discovery` — Discover live hosts on local network
-* `/ssl-scan <domain>` — SSL/TLS certificate & cipher audit
-* `/scan-project [path]` — AST codebase analysis & security scanning
-* `/search-in-files <term>` — High-speed pattern search across project
-* `/clean-footprints` — Secure shell and temporary trace sanitization
-* `/integrity-check` — Cryptographic verification of core system files
-* `/backup-now` — Create encrypted AES256 backup archive
-
-### 💰 Trading & Wealth Operations *[Experimental]*
-* `/market-data` — Real-time price and volume metrics across crypto assets
-* `/arbitrage-scan` — Detect cross-exchange spread and yield arbitrage
-* `/trading-signals` — Generate quantitative momentum and trend signals
-* `/market-trends` — Multi-asset market trend evaluation
-* `/wealth-strategy <amount>` — Projected wealth allocation model
-* `/portfolio-health` — Portfolio risk and health check
-
-### ⚽ Sports Analytics Engine *[Experimental]*
-* `/predict <home> vs <away>` — Run multi-factor probabilistic prediction model
-* `/sports-performance` — Display historical model accuracy telemetry
-* `/sports-stats` — Terminal performance report
-* `/auto-predict` — Trigger daily scheduled prediction workflow
-
-### 📦 Code Staging & Hot-Patching
-* `/staged` (or `/code`, `/upgrades`) — List pending, applied, and rejected code artifacts
-* `/apply <id>` — Verify AST syntax, backup target, and atomically apply staged code
-* `/review <id>` — Preview staged code lines cleanly
-* `/reject <id>` — Dismiss and archive a staged code proposal
-* `/rollback <file>` — Instantly restore the most recent pre-write backup
-
-### 🛡️ System & Identity
-* `/status` — Real-time subsystem operational metrics
-* `/model-status` — AI engine connection diagnostics
-* `/test-model` — Ping AI API latency and model response
-* `/setkey <key>` — Set or update your AI API key
-* `/set-name <callsign>` — Update operator callsign in encrypted vault
-* `/help` — Display command manual
-* `/exit` — Terminate session securely
-
----
-
-## 🧱 System Architecture Map
-
-```text
-run_ciph.py (Launcher & Dependency Verification)
-  └── ciph_core.py (Session Core, Router & Telemetry Event Loop)
-        ├── ciph_router.py ─────────► OpenAI-Compatible / Sovereign LLM Cognitive Engine
-        ├── intent_resolver.py ─────► Self-Exhaustive Pronoun & Context Target Resolver
-        ├── ciph_kernel_v3.py ──────► Epistemic State Machine, CAS Concurrency Locks & Receipts
-        ├── evolution_bridge.py ────► Curiosity-to-Code Self-Relevance & Hypothesis Analyzer
-        ├── ciph_benchmark.py ──────► Subprocess AST Syntax & Cold-Load Latency Benchmarker
-        ├── ghost_transport.py ─────► Fail-Closed Tor SOCKS5h & DoH DNS Resolver
-        ├── bounty_hunter.py ───────► Takeover, GraphQL, Parameter & CT Recon
-        │     └── cvss_calculator.py  ► Deterministic FIRST.org CVSS v3.1 Engine
-        ├── darknet_monitor.py ─────► Tor Hidden Service Threat Intelligence
-        ├── world_telemetry.py ─────► 24/7 Clearnet CVE & Tor Sensory Engine
-        ├── smart_memory.py ────────► Sovereign Neural Memory (Callsign & Entity Graph)
-        ├── code_staging.py ────────► Auto-Sandbox, Pip Resolver & Empirical Scorecards
-        ├── pentest_engine.py ──────► Port Scanner, Header Audit & CORS Analyzer
-        ├── war_room.py ────────────► 3-Perspective Adversarial Stress Tester
-        ├── ciph_evolution.py ──────► 24/7 Polymath Curiosity Daemon & Knowledge Engine
-        ├── ciph_link_reader.py ────► OPSEC Link Fetcher & Canary Blocker
-        ├── book_engine.py ─────────► High-Speed Inverted Index Strategic Wisdom
-        ├── self_awareness.py ──────► AST Code Auditor & Upgrade Proposals
-        ├── cipher_vault.py ────────► Epistemic Ledger, Runtime Receipts & AES-256 SQLite
-        ├── module_manager.py ──────► Dynamic Module Lifecycle Manager
-        └── security_layer.py ──────► GPG Backup Archive & Footprint Sanitizer
-```
-
----
-
-## 🛡️ Security & OPSEC Guarantees
-
-1. **Zero Clearnet Leakage**: `GhostTransport` enforces strict fail-closed connection pooling. If Tor drops, requests abort immediately without falling back to clearnet.
-2. **Leak-Proof Remote DNS**: Hostnames are resolved through DNS-over-HTTPS (DoH) over the Tor circuit, eliminating local ISP DNS resolver exposure.
-3. **Local Encryption**: All conversation logs, system states, and configuration tokens are encrypted before storage in SQLite `WAL` databases.
-4. **Context Bridge Synchronization**: Slash command execution outputs are parsed and bridged into conversational attention windows, preventing AI hallucinations on multi-turn technical queries.
-5. **Fail-Closed Code Execution**: Staged code is parsed via AST and tested in an isolated subprocess before any file write occurs; pre-write backups prevent code loss.
+1. **Fail-Closed Network Policy**: If a capability requires `TOR_MANDATORY` and the local Tor SOCKS5h circuit is unreachable, execution halts immediately without clearnet leakage. Capabilities marked `NETWORK_DENIED` are rejected at the runtime policy engine before execution.
+2. **Deterministic $T_0$ Rollbacks**: Operations classified as `REVERSIBLE` create structured file backups in `ciph_backups/` before execution. If a subsequent step in a DAG plan fails, the executor restores the pre-execution state and purges newly created dirty artifacts.
+3. **Safe AST Predicate Evaluation**: Plan conditions and dynamic policy checks are parsed strictly through Python Abstract Syntax Trees (AST), completely eliminating `eval()` code execution vectors.
+4. **Adversarial Gate Validation**: High-impact vulnerability claims undergo automated Red Team challenge checks to eliminate soft-404 false positives and ungrounded finding claims.
+5. **Local Cryptographic Encryption**: All conversation logs, system states, and configuration tokens are encrypted at rest using AES-256 in SQLite `WAL` mode.
 
 ---
 
 ## ☕ Fuel the Build & Support CIPH
 
-CIPH is an open-source sovereign intelligence and autonomous security research platform built without corporate backing. If CIPH accelerates your vulnerability research, bug bounty workflows, or operational intelligence, consider supporting continuous development.
+CIPH is an independent, open-source security intelligence runtime built for researchers. If CIPH accelerates your workflow or security operations, consider supporting continuous development:
 
 | Network | Asset | Address |
 | :--- | :--- | :--- |
@@ -538,10 +301,10 @@ CIPH is an open-source sovereign intelligence and autonomous security research p
 
 ## 📡 Sovereign Contact
 
-For research collaboration, operational feedback, or direct operator communication:
+For research inquiries, vulnerability disclosure, or feedback:
 
 * **Encrypted Mail**: `ciphcontact.ranger783@passinbox.com`
-* **Anonymous Session ID**: `05fa17d37438cb789700327416962eaa8649a582f66d06be63ef1b7f8b85b8fd09`
+* **Session ID**: `05fa17d37438cb789700327416962eaa8649a582f66d06be63ef1b7f8b85b8fd09`
 
 ---
 
