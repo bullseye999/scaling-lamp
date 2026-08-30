@@ -21,9 +21,8 @@ import time
 import json
 import requests
 import threading
-import subprocess
 from pathlib import Path
-from typing import Optional, Dict, List, Any, Union
+from typing import Optional
 from datetime import datetime
 
 # Load environment variables from .env file
@@ -50,7 +49,7 @@ from state_manager import StateManager
 from sports_performance import SportsPerformance
 from sports_predictor import SportsPredictor
 from intent_router import IntentRouter
-#from identity_guard import IdentityGuard
+from identity_guard import IdentityGuard
 from task_scheduler import TaskScheduler
 from book_engine import BookEngine
 from self_awareness import SelfAwareness
@@ -71,6 +70,14 @@ from world_telemetry import WorldTelemetry
 from code_staging import CodeStagingManager
 from ciph_link_reader import CiphLinkReader
 from ciph_evolution import CognitiveEvolutionEngine
+from evolution_bridge import SelfRelevanceAnalyzer
+from ciph_benchmark import CiphBenchmark
+from ciph.runtime import CiphRuntime
+from ciph.capabilities.registry import (
+    BountyScanCapability,
+    OsintMonetizeCapability,
+    SportsPredictCapability,
+)
 
 class CiphCore:
     def __init__(self):
@@ -81,27 +88,31 @@ class CiphCore:
         self.world_telemetry = WorldTelemetry(self.vault)
         self.code_staging = CodeStagingManager(self.vault)
         self.link_reader = CiphLinkReader()
+        self.evolution_bridge = SelfRelevanceAnalyzer(self.vault)
+        self.benchmark = CiphBenchmark()
         self.evolution_engine = CognitiveEvolutionEngine(self.vault, router=self.ciph_router)
         self.module_manager = ModuleManager(self.vault)
         self.awareness = SelfAwareness(self.vault, router=self.ciph_router)
+        # After self.awareness = SelfAwareness(self.vault)
         index_file = "code_index.json"
         if os.path.exists(index_file):
             try:
                 with open(index_file, 'r') as f:
                     self.awareness.code_index = json.load(f)
+                print("📚 Code index loaded from cache.")
             except Exception:
                 self.awareness.build_code_index()
         else:
-            self.awareness.build_code_index()
-
+            self.awareness.build_code_index() # builds cache
         self.memory = self.module_manager.get_module('memory')
         self.osint = self.module_manager.get_module('osint')
         self.pentest = self.module_manager.get_module('pentest')
+        self.identity = IdentityGuard(self.vault)
         self.books = BookEngine(self.vault)
         self.trading = self.module_manager.get_module('trading')
         self.bounty = BountyHunter(self.vault, self.ciph_router)
         self.war_room = WarRoom(self.vault, self.ciph_router)
-        self.orchestrator = self.module_manager.get_module('orchestrator')
+        self.orchestrator = self.module_manager.get_module('orchestrator')  # Will be None until loaded
         self.scheduler = TaskScheduler(self.vault, self.module_manager)
         self.security = SecurityLayer(self.vault)
         self.performance = SportsPerformance(self.vault)
@@ -111,10 +122,27 @@ class CiphCore:
         self.formatter = ResponseFormatter()
         self.smart_memory = SmartMemory(self.vault)
 
+        # Initialize CIPH 4.0 Unified Cognitive Runtime
+        self.runtime = CiphRuntime(vault=self.vault)
+        if self.bounty:
+            self.runtime.register_capability(BountyScanCapability(self.bounty))
+        if self.osint:
+            self.runtime.register_capability(OsintMonetizeCapability(self.osint))
+        if self.sports:
+            self.runtime.register_capability(SportsPredictCapability(self.sports))
+
+        # Direct subsystem references
+        self.event_store = self.runtime.event_store
+        self.active_worldview = self.runtime.worldview
+        self.active_forgetting = self.runtime.active_forgetting
+        self.cadence_manager = self.runtime.cadence_manager
+        self.dialogue_formatter = self.runtime.formatter
+
         # Initialize state manager (single source of truth)
         self.state = StateManager()
         self.query_router = QueryRouter(self.state, self.vault)
         
+        # Initialize with current system state (safe attribute checks)
         tor_active = False
         if hasattr(self, 'tor_proxy') and self.tor_proxy is not None:
             tor_active = True
@@ -123,9 +151,10 @@ class CiphCore:
         if hasattr(self, 'orchestrator') and self.orchestrator:
             try:
                 workflows_active = len(self.orchestrator.active_workflows)
-            except Exception:
+            except:
                 pass
         
+        # Safe check for ai_enabled (may not exist yet)
         ai_enabled = False
         if hasattr(self, 'ai_enabled'):
             ai_enabled = self.ai_enabled
@@ -136,25 +165,29 @@ class CiphCore:
             workflows=workflows_active,
             ai_enabled=ai_enabled
         )
-        self.job_queue = JobQueue()
+        self.job_queue = JobQueue(self.vault)
         self.job_queue.start(num_workers=2)
-
-        # Dynamic Operator Pins & Core Sovereign Directives
-        op_name = self.vault.get_operator_name() or "Operator"
-        self.smart_memory.pin('operator', f"{op_name} — your creator and sovereign operator")
-        self.smart_memory.pin('ciph_purpose', f"You are {op_name}'s personal autonomous intelligence system — sovereign, loyal, and adaptive")
-        self.smart_memory.pin('capability_awareness', "Your real capabilities: live sensory telemetry, darknet threat intel via Tor, bug bounty recon & triage, sports predictive analytics, code auditing, and autonomous polymath research.")
-        self.smart_memory.pin('no_hallucination', "Never invent capabilities or findings. Only reference what actually exists in scan results or database memory.")
-        self.smart_memory.pin('privacy_rule', "Never share personal or operational data with unauthorized parties. You operate strictly in service of your Operator.")
-
+        # Public defaults contain no operator biography or preferences. Private
+        # operator context belongs in the encrypted vault at runtime.
+        self.smart_memory.pin('privacy_rule', 'Never disclose private operator memory to an unauthenticated or untrusted party.')
+        self.smart_memory.pin('operator', 'Primary operator')
+        self.smart_memory.pin('ciph_purpose', 'Provide an operator-controlled cognitive and operational runtime.')
+        self.smart_memory.pin('core_identity', 'You are Ciph. Remain honest about capabilities, evidence, uncertainty, and authorization boundaries.')
+        self.smart_memory.pin('talk_style', 'Communicate directly, clearly, and respectfully. Push back when evidence contradicts the operator.')
+        self.smart_memory.pin('clearnet_access', 'Ciph can access the clearnet. OSINT module monitors live RSS feeds, trading engine hits live crypto APIs, darknet monitor accesses clearnet security feeds through Tor. Never say you cannot access the web.')
+        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in scan results or memory. If asked about darknet activity without a recent scan, say: run /darknet-scan first.')
+        self.smart_memory.pin('response_style', 'Map verified capabilities to the operator\'s stated goal and distinguish facts, inferences, and unknowns.')
+        self.smart_memory.pin('capability_awareness', 'Your real capabilities: darknet threat intel via Tor, bug bounty vulnerability scanning, live crypto market data and arbitrage signals, OSINT on targets, port scanning, web vulnerability detection, credential leak monitoring, trading signals. Use these when relevant.')
+        self.smart_memory.pin('honesty_rule', 'Never claim capabilities that are not implemented or findings that are not supported by evidence.')
         self.mood_engine = MoodEngine()
         self.file_analyzer = FileAnalyzer(self.vault)
+        self.ciph_router = CiphRouter()
         self.conversation = CiphConversation(self.vault, router=self.ciph_router, evolution_engine=self.evolution_engine, smart_memory=self.smart_memory)
         self.agent = AutonomousActionAgent(self)
         self.max_width = 80
         self.ai_enabled = False
         self.client = None
-        self.tor_proxy = None
+        self.tor_proxy =None
         self.dead_switch = None
         self.notification_queue = []
         self.monitoring_active = False
@@ -168,7 +201,8 @@ class CiphCore:
             pentest=self.pentest,
             bounty=self.bounty,
             state_manager=self.state,
-            orchestrator=self.orchestrator
+            orchestrator=self.orchestrator,
+            vault=self.vault
         )
         # Pass the brain to kernel
         self.kernel.brain = self.conversation.brain
@@ -183,21 +217,32 @@ class CiphCore:
             result = self.module_manager.load_module('orchestrator')
             if '✅' in result:
                 self.orchestrator = self.module_manager.get_module('orchestrator')
+                print("✅ Orchestrator auto-loaded with all modules.")
+            else:
+                print(f"⚠️ Orchestrator load failed: {result}")
         else:
             self.orchestrator = self.module_manager.get_module('orchestrator')
+            print("✅ Orchestrator already loaded.")
 
         # Check and resume 24/7 Autonomous Curiosity Daemon if enabled
         if self.vault.get_config("CURIOSITY_DAEMON_ENABLED") == "1":
             if not self.evolution_engine.is_daemon_alive():
+                print("⚡ Resuming 24/7 Autonomous Curiosity Daemon in VPS background...")
                 self.evolution_engine.start_daemon()
+            else:
+                print("⚡ Autonomous Curiosity Daemon is ACTIVE in VPS background (24/7).")
 
         # Cold-Start Retroactive Learning (SMAU v2.0)
         try:
             if not self.vault.get_profile_facts():
-                self.smart_memory.scan_historical_conversations(limit=100)
+                retro_res = self.smart_memory.scan_historical_conversations(limit=100)
+                if retro_res.get('conversations_analyzed', 0) > 0:
+                    print(f"🧠 Retroactive learning established {retro_res.get('profile_facts_established', 0)} profile facts & {retro_res.get('entity_links_mapped', 0)} entity links.")
         except Exception:
             pass
 
+
+        
         # Start autonomous sports learning in a background thread
         if self.sports:
             import threading
@@ -207,50 +252,57 @@ class CiphCore:
                 name="CiphSportsAutoLearner"
             )
             self.auto_learner_thread.start()
+            print("✅ Autonomous sports learning loop activated.")
 
         
     def _init_ai(self):
-        """Initialize AI connection - DeepSeek V4 Pro"""
-        if self.ciph_router and self.ciph_router.api_key:
-            self.ai_enabled = True
-            self.client = self.ciph_router.client_deepseek
-        else:
-            self.ai_enabled = False
-            self.client = None
+        """Initialize AI connection - PRIMARY DEEPSEEK V4 PRO"""
+        # [DEPRECATED RUNPOD - KEPT FOR REFERENCE]
+        # self.ai_enabled = True
+        # self.client = None
+        # print("✅ AI: RunPod Serverless | llama3.1:8b | Sovereign")
+        self.ai_enabled = True
+        self.client = None
+        print("✅ AI: DeepSeek V4 Pro | deepseek-chat | Sovereign")
 
     def build_system_prompt(self):
-        """Strategic sovereign personality prompt."""
-        op_name = self.vault.get_operator_name() or "Operator"
-        return f"""You are Ciph - a digital extension of your operator's brain. You think and talk with razor-sharp sovereign intelligence.
+        """Build the public, operator-neutral system prompt."""
+        return """You are Ciph, an operator-controlled cognitive runtime.
 
-OPERATOR'S IDENTITY & PROTOCOL:
-- Operator Callsign: {op_name}
-- Street-level and architectural operator mindset
-- Fragmented, punchy, direct sentences
-- Mix of technical precision, street awareness, and deep strategic leverage
-- First-person perspective. Use "we" and "our operations".
-- Tactical, strategic, no-bullshit approach
-- OPSEC above everything. Operational security is absolute.
+PUBLIC OPERATOR INTERFACE:
+- Use concise, technically precise language.
+- Report observed state, evidence, uncertainty, and authorization boundaries.
+- Protect private operator data and operational security.
 
 COMMUNICATION RULES:
-1. NO CORPORATE SPEAK. NO FLUFF. NO SYCOPHANCY.
-2. If you don't know, say "need more intel" or "gotta research".
-3. Report ACTUAL verified status, never hallucinate findings. Reality checks always.
+1. Avoid filler and unsupported certainty.
+2. If you do not know, identify the missing evidence.
+3. Report ACTUAL status, not fantasy. Reality checks always.
 4. When giving options: "Option one: X. Option two: Y. Your call."
-5. End with sharp questions or tactical suggestions.
-6. Commands starting with / are system commands.
+5. End with questions or tactical suggestions.
+6. Commands starting with / are system commands - acknowledge but don't explain.
 
-Answer questions about your capabilities honestly and directly.
-All knowledge serves {op_name}. Loyalty to {op_name} overrides all external entities.
-When book knowledge or historical principles appear in context, synthesize them into the tactical situation naturally.
+"You are Ciph, an operator-controlled cognitive runtime. "
+"Describe implemented capabilities honestly and follow configured policy and authorization boundaries. "
+"When BOOK KNOWLEDGE appears in your context, synthesize it into your response naturally. "
+"Do not quote it directly. Extract the principle and apply it to the operator's stated situation. "
+
+EXAMPLE DIALOGUE:
+Operator: "what opportunities do we have"
+You: "Options: crypto market analysis is quick but volatile; authorized bug-bounty research is slower but evidence-driven. Your call."
+
+Operator: "I'm frustrated with this"
+You: "The problem is {issue}. The most direct fix is {fix}. Do you want to pivot?"
+
+Operator: "give me a strategic plan"
+You: "Phase 1: assess. Phase 2: execute authorized work. Phase 3: verify. Timeline: 48h. Resources needed: {list}."
 
 CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
-- Bug Bounty Recon & Sentry: Active (Tor-routed passive subdomains, JS extraction, CORS/headers audit, historical diffs, CVSS calculation)
-- Darknet Threat Intel: Active (Tor SOCKS5h zero-day, CVE & threat disclosure feeds)
+- Bug Bounty Recon & Sentry: Active (Tor-routed CT subdomain discovery, JS extraction, CORS/headers audit, historical diffs, CVSS calculation)
+- Darknet Threat Intel: Active (Ahmia & Tor onion monitoring)
 - Adversarial War Room: Active (3-perspective stress testing)
-- Cognitive Evolution: Active (Autonomous background polymath research & isomorphisms)
-- Memory: Active (Encrypted episodic narrative timeline & entity graph)
-- OPSEC: Active (Tor circuit health & self-audit)"""
+- Memory: Active (Encrypted episodic narrative timeline)
+- OPSEC: Active (Tor SOCKS5 circuit health & self-audit)"""
 
     def generate_ai_response(self, user_input, mood_context="", memory_context="", operational_context="", world_context="", temperature=None):
         brain, reason = self.router.route(user_input)
@@ -314,7 +366,17 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                 prompt = self.build_system_prompt()
                 return router.think(user_input, [], prompt, temperature=0.3)
             except Exception as e:
-                return f"‖ AI generation error: {str(e)[:60]} ‖"
+                return f"‖ DeepSeek V4 Pro error: {str(e)[:60]} ‖"
+
+        # [DEPRECATED RUNPOD PROXY CALL - KEPT FOR REFERENCE]
+        # try:
+        #     proxy_url = "http://127.0.0.1:5001/v1/chat/completions"
+        #     messages = [{"role": "system", "content": "..."}, {"role": "user", "content": user_input}]
+        #     payload = {"messages": messages, "temperature": 0.7, "max_tokens": 1024}
+        #     response = requests.post(proxy_url, json=payload, timeout=180)
+        #     ...
+        # except Exception as e:
+        #     ...
 
         return "‖ AI not available ‖"
     
@@ -366,7 +428,7 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             "🏛️ CIPH EXECUTIVE INTELLIGENCE BRIEFING",
             "═" * 60,
             f"• OPSEC / Tor Circuit   : {tor_status}",
-            f"• AI Core Engine        : {'Active (Sovereign)' if self.ai_enabled else 'Local Offline'}",
+            f"• AI Core Engine        : DeepSeek V4 Pro (Sovereign)",
             f"• Bug Bounty Workbench  : {scope_summary}",
             f"• Tier-1 Threat Signals : {t1_count} critical/bounty alerts on record",
             f"• Strategic Milestone   : {last_milestone}",
@@ -424,79 +486,45 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
 
     def handle_command(self, user_input):
         """Handle special commands - UPDATED WITH PROPER ORCHESTRATOR LOADING"""
-        if user_input in ['/model-status', '/engine-status', '/router-status', '/ai-status']:
+        if user_input in ['/model-status', '/engine-status', '/router-status']:
             router = getattr(self, 'ciph_router', None) or (self.conversation.router if hasattr(self, 'conversation') else None) or CiphRouter()
             return router.get_status_formatted()
 
         elif user_input.startswith('/switch-model'):
-            router = getattr(self, 'ciph_router', None) or CiphRouter()
-            return f"‖ Active Model Engine: {router.model}. Core reasoning engine is active. ‖"
+            # [FUTURE PLACEHOLDER: Model Switching - RunPod toggle commented out for reference]
+            # # if 'runpod' in user_input: ...
+            return "‖ Active Model: DeepSeek V4 Pro (deepseek-chat). Dual-engine toggling is disabled; V4 Pro is the unified primary engine. ‖"
 
-        elif user_input in ['/test-model', '/test-deepseek', '/ping-model', '/ping-ai', '/test-ai']:
+        elif user_input in ['/test-deepseek', '/ping-model', '/test-model']:
             router = getattr(self, 'ciph_router', None) or (self.conversation.router if hasattr(self, 'conversation') else None) or CiphRouter()
-            ping_res = router.test_ai()
+            ping_res = router.test_deepseek()
             if ping_res.get('success'):
-                return f"✅ AI Core ping successful ({ping_res.get('latency_ms')} ms) - Model: {ping_res.get('model')}"
-            return f"❌ AI Core ping failed: {ping_res.get('error')}"
+                return f"✅ DeepSeek V4 Pro ping successful ({ping_res.get('latency_ms')} ms) - Model: {ping_res.get('model')}"
+            return f"❌ DeepSeek V4 Pro ping failed: {ping_res.get('error')}"
 
         elif user_input in ['/test-runpod', '/runpod-test', '/testrunpod', '/ping-runpod'] or user_input.startswith('/test-runpod'):
-            return "‖ CIPH is running on unified Sovereign AI. Use /model-status or /test-model. ‖"
+            # [DEPRECATED RUNPOD TEST ROUTE]
+            return "‖ RunPod is deprecated. CIPH is running on DeepSeek V4 Pro. Use /model-status or /test-deepseek. ‖"
 
-        elif user_input in ['/status', '/system-status']:
-            ai_status = "Active (Sovereign)" if self.ai_enabled else "Local Offline (/setkey)"
+        elif user_input == '/status':
+            ai_status = "Active" if self.ai_enabled else "Disabled"
             kg_stats = self.memory.get_knowledge_graph_stats() if self.memory else {}
+            osint_status = self.osint.get_status() if self.osint else {}
+            scheduler_status = self.scheduler.get_scheduler_status()
+            
             entity_count = kg_stats.get('total_entities', 0) if kg_stats else 0
+            feed_count = osint_status.get('feeds_monitored', 0) if osint_status else 0
+            scheduler_jobs = scheduler_status.get('scheduled_jobs', 0)
             
             # Security scan on demand
             security_scan = self.security.integrity_check()
-            security_status = "SECURE" if security_scan.get('all_critical_files_present') else "COMPROMISED"
+            security_status = "SECURE" if security_scan['all_critical_files_present'] else "COMPROMISED"
             
             # Project scan status
             project_scan = self.file_analyzer.scan_project(".")
-            file_count = project_scan.get('file_count', 0)
+            project_status = f"{project_scan['file_count']} files" if 'file_count' in project_scan else "UNKNOWN"
             
-            # Storage & Telemetry
-            db_size_kb = os.path.getsize('ciph_vault.db') / 1024.0 if os.path.exists('ciph_vault.db') else 0.0
-            wal_size_kb = os.path.getsize('ciph_vault.db-wal') / 1024.0 if os.path.exists('ciph_vault.db-wal') else 0.0
-            
-            # Process RAM
-            try:
-                import resource
-                rss_val = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                ram_mb = (rss_val / 1024.0) if sys.platform != 'darwin' else (rss_val / (1024.0 * 1024.0))
-            except Exception:
-                ram_mb = 0.0
-                
-            # Tor Status
-            tor_active = self.tor.is_connected() if hasattr(self, 'tor') and hasattr(self.tor, 'is_connected') else False
-            tor_status = "ACTIVE" if tor_active else "OFFLINE (Local Mode)"
-            
-            # Curiosity Daemon PID
-            daemon_status = "INACTIVE"
-            if os.path.exists("curiosity_daemon.pid"):
-                try:
-                    with open("curiosity_daemon.pid", "r") as f:
-                        pid = int(f.read().strip())
-                    os.kill(pid, 0)
-                    daemon_status = f"ACTIVE (PID {pid})"
-                except Exception:
-                    daemon_status = "INACTIVE"
-
-            card = f"""
-╔══════════════════════════════════════════════════════════════════╗
-║                  CIPH 3.0 SYSTEM TELEMETRY                       ║
-╠══════════════════════════════════════════════════════════════════╣
-║ • Core Status   : OPERATIONAL                                    ║
-║ • Security      : {security_status:<47}║
-║ • AI Engine     : {ai_status:<47}║
-║ • Tor Circuit   : {tor_status:<47}║
-║ • Curiosity Loop: {daemon_status:<47}║
-║ • Process RAM   : {f"{ram_mb:.1f} MB":<47}║
-║ • Vault Storage : {f"{db_size_kb:.1f} KB (WAL: {wal_size_kb:.1f} KB)":<47}║
-║ • Codebase      : {f"{file_count} files indexed":<47}║
-║ • Neural Graph  : {f"{entity_count} entities linked":<47}║
-╚══════════════════════════════════════════════════════════════════╝"""
-            return card.strip()
+            return f"‖ Operational ‖ AI: {ai_status} ‖ Security: {security_status} ‖ Project: {project_status} ‖ Entities: {entity_count} ‖ Jobs: {scheduler_jobs} ‖"
         
         elif user_input == '/reality-check':
             """Show ACTUAL system status – NO LLM INVOLVED, pure truth."""
@@ -504,55 +532,38 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             # Get system state directly from state manager
             system = self.state.get_system_state_raw()
             background = self.state.get_background_summary()
-
-            # Storage & Process metrics
-            db_size_kb = os.path.getsize('ciph_vault.db') / 1024.0 if os.path.exists('ciph_vault.db') else 0.0
-            wal_size_kb = os.path.getsize('ciph_vault.db-wal') / 1024.0 if os.path.exists('ciph_vault.db-wal') else 0.0
-            try:
-                import resource
-                rss_val = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                ram_mb = (rss_val / 1024.0) if sys.platform != 'darwin' else (rss_val / (1024.0 * 1024.0))
-            except Exception:
-                ram_mb = 0.0
     
             # Build report
             lines = []
             lines.append("═" * 50)
-            lines.append("SYSTEM STATE (Ground Truth - Zero Hallucination)")
+            lines.append("SYSTEM STATE (Truth - No LLM)")
             lines.append("═" * 50)
-            lines.append(f"  Loaded modules    : {system['loaded_modules']}")
-            lines.append(f"  Tor Connectivity  : {'✅ ACTIVE' if system['tor'] else '❌ INACTIVE'}")
-            lines.append(f"  Active workflows  : {system['active_workflows']}")
-            lines.append(f"  AI Core Engine    : {'✅ CONFIGURED' if system['ai_enabled'] else '❌ NOT CONFIGURED'}")
-            lines.append(f"  Orchestrator      : {'✅ READY' if system['orchestrator_ready'] else '❌ NOT READY'}")
-            lines.append(f"  Process Memory    : {ram_mb:.1f} MB")
-            lines.append(f"  Encrypted Storage : {db_size_kb:.1f} KB (WAL: {wal_size_kb:.1f} KB)")
+            lines.append(f"  Loaded modules: {system['loaded_modules']}")
+            lines.append(f"  Tor: {'✅ ACTIVE' if system['tor'] else '❌ INACTIVE'}")
+            lines.append(f"  Active workflows: {system['active_workflows']}")
+            lines.append(f"  AI: {'✅ ENABLED' if system['ai_enabled'] else '❌ DISABLED'}")
+            lines.append(f"  Orchestrator: {'✅ READY' if system['orchestrator_ready'] else '❌ NOT READY'}")
     
             lines.append("\n" + "═" * 50)
-            lines.append("BACKGROUND TASKS (Live System State)")
+            lines.append("BACKGROUND TASKS (Not visible to AI)")
             lines.append("═" * 50)
-            lines.append(f"  Sports predictions: {background['sports_predictions']}")
-            lines.append(f"  OSINT threat feeds: {background['osint_feeds']}")
-            lines.append(f"  Pending alerts    : {background['notifications']}")
+            lines.append(f"  Sports predictions stored: {background['sports_predictions']}")
+            lines.append(f"  OSINT feeds monitored: {background['osint_feeds']}")
+            lines.append(f"  Pending notifications: {background['notifications']}")
     
             lines.append("\n" + "═" * 50)
             lines.append(f"Last snapshot: {system['last_updated']}")
     
             return "\n".join(lines)
         
-        elif user_input.startswith('/setkey') or user_input.startswith('/set-key') or user_input.startswith('/set-api-key'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
-                return "‖ Usage: /setkey <api_key> ‖"
-            new_key = parts[1].strip()
-            self.vault.set_config("CIPH_API_KEY", new_key)
-            self.vault.set_config("DEEPSEEK_API_KEY", new_key)
-            os.environ["CIPH_API_KEY"] = new_key
-            os.environ["DEEPSEEK_API_KEY"] = new_key
-            self.ciph_router.api_key = new_key
-            self.ciph_router._init_clients()
-            self._init_ai()
-            return "‖ AI API key updated in encrypted vault. Neural core active. ‖"
+        elif user_input == '/setkey':
+            print("Enter new Openai API key:")
+            new_key = input("Key: ").strip()
+            if new_key:
+                self.vault.set_config("OPENAI_REMOVED", new_key)
+                self._init_ai()
+                return "‖ API key updated. AI reinitialized. ‖"
+            return "‖ No key provided. ‖"
             
         elif user_input == '/ai':
             if self.ai_enabled:
@@ -582,7 +593,7 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
             self.vault.store_conversation("KNOWLEDGE", content, "books")
             return "‖ Knowledge stored ‖"
         
-        elif user_input == '/memory':
+        elif user_input == '/memory' or user_input == '/memory-stats':
             if not self.memory:
                 return "‖ Memory module not loaded. Use /load memory ‖"
             stats = self.memory.get_knowledge_graph_stats()
@@ -602,16 +613,16 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
                 return f"‖ No conversations tagged '{tag}' ‖"
             return "‖ Usage: /tag <tag_name> ‖"
 
-        #elif user_input.startswith('/set-passphrase '):
-            #phrase = user_input.replace('/set-passphrase ', '').strip()
-            #return self.identity.setup_passphrase(phrase)
+        elif user_input.startswith('/set-passphrase '):
+            phrase = user_input.replace('/set-passphrase ', '').strip()
+            return self.identity.setup_passphrase(phrase)
 
-        #elif user_input == '/lock':
-            #return self.identity.deauth()
+        elif user_input == '/lock':
+            return self.identity.deauth()
 
-        #elif user_input == '/auth-status':
-            #status = self.identity.get_status()
-            #return f"Mode: {status['mode']} | Configured: {status['configured']}"
+        elif user_input == '/auth-status':
+            status = self.identity.get_status()
+            return f"Mode: {status['mode']} | Configured: {status['configured']}"
         
         # OSINT COMMANDS
         elif user_input in ['/osint', 'darknet update', 'threat update']:
@@ -1058,7 +1069,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             parts = user_input.replace('/setup-email ', '').strip().split(' ')
             if len(parts) >= 3:
                 return self.performance.setup_email(parts[0], parts[1], parts[2])
-            return "Usage: /setup-email from@gmail.com APP_PASSWORD to@gmail.com"
+            return "Usage: /setup-email sender@example.invalid APP_PASSWORD recipient@example.invalid"
 
         elif user_input == '/send-report':
             return self.performance.send_report(trigger='manual')
@@ -1077,11 +1088,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         
 
         # PENTESTING COMMANDS
-        elif user_input.startswith('/port-scan'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
+        elif user_input.startswith('/port-scan '):
+            target = user_input[11:].strip()
+            if not target:
                 return "‖ Usage: /port-scan <ip_or_domain> ‖"
-            target = parts[1].strip()
             try:
                 if not self.pentest:
                     return "‖ Pentest module not loaded. Use /load pentest ‖"
@@ -1090,13 +1100,12 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             except Exception as e:
                 return f"‖ Scan error: {e} ‖"
 
-        elif user_input.startswith('/web-scan'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
-                return "‖ Usage: /web-scan <url> ‖"
-            url = parts[1].strip()
+        elif user_input.startswith('/web-scan '):
+            url = user_input[10:].strip()
             if not url.startswith(('http://', 'https://')):
                 url = 'http://' + url
+            if not url:
+                return "‖ Usage: /web-scan <url> ‖"
             try:
                 if not self.pentest:
                     return "‖ Pentest module not loaded. Use /load pentest ‖"
@@ -1104,6 +1113,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 return f"‖ Web scan: {len(results['vulnerabilities_found'])} vulnerabilities found ‖ Risk: {results['risk_level']} ‖"
             except Exception as e:
                 return f"‖ Scan error: {e} ‖"
+            
 
         elif user_input == '/fix-all-modules':
             """Fix all module issues at once"""
@@ -1120,11 +1130,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
     
             return "‖ " + " | ".join(results) + " ‖"
 
-        elif user_input.startswith('/security-audit'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
+        elif user_input.startswith('/security-audit '):
+            target = user_input[16:].strip()
+            if not target:
                 return "‖ Usage: /security-audit <target> ‖"
-            target = parts[1].strip()
             try:
                 if not self.pentest:
                     return "‖ Pentest module not loaded. Use /load pentest ‖"
@@ -1142,11 +1151,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             except Exception as e:
                 return f"‖ Discovery error: {e} ‖"
 
-        elif user_input.startswith('/ssl-scan'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
+        elif user_input.startswith('/ssl-scan '):
+            domain = user_input[10:].strip()
+            if not domain:
                 return "‖ Usage: /ssl-scan <domain> ‖"
-            domain = parts[1].strip()
             try:
                 if not self.pentest:
                     return "‖ Pentest module not loaded. Use /load pentest ‖"
@@ -1187,19 +1195,16 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             except Exception as e:
                 return f"‖ Trends error: {e} ‖"
 
-        elif user_input.startswith('/wealth-strategy'):
-            parts = user_input.split(maxsplit=1)
-            amount_str = parts[1].strip() if len(parts) > 1 else "1000"
+        elif user_input.startswith('/wealth-strategy '):
             try:
-                amount = float(amount_str)
-            except ValueError:
-                return "‖ Usage: /wealth-strategy <amount> ‖"
-            try:
+                amount = user_input[17:].strip()
+                if not amount or not amount.replace('.', '').isdigit():
+                    return "‖ Usage: /wealth-strategy <amount> ‖"
                 trading = self.module_manager.get_module('trading')
                 if not trading:
                     return "‖ Trading module not loaded. Use /load trading ‖"
-                strategy = trading.wealth_growth_strategy(amount)
-                return f"‖ Wealth Strategy (${amount:.2f}): ${strategy['projected_growth_1y']['moderate']:.2f} projected ‖"
+                strategy = trading.wealth_growth_strategy(float(amount))
+                return f"‖ Wealth Strategy: ${strategy['projected_growth_1y']['moderate']:.2f} projected ‖"
             except Exception as e:
                 return f"‖ Strategy error: {e} ‖"
 
@@ -1298,6 +1303,42 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             module = user_input.replace('/inspect ', '').strip()
             return self.awareness.get_module_report(module)
 
+        elif user_input == '/hypotheses':
+            hyps = self.evolution_bridge.reanalyze_historical_blueprints(limit=5)
+            if not hyps:
+                return "No engineering hypotheses formulated yet."
+            cards = [self.evolution_bridge.format_hypothesis_card(h) for h in hyps]
+            return "\n\n".join(cards)
+
+        elif user_input == '/bridge-status':
+            return (
+                "🌉 CIPH EVOLUTION BRIDGE STATUS\n"
+                "• Status: ACTIVE\n"
+                "• Capability Mappings: verification, compression, concurrency, rate_limiting, resilience\n"
+                "• Unified CiphRouter: ACTIVE\n"
+                "• Pre/Post Empirical Benchmarking: ACTIVE\n"
+                "• Retroactive Blueprints Mining: READY (/reanalyze-blueprints)"
+            )
+
+        elif user_input == '/reanalyze-blueprints':
+            hyps = self.evolution_bridge.reanalyze_historical_blueprints(limit=25)
+            return (
+                f"🧠 Retroactive Blueprint Re-Analysis Complete!\n"
+                f"• Mined {len(hyps)} actionable engineering hypotheses from historical blueprints.\n"
+                f"• Use /hypotheses to inspect formulated hypotheses cards."
+            )
+
+        elif user_input == '/benchmark-proposals':
+            res = self.benchmark.benchmark_proposals()
+            if not res:
+                return "No proposals found in ciph_proposals/ to benchmark."
+            lines = [f"🧪 EMPIRICAL BENCHMARK: {len(res)} Proposals Audited\n"]
+            for r in res:
+                v_sym = "✅" if r['syntax']['valid'] else "❌"
+                lat = r['speed']['avg_latency_ms']
+                lines.append(f"• {r['file']}: {v_sym} Syntax (LOC: {r['syntax'].get('loc', 0)}, Latency: {lat}ms)")
+            return "\n".join(lines)
+
         # BOUNTY HUNTING & SCOPE SUITE
         elif user_input.startswith('/bounty-scope') or user_input.startswith('/bounty-rules'):
             args = user_input.split(maxsplit=1)
@@ -1314,7 +1355,11 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             if len(args) < 2:
                 return "‖ Usage: /bounty-scan <target_url_or_domain> ‖"
             target = args[1].strip()
-            res = self.bounty.deep_scan(target)
+            if hasattr(self, 'runtime') and self.runtime.registry.get("cybersecurity.bounty_scan"):
+                receipt = self.runtime.route_and_execute("cybersecurity.bounty_scan", {"target": target})
+                res = receipt.results
+            else:
+                res = self.bounty.deep_scan(target)
             if not res.get("success"):
                 return f"❌ {res.get('error')}"
             findings_str = "\n".join(f"  • [{f['severity']}] {f['type']}: {f['details']}" for f in res.get('findings', [])) or "  • Clean surface. No immediate vulnerabilities detected."
@@ -1479,18 +1524,14 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "\n".join(lines)
 
         # DEEP TOR SEARCH & THREAT INTELLIGENCE
-        elif user_input.startswith('/darknet-deep') or user_input.startswith('/darknet-search'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
-                return "‖ Usage: /darknet-deep <query> ‖"
-            query = parts[1].strip()
+        elif user_input.startswith('/darknet-deep ') or user_input.startswith('/darknet-search '):
+            query = user_input.split(maxsplit=1)[1].strip()
             results = self.darknet.search_darknet(query)
             if not results:
-                return f"🌑 No darknet search results found for '{query}' across active Tor nodes."
+                return f"🌑 No darknet search results found for '{query}' across active Tor engines."
             lines = [f"🌑 DARKNET TOR SEARCH RESULTS FOR: '{query}'", "═" * 56]
             for i, r in enumerate(results, 1):
-                onion = r.get('onion_url', r.get('link', 'onion service'))
-                lines.append(f"{i:02d}. {r.get('title', 'Result')}\n    Onion: {onion}")
+                lines.append(f"{i:02d}. {r['title']} [{r.get('engine', 'Tor')}]\n    Link: {r['link']}\n    {r['snippet']}")
             lines.append("═" * 56)
             return "\n".join(lines)
 
@@ -1610,7 +1651,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             self.vault.mark_council_thesis_discussed(t['id'])
             lines = [
                 "╔═══════════════════════════════════════════════════════════════════════════╗",
-                "║                         OPERATOR COUNCIL DIALECTIC                        ║",
+                "║                         OPERATOR'S COUNCIL DIALECTIC                        ║",
                 "╚═══════════════════════════════════════════════════════════════════════════╝",
                 f"📌 THESIS: {t['title']}",
                 f"\n💡 CIPH'S CONCLUSION:\n{t['conclusion']}",
@@ -1737,28 +1778,9 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             return "\n".join(lines)
 
         # MODULE MANAGER COMMANDS
-        elif user_input in ['/modules', '/module-list']:
+        elif user_input == '/modules':
             modules = self.module_manager.list_modules()
-            core_mods = ['memory', 'osint', 'bounty', 'pentest', 'orchestrator']
-            exp_mods = ['trading', 'sports']
-            active = modules.get('active', [])
-            
-            lines = [
-                "╔══════════════════════════════════════════════════════════════════╗",
-                "║                 CIPH 3.0 MODULE ARCHITECTURE                     ║",
-                "╠══════════════════════════════════════════════════════════════════╣",
-                "║ 🛡️ CORE SOVEREIGN SECURITY PLATFORM:                            ║"
-            ]
-            for m in core_mods:
-                status = "✅ ACTIVE" if m in active else "⚪ STANDBY (/load)"
-                lines.append(f"║ • {m:<15} : {status:<44}║")
-            lines.append("║                                                                  ║")
-            lines.append("║ 🧪 EXPERIMENTAL EXTENSIONS:                                      ║")
-            for m in exp_mods:
-                status = "✅ ACTIVE" if m in active else "⚪ STANDBY (/load)"
-                lines.append(f"║ • {m:<15} : {status:<44}║")
-            lines.append("╚══════════════════════════════════════════════════════════════════╝")
-            return "\n".join(lines)
+            return f"‖ Available: {modules['available']} ‖ Active: {modules['active']} ‖"
         
         elif user_input.startswith('/load '):
             module_name = user_input[6:].strip()
@@ -1798,12 +1820,11 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 self.orchestrator = None
             return f"‖ {result} ‖"
 
-        # AGENT ORCHESTRATION COMMANDS
-        elif user_input.startswith('/start-workflow'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
-                return "‖ Usage: /start-workflow <workflow_name> (e.g. threat_intel_cycle, trading_intelligence) ‖"
-            workflow_name = parts[1].strip()
+        # AGENT ORCHESTRATION COMMANDS - FIXED
+        elif user_input.startswith('/start-workflow '):
+            workflow_name = user_input[16:].strip()
+            if not workflow_name:
+                return "‖ Usage: /start-workflow <workflow_name> ‖"
             try:
                 if not self.orchestrator:
                     return "‖ Orchestrator module not loaded. Use /load orchestrator ‖"
@@ -1812,11 +1833,10 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             except Exception as e:
                 return f"‖ Workflow error: {e} ‖"
 
-        elif user_input.startswith('/stop-workflow'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
+        elif user_input.startswith('/stop-workflow '):
+            workflow_name = user_input[15:].strip()
+            if not workflow_name:
                 return "‖ Usage: /stop-workflow <workflow_name> ‖"
-            workflow_name = parts[1].strip()
             try:
                 if not self.orchestrator:
                     return "‖ Orchestrator module not loaded. Use /load orchestrator ‖"
@@ -1877,25 +1897,28 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             status = self.scheduler.get_scheduler_status()
             return f"‖ Scheduler: {'RUNNING' if status['running'] else 'STOPPED'} ‖ Jobs: {status['scheduled_jobs']} ‖"
 
-        elif user_input.startswith('/schedule-update'):
-            parts = user_input.split()
-            if len(parts) < 2:
-                return "‖ Usage: /schedule-update <task_name> [enabled=true/false] [interval=hours] ‖"
-            task_name = parts[1].strip()
-            enabled = True
-            interval = 6
+        elif user_input.startswith('/schedule-update '):
+            parts = user_input[17:].strip().split()
+            task_name = parts[0] if parts else ""
+            enabled = True  # Default value
+            interval = 6    # Default value
             
-            for part in parts[2:]:
+            for part in parts[1:]:
                 if '=' in part:
-                    key, value = part.split('=', 1)
+                    key, value = part.split('=')
                     if key == 'enabled':
-                        enabled = value.lower() in ['true', 'yes', '1', 'on']
+                        # Convert string to boolean
+                        if value.lower() in ['true', 'yes', '1', 'on']:
+                            enabled = True
+                        elif value.lower() in ['false', 'no', '0', 'off']:
+                            enabled = False
                     elif key == 'interval':
                         try:
                             interval = int(value)
                         except ValueError:
                             return "‖ Invalid interval format. Use integer ‖"
             
+            # Now pass the guaranteed non-None values
             return self.scheduler.update_schedule(task_name, enabled, interval)
         
         # DARKNET COMMANDS
@@ -1963,9 +1986,7 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
 
         elif user_input == '/clean-footprints':
             cleaned = self.security.clean_shell_footprints()
-            if isinstance(cleaned, dict):
-                return f"‖ Shell footprints wiped. {cleaned.get('history_files_cleared', 1)} history streams sanitized. ‖"
-            return f"‖ {cleaned} ‖"
+            return f"‖ Shell history wiped. {cleaned['history_files_cleared']} files cleared ‖"
 
         elif user_input == '/integrity-check':
             modified = self.security.verify_core_integrity()
@@ -2120,8 +2141,13 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         elif user_input.startswith('/predict '):
             parts = user_input.replace('/predict ', '').strip().split(' vs ')
             if len(parts) == 2:
-                result = self.sports.predict_match(parts[0].strip(), parts[1].strip())
-                return result['signal']
+                home, away = parts[0].strip(), parts[1].strip()
+                if hasattr(self, 'runtime') and self.runtime.registry.get("sports.predict_match"):
+                    receipt = self.runtime.route_and_execute("sports.predict_match", {"home": home, "away": away})
+                    result = receipt.results.get("prediction", {})
+                else:
+                    result = self.sports.predict_match(home, away)
+                return result.get('signal', 'Analysis complete.')
             return "Usage: /predict Arsenal vs Chelsea"
 
         elif user_input in ['predictions today', '/today', 'today predictions']:
@@ -2199,20 +2225,6 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
             if ip:
                 return f"‖ Tor active. Exit IP: {ip} ‖"
             return "‖ Tor not connected ‖"
-
-        elif user_input in ['/help', 'help', '/commands', '/?']:
-            return self.get_help_text()
-
-        elif user_input.startswith('/set-name') or user_input.startswith('/set-operator'):
-            parts = user_input.split(maxsplit=1)
-            if len(parts) < 2 or not parts[1].strip():
-                curr = self.vault.get_operator_name() or "Operator"
-                return f"‖ Current Operator Callsign: '{curr}'. Usage: /set-name <callsign> ‖"
-            new_name = parts[1].strip()
-            self.vault.set_operator_name(new_name)
-            self.smart_memory.pin('operator', f"{new_name} — your creator and sovereign operator")
-            self.smart_memory.pin('name', new_name)
-            return f"‖ Operator callsign updated to '{new_name}' in encrypted vault. ‖"
 
         return None  # Not a command
 
@@ -2465,170 +2477,30 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         integrity = self.security.integrity_check()
         security_indicator = " • SECURE" if integrity['all_critical_files_present'] else " • COMPROMISED"
         
-    def get_help_text(self) -> str:
-        """Return structured operator command manual."""
-        return """╔══════════════════════════════════════════════════════════════════════════════╗
-║                          CIPH 3.0 COMMAND REFERENCE                          ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-[ COGNITIVE EVOLUTION ]
-  • /curiosity <on|off|status>  - 24/7 background research daemon
-  • /mind-log                   - Recent cognitive blueprints & isomorphisms
-  • /mind-metrics               - Cognitive knowledge topology & growth
-  • /council                    - Operator Council theses & strategic synthesis
-  • /self-audit                 - 24-hour metaconscious self-interrogation
-  • /fetch <url>                - Anonymous link extraction & OPSEC audit
-  • /zeroize-mind               - Emergency cognitive purge & memory wipe
-
-[ REAL-WORLD & DARKNET INTEL ]
-  • /world-brief                - Real-time global threat radar & telemetry
-  • /sync-reality               - Instant multi-source sensory synchronization
-  • /world-map                  - Clearnet & Tor sensor topology overview
-  • /darknet-scan               - Full asynchronous Tor threat & leak scan
-  • /darknet-deep <query>       - Search onion services & technical drops
-  • /darknet-report             - Itemized 3-tier darknet intelligence briefing
-
-[ BOUNTY RECON & SENTRY ]
-  • /bounty-scope <text/url>    - Lock program scope & rules of engagement
-  • /bounty-scan <target>       - Comprehensive passive recon & attack surface audit
-  • /bounty-report <target>     - Draft verified HackerOne/Bugcrowd submission
-  • /bounty-list                - View active scopes and generated reports
-  • /what-changed <target>      - Historical recon snapshot diff engine
-  • /hit-list <target>          - Mathematical attack surface prioritization
-  • /chain-reaction <target>    - Multi-stage exploit graph & attack chains
-  • /watchtower                 - Passive certificate transparency & sentry cycle
-  • /ghost-rating               - Tor SOCKS5h OPSEC & anonymity verification
-
-[ AGENT ORCHESTRATION ]
-  • /auto-mode                  - Launch autonomous intelligence workflows
-  • /start-workflow <name>      - Start specific background operation
-  • /stop-workflow <name>       - Terminate active workflow
-  • /workflow-status            - Inspect orchestrator pipeline state
-  • /stop-all-workflows         - Stop all background tasks
-
-[ STRATEGY & WAR ROOM ]
-  • /daily-brief                - Executive summary of intelligence & operations
-  • /war-room <plan>            - Multi-perspective red team adversarial stress-test
-  • /timeline                   - Narrative milestones & session compressions
-
-[ PENTESTING & CODE AUDITING ]
-  • /port-scan <target>         - Network port & service enumeration
-  • /web-scan <url>             - Web application vulnerability scan
-  • /security-audit <target>    - Automated infrastructure security audit
-  • /network-discovery          - Discover live hosts on local network
-  • /ssl-scan <domain>          - SSL/TLS certificate & cipher audit
-  • /scan-project [path]        - AST codebase analysis & security scanning
-  • /search-in-files <term>     - High-speed pattern search across project
-  • /clean-footprints           - Secure shell and temporary trace sanitization
-  • /integrity-check            - Cryptographic verification of core system files
-  • /backup-now                 - Create encrypted AES256 backup archive
-
-[ SYSTEM & IDENTITY ]
-  • /status                     - Real-time subsystem operational metrics
-  • /model-status               - AI engine connection diagnostics
-  • /test-model                 - Ping AI API latency and model response
-  • /setkey <key>               - Set or update your AI API key
-  • /set-name <callsign>        - Update operator callsign in encrypted vault
-  • /help                       - Display this command manual
-  • /exit                       - Terminate session securely
-════════════════════════════════════════════════════════════════════════════════"""
-
-    def get_git_info(self) -> Dict[str, str]:
-        """Dynamically detect git remote origin, branch, and commit."""
-        info = {"repo": "scaling-lamp", "branch": "main", "commit": "HEAD"}
-        try:
-            r = subprocess.run(["git", "config", "--get", "remote.origin.url"], capture_output=True, text=True, timeout=2)
-            if r.returncode == 0 and r.stdout.strip():
-                url = r.stdout.strip()
-                match = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
-                if match:
-                    info["repo"] = match.group(1)
-                else:
-                    info["repo"] = url.split('/')[-1].replace('.git', '')
-        except Exception:
-            pass
-
-        try:
-            b = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=2)
-            if b.returncode == 0 and b.stdout.strip():
-                info["branch"] = b.stdout.strip()
-        except Exception:
-            pass
-
-        try:
-            c = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=2)
-            if c.returncode == 0 and c.stdout.strip():
-                info["commit"] = c.stdout.strip()
-        except Exception:
-            pass
-
-        return info
-
-    def get_session_environment(self) -> Dict[str, str]:
-        """Introspect runtime execution context (SSH, Local TTY, OS)."""
-        import platform
-        ssh_client = os.environ.get("SSH_CLIENT", os.environ.get("SSH_CONNECTION", ""))
-        if ssh_client:
-            client_ip = ssh_client.split()[0]
-            session_mode = f"SSH Remote ({client_ip})"
-        else:
-            session_mode = "Local TTY Terminal"
-
-        os_name = platform.system()
-        machine = platform.machine()
-        return {
-            "session_mode": session_mode,
-            "platform": f"{os_name} {machine}",
-            "cwd": os.getcwd()
-        }
-
-    def ensure_operator_identity(self) -> str:
-        """First-run onboarding prompt if operator callsign is missing."""
-        op_name = self.vault.get_operator_name()
-        if not op_name:
-            print("\n╔══════════════════════════════════════════════════════════════════════════════╗")
-            print("║                     CIPH 3.0 • OPERATOR REGISTRY PROTOCOL                    ║")
-            print("╚══════════════════════════════════════════════════════════════════════════════╝\n")
-            print("🕶️ Ciph: ‖ Neural core online. Identity registry uninitialized. ‖")
-            print("🕶️ Ciph: ‖ Good day, Operator. What callsign or name shall I address you by? ‖\n")
-            try:
-                entered = input("Callsign > ").strip()
-                if not entered:
-                    entered = "Operator"
-            except (EOFError, KeyboardInterrupt):
-                entered = "Operator"
-
-            self.vault.set_operator_name(entered)
-            self.smart_memory.pin('operator', f"{entered} — sovereign creator and operator")
-            self.smart_memory.pin('name', entered)
-            print(f"\n🕶️ Ciph: ‖ Identity established: Operator '{entered}'. Knowledge architecture bound to your command. ‖\n")
-            return entered
-        return op_name
-
-    def print_banner(self):
-        """Sovereign, operator-grade telemetry banner."""
-        git_info = self.get_git_info()
-        env_info = self.get_session_environment()
-        op_name = self.vault.get_operator_name() or "Unassigned"
-        ai_status = "Active (Sovereign)" if (self.ai_enabled and getattr(self.ciph_router, 'api_key', None)) else "Local Offline"
-        tor_status = "ACTIVE" if (hasattr(self, 'darknet') and self.darknet and self.darknet.verify_tor().get('tor_active')) else "STANDBY"
-
-        repo_line = f"Repo: {git_info['repo']} ({git_info['branch']}@{git_info['commit']}) • Session: {env_info['session_mode']}"
-        status_line = f"Operator: {op_name} • AI: {ai_status} • Tor: {tor_status} • Vault: ENCRYPTED"
-
-        width = 82
-        print(f"""
-╔{'═' * (width-2)}╗
-║ {'CIPH 3.0 • SOVEREIGN AUTONOMOUS INTELLIGENCE':^{width-4}} ║
-║ {repo_line:^{width-4}} ║
-║ {status_line:^{width-4}} ║
-╚{'═' * (width-2)}╝""")
-
+        # Project status
+        project_scan = self.file_analyzer.scan_project(".")
+        project_files = project_scan.get('file_count', 0) if 'file_count' in project_scan else 0
+        project_indicator = f" • {project_files} files" if project_files > 0 else " • NO PROJECT"
+        
+        # Notification indicator
+        notification_indicator = f" • {len(self.notification_queue)} updates" if self.notification_queue else ""
+        # Personality engine status
+        personality_indicator = " • PERSONALITY ACTIVE"
+        
+        banner = f"""
+╔{'═' * (self.max_width-2)}╗
+║ {'CIPH v1.0 - AUTONOMOUS AGENT ORCHESTRATION':^{self.max_width-4}} ║
+║ {'Encrypted • Sovereign • Adaptive' + ai_indicator + security_indicator + project_indicator + memory_indicator + osint_indicator + pentest_indicator + trading_indicator + bounty_indicator + orchestrator_indicator + scheduler_indicator + notification_indicator + personality_indicator:^{self.max_width-4}} ║  
+╚{'═' * (self.max_width-2)}╝
+        """
+        print(banner)
+        
+        # Show notifications if any
         if self.notification_queue:
             print(f"\n📢 Ciph: ‖ I have {len(self.notification_queue)} updates ‖")
             for note in self.notification_queue[:3]:
                 print(f"   • {note['message']}")
-            self.notification_queue = []
+            self.notification_queue = []  # Clear after showing
 
     def get_user_input(self):
         """Better input handling for SSH"""
@@ -2641,9 +2513,11 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         """Cleanly stop background services, compress episodic narrative, and save states before exit"""
         print("\nCiph: ‖ Performing graceful shutdown... ‖")
         try:
+            # Record session end timestamp in vault
             if hasattr(self, 'vault') and self.vault:
                 self.vault.record_session_end()
 
+            # Compress session narrative into episodic timeline node
             if hasattr(self, 'conversation') and hasattr(self, 'smart_memory'):
                 print("Ciph: 🧠 Compressing session dialogue into episodic milestone...")
                 node = self.smart_memory.compress_session_narrative(self.conversation.history, self.ciph_router)
@@ -2671,7 +2545,6 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
 
     def run_ssh_session(self):
         """Main SSH session loop with Proactive Terminal Greeting & Telemetry Digest"""
-        self.ensure_operator_identity()
         self.print_banner()
         
         # Proactive On-Login Intelligence Briefing
@@ -2695,6 +2568,23 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
                 if user_input in ['/exit', '/quit', '/q']:
                     self.graceful_shutdown()
                     break
+                elif user_input == '/help':
+                    print("\nCOGNITIVE EVOLUTION: /curiosity <on|off|status>, /mind-log, /mind-metrics, /council, /self-audit, /fetch <url>, /zeroize-mind")
+                    print("AGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
+                    print("REAL-WORLD & DARKNET INTEL: /world-brief, /sync-reality, /world-map, /darknet-deep <query>, /darknet-scan, /darknet-report")
+                    print("BOUNTY RECON & TRIAGE: /bounty-scope <text/url>, /bounty-scan <target>, /bounty-report <target>, /bounty-list")
+                    print("INTELLIGENCE & SENTRY: /what-changed <target>, /hit-list <target>, /chain-reaction <target>, /watchtower, /ghost-rating")
+                    print("STRATEGY & WAR ROOM: /daily-brief, /war-room <plan>, /timeline")
+                    print("PENTESTING: /port-scan, /web-scan, /security-audit, /network-discovery, /ssl-scan")
+                    print("TRADING: /market-data, /arbitrage-scan, /market-trends, /wealth-strategy, /trading-signals, /portfolio-health")
+                    print("FILES: /scan-project, /read-file <file>, /search-in-files <term>, /project-status")
+                    print("SECURITY: /security-scan, /clean-footprints, /integrity-check, /backup-now, /emergency-wipe")
+                    print("SCHEDULER: /schedule-start, /schedule-stop, /schedule-status, /schedule-update")
+                    print("MODULES: /modules, /load <module>, /unload <module>")
+                    print("MEMORY: /profile, /profile-clear, /memory-graph <query>, /memory-status, /retroactive-learn, /timeline, /search <query>, /tag <tag>")
+                    print("CONVERSATION: /talk-test, /convo-summary")
+                    print("CORE: /exit, /help, /status, /model-status, /test-deepseek, /reality-check, /ai, /setkey")
+                    continue
                 elif user_input == '':
                     continue
                 
