@@ -149,7 +149,11 @@ class SecurityLayer:
         if not backup_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"ciph_backup_{timestamp}.tar.gpg"
-        
+
+        backup_passphrase = os.environ.get("BACKUP_PASSPHRASE")
+        if not backup_passphrase:
+            return "‖ Backup failed: set BACKUP_PASSPHRASE before creating an encrypted backup. ‖"
+
         try:
             # Create backup archive
             import tarfile
@@ -168,7 +172,7 @@ class SecurityLayer:
                 result = subprocess.run([
                     "gpg", "--batch", "--yes", "--pinentry-mode", "loopback",
                     "--symmetric", "--cipher-algo", "AES256",
-                    "--passphrase", os.environ.get("BACKUP_PASSPHRASE", "REDACTED_LEGACY_VALUE"),
+                    "--passphrase", backup_passphrase,
                     "-o", backup_path, "temp_backup.tar"
                 ], capture_output=True, timeout=5)
                 
@@ -178,12 +182,12 @@ class SecurityLayer:
                     return f"‖ Encrypted backup created: {backup_path} ‖"
                 else:
                     if os.path.exists("temp_backup.tar"):
-                        os.rename("temp_backup.tar", backup_path)
-                    return f"‖ Backup created (unencrypted fallback): {backup_path} ‖"
-            except Exception:
+                        os.remove("temp_backup.tar")
+                    return "‖ Backup failed: GPG encryption failed; no plaintext archive was retained. ‖"
+            except Exception as exc:
                 if os.path.exists("temp_backup.tar"):
-                    os.rename("temp_backup.tar", backup_path)
-                return f"‖ Backup created (unencrypted): {backup_path} ‖"
+                    os.remove("temp_backup.tar")
+                return f"‖ Backup failed: encryption unavailable ({str(exc)[:80]}). ‖"
                 
         except Exception as e:
             return f"‖ Backup failed: {str(e)} ‖"

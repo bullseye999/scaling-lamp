@@ -5,8 +5,9 @@ import time
 import traceback
 import json
 
-# Ensure scaling-lamp directory is in path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure the repository root is importable without exposing a local username/path.
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, REPO_ROOT)
 
 from ciph_core import CiphCore
 
@@ -200,7 +201,7 @@ def run_tests():
                 print(f"     └─ Preview: {output_str[:160]}")
 
     # Save detailed JSON report
-    with open('test_audit_results.json', 'w') as f:
+    with open(os.path.join(REPO_ROOT, 'test_audit_results.json'), 'w') as f:
         json.dump(results, f, indent=2)
 
     print("\n==================================================")

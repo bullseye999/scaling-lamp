@@ -34,7 +34,7 @@ class BrainRouter:
         # Add these to the existing list:
         'opsec', 'privacy', 'monitoring', 'surveillance', 'backdoor',
         'compromise', 'anxiety', 'stress', 'burnout',
-        'security testing', 'penetration test'
+        'security testing', 'penetration test',
 
         # Ciph internals
         'ciph capabilities', 'what can you do', 'darknet scan',
@@ -43,7 +43,6 @@ class BrainRouter:
         # Crypto / markets
         'monero', 'xmr', 'mixing', 'tumbler', 'laundering',
         'darknet market', 'vendor', 'escrow',
-
 
         # Added via UP-006
         'operational security',

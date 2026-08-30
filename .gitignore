@@ -16,6 +16,8 @@ build/
 
 # Vaults & encryption keys (sensitive)
 *.db
+*.db-wal
+*.db-shm
 *.key
 *.gpg
 *.pem
@@ -93,3 +95,9 @@ control.authcookie
 # Large downloads or test assets (optional)
 *.pdf      # ignore PDFs by default – keep only if you have sample books
 !sample.pdf
+
+# Private operator customization (never publish)
+private_operator/
+operator_profile.json
+operator_profile.yaml
+operator_profile.yml
