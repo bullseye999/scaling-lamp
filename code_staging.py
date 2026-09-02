@@ -9,18 +9,19 @@ import time
 import shutil
 import subprocess
 import importlib
+import importlib.util
 import py_compile
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 class CodeStagingManager:
     """
-    Unified Code Staging & Autonomous Hot-Patching Engine.
+    Unified Code Staging & Governed Hot-Patching Engine.
     - Stages generated code artifacts into ciph_staging/
-    - Auto-detects and installs missing pip dependencies in venv
+    - Safely audits missing pip dependencies without unauthorized auto-install
     - Runs isolated auto-sandbox execution tests (syntax + subprocess timeout)
     - Generates clean ASCII Staging Cards (zero terminal clutter)
-    - 1-click safe atomic application (/apply <id>) with automated backups
+    - Safe atomic application (/apply <id>) with automated backups
     - Rollback failsafe (/rollback <file>)
     - Structured audit changelog tracking (ciph_changelog.json)
     """
@@ -88,7 +89,7 @@ class CodeStagingManager:
         return f"STG-{next_num:03d}"
 
     # ─────────────────────────────────────────────
-    # DEPENDENCY RESOLVER (AUTO-PIP)
+    # DEPENDENCY AUDITOR & INSPECTOR (SAFE)
     # ─────────────────────────────────────────────
 
     def extract_dependencies(self, code: str) -> List[str]:
@@ -112,32 +113,27 @@ class CodeStagingManager:
         return sorted(list(dependencies))
 
     def resolve_dependencies(self, dependencies: List[str]) -> Dict[str, bool]:
-        """Check installed status and auto-install missing packages in venv"""
+        """
+        Check installed status of dependencies safely without auto-installing.
+        Per Phase 0 safety invariants, automatic pip execution is strictly prohibited.
+        Missing packages are flagged for operator approval and manual installation.
+        """
         status = {}
         for dep in dependencies:
-            # Check if importable
             try:
-                importlib.import_module(dep)
-                status[dep] = True
-            except ImportError:
-                # Attempt non-blocking pip installation
-                print(f"📦 Ciph Auto-Import: Missing package '{dep}'. Installing in virtual environment...")
-                try:
-                    res = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", dep],
-                        capture_output=True,
-                        text=True,
-                        timeout=45
-                    )
-                    if res.returncode == 0:
-                        status[dep] = True
-                        print(f"✅ Package '{dep}' installed successfully.")
-                    else:
-                        status[dep] = False
-                        print(f"⚠️ Failed to auto-install '{dep}': {res.stderr[:100]}")
-                except Exception as e:
-                    status[dep] = False
-                    print(f"⚠️ Auto-install exception for '{dep}': {e}")
+                if hasattr(importlib.util, 'find_spec'):
+                    spec = importlib.util.find_spec(dep)
+                    status[dep] = (spec is not None)
+                else:
+                    importlib.import_module(dep)
+                    status[dep] = True
+            except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
+                status[dep] = False
+            except Exception:
+                status[dep] = False
+
+            if not status[dep]:
+                print(f"🔒 [Dependency Policy] Missing package '{dep}' flagged. Auto-installation blocked by kernel policy.")
         return status
 
     # ─────────────────────────────────────────────
