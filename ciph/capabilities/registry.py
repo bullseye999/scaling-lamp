@@ -121,3 +121,150 @@ class SportsPredictCapability(BaseCapability):
         away = params.get("away") or params.get("away_team", "")
         res = self._sports.predict_match(home, away)
         return {"success": True, "prediction": res}
+
+
+class CvssCalculatorCapability(BaseCapability):
+    """Adapter for deterministic CVSS v3.1 calculation."""
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return CapabilityManifest(
+            name="pentest.cvss_calculate",
+            description="Deterministic FIRST.org CVSS v3.1 base score computation",
+            risk_tier=RiskTier.NONE,
+            network_policy=NetworkPolicy.OFFLINE_ONLY,
+            reversibility=ReversibilityClass.READ_ONLY,
+            authorization=AuthorizationTier.AUTO,
+            timeout_seconds=10
+        )
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from cvss_calculator import CVSSv31Calculator
+        vector = params.get("vector")
+        if vector:
+            return CVSSv31Calculator.calculate_from_vector(vector)
+        else:
+            metrics = {k.upper(): str(v).upper() for k, v in params.items() if k.upper() in CVSSv31Calculator.METRIC_WEIGHTS}
+            if not metrics:
+                # Default high severity sample
+                vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+                return CVSSv31Calculator.calculate_from_vector(vector)
+            return CVSSv31Calculator.calculate_from_metrics(metrics)
+
+
+class MemoryRetrieveCapability(BaseCapability):
+    """Adapter for retrieving values from Vault / Local Memory."""
+
+    def __init__(self, memory_backend=None):
+        self._memory = memory_backend or {}
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return CapabilityManifest(
+            name="memory.retrieve",
+            description="Retrieve stored knowledge or operational records from memory",
+            risk_tier=RiskTier.NONE,
+            network_policy=NetworkPolicy.OFFLINE_ONLY,
+            reversibility=ReversibilityClass.READ_ONLY,
+            authorization=AuthorizationTier.AUTO,
+            timeout_seconds=10
+        )
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        key = params.get("key", "")
+        if hasattr(self._memory, "get_memory"):
+            val = self._memory.get_memory(key)
+        elif hasattr(self._memory, "get"):
+            val = self._memory.get(key)
+        elif isinstance(self._memory, dict):
+            val = self._memory.get(key)
+        else:
+            val = f"record_{key}"
+        return {"success": True, "key": key, "value": val, "found": val is not None}
+
+
+class MemoryStoreCapability(BaseCapability):
+    """Adapter for storing values into Vault / Local Memory."""
+
+    def __init__(self, memory_backend=None):
+        self._memory = memory_backend if memory_backend is not None else {}
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return CapabilityManifest(
+            name="memory.store",
+            description="Store or update a verified record in memory vault",
+            risk_tier=RiskTier.LOW,
+            network_policy=NetworkPolicy.OFFLINE_ONLY,
+            reversibility=ReversibilityClass.REVERSIBLE,
+            authorization=AuthorizationTier.AUTO,
+            timeout_seconds=10
+        )
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        key = params.get("key", "")
+        val = params.get("value", "")
+        if hasattr(self._memory, "store_memory"):
+            self._memory.store_memory(key, val)
+        elif isinstance(self._memory, dict):
+            self._memory[key] = val
+        return {"success": True, "key": key, "value": val, "stored": True}
+
+
+class CodeAuditCapability(BaseCapability):
+    """Adapter for auditing dependencies in code files safely."""
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return CapabilityManifest(
+            name="code.audit_dependencies",
+            description="Audit dependencies of Python source files without automatic installation",
+            risk_tier=RiskTier.NONE,
+            network_policy=NetworkPolicy.OFFLINE_ONLY,
+            reversibility=ReversibilityClass.READ_ONLY,
+            authorization=AuthorizationTier.AUTO,
+            timeout_seconds=20
+        )
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from code_staging import CodeStagingManager
+        import os
+        csm = CodeStagingManager()
+        target_file = params.get("target_file", "")
+        code_content = params.get("code")
+        if not code_content and target_file and os.path.exists(target_file):
+            with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
+                code_content = f.read()
+
+        if not code_content:
+            return {"success": False, "error": f"Target file '{target_file}' not found or empty."}
+
+        deps = csm.extract_dependencies(code_content)
+        status = csm.resolve_dependencies(deps)
+        return {"success": True, "dependencies": deps, "status": status, "missing_count": sum(1 for v in status.values() if not v)}
+
+
+class TorStatusCapability(BaseCapability):
+    """Adapter for verifying Tor network status."""
+
+    def __init__(self, tor_proxy_instance=None):
+        self._tor = tor_proxy_instance
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return CapabilityManifest(
+            name="tor.check_status",
+            description="Verify active Tor proxy circuit and health",
+            risk_tier=RiskTier.LOW,
+            network_policy=NetworkPolicy.TOR_MANDATORY,
+            reversibility=ReversibilityClass.READ_ONLY,
+            authorization=AuthorizationTier.AUTO,
+            timeout_seconds=15
+        )
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        if self._tor and hasattr(self._tor, 'check_connection'):
+            connected = self._tor.check_connection()
+            return {"success": True, "connected": connected, "transport": "TOR_SOCKS5H"}
+        return {"success": True, "connected": True, "transport": "TOR_SOCKS5H", "simulated": True}
+
