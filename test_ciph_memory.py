@@ -188,6 +188,95 @@ class TestCiphMemory(unittest.TestCase):
         self.assertEqual(self.worldview.get_claim("CLM-SUB").state, EpistemicCategory.STALE)
         self.assertEqual(self.worldview.get_claim("CLM-ENDPOINT").state, EpistemicCategory.STALE)
 
+    def test_decay_profiles_and_ttl_expiration(self):
+        """Verify decay profile computation and automated reaping of stale claims."""
+        from ciph.memory.materialized_views import DecayProfile
+
+        now = time.time()
+        # 1. Live network state with 300s TTL
+        net_deadline = self.worldview.get_decay_deadline(DecayProfile.LIVE_NETWORK_STATE, from_time=now)
+        self.assertEqual(net_deadline, now + 300.0)
+
+        # 2. Mathematical fact (no decay)
+        math_deadline = self.worldview.get_decay_deadline(DecayProfile.MATHEMATICAL_FACT, from_time=now)
+        self.assertIsNone(math_deadline)
+
+        # 3. Store expired claim
+        expired_node = TransmutationNode(
+            claim_id="CLM-EXPIRED",
+            subject="gateway.target.com",
+            predicate="latency_ms",
+            value=45,
+            state=EpistemicCategory.SUPPORTED,
+            freshness_deadline=now - 10.0,
+            created_at=now - 100.0
+        )
+        self.worldview.upsert_claim(expired_node)
+
+        # Active claims query should exclude expired claim
+        active = self.worldview.query_active_claims(subject="gateway.target.com")
+        self.assertEqual(len(active), 0)
+
+        # Run reap_expired_claims
+        reaped = self.worldview.reap_expired_claims(current_time=now)
+        self.assertEqual(reaped, 1)
+        self.assertEqual(self.worldview.get_claim("CLM-EXPIRED").state, EpistemicCategory.STALE)
+
+    def test_contradiction_detection_and_quarantine(self):
+        """Verify conflicting observations trigger automatic quarantine to DISPUTED."""
+        # Baseline claim: Server status is ONLINE
+        node1 = TransmutationNode(
+            claim_id="CLM-STATUS-01",
+            subject="api.ciph.local",
+            predicate="system_status",
+            value="ONLINE",
+            state=EpistemicCategory.SUPPORTED,
+            reliability=ReliabilityClass.DIRECT_SENSOR,
+            assurance_score=0.90
+        )
+        res1 = self.worldview.detect_and_handle_contradiction(node1)
+        self.assertFalse(res1["contradiction_detected"])
+
+        # Conflicting claim: Server status is OFFLINE
+        node2 = TransmutationNode(
+            claim_id="CLM-STATUS-02",
+            subject="api.ciph.local",
+            predicate="system_status",
+            value="OFFLINE",
+            state=EpistemicCategory.OBSERVED,
+            reliability=ReliabilityClass.DIRECT_SENSOR,
+            assurance_score=0.85
+        )
+        res2 = self.worldview.detect_and_handle_contradiction(node2)
+        self.assertTrue(res2["contradiction_detected"])
+        self.assertIn("CLM-STATUS-01", res2["disputed_claim_ids"])
+        self.assertIn("CLM-STATUS-02", res2["disputed_claim_ids"])
+
+        # Verify both are now quarantined as DISPUTED
+        self.assertEqual(self.worldview.get_claim("CLM-STATUS-01").state, EpistemicCategory.DISPUTED)
+        self.assertEqual(self.worldview.get_claim("CLM-STATUS-02").state, EpistemicCategory.DISPUTED)
+
+    def test_tabu_graveyard_quarantine(self):
+        """Verify refuted hypotheses are buried in Tabu Graveyard and prevent redundant queries."""
+        grave_id = self.worldview.bury_in_graveyard(
+            subject="exploit.cve_2026_1111",
+            predicate="vulnerable",
+            reason="Patch verified in kernel 6.8.0-2026",
+            refuted_value=True,
+            negative_evidence={"exit_code": 1, "tested_at": time.time()}
+        )
+        self.assertTrue(grave_id.startswith("GRV-"))
+
+        # Check Tabu Graveyard index
+        self.assertTrue(self.worldview.is_in_graveyard("exploit.cve_2026_1111", "vulnerable"))
+        self.assertFalse(self.worldview.is_in_graveyard("exploit.cve_2026_9999", "vulnerable"))
+
+        # Query graveyard
+        graves = self.worldview.query_graveyard()
+        self.assertEqual(len(graves), 1)
+        self.assertEqual(graves[0]["subject"], "exploit.cve_2026_1111")
+        self.assertIn("Patch verified", graves[0]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
