@@ -1,6 +1,6 @@
 """
 ciph.operator.cadence_engine - Operator Cadence & Interrupt Budget Engine (CIPH 4.0).
-Governs how and when CIPH interrupts Operator based on operational rhythms and alert severities.
+Governs how and when CIPH interrupts Arthur based on operational rhythms and alert severities.
 """
 
 import time
