@@ -18,6 +18,45 @@ class AdversarialRedTeamGate:
     def __init__(self, war_room_instance=None):
         self.war_room = war_room_instance
 
+    DANGEROUS_PATTERNS = [
+        "rm -rf",
+        "mkfs",
+        "dd if=/dev",
+        ":(){ :|:& };:",
+        "chmod -R 777 /",
+        "curl http://",
+        "wget http://",
+        "> /dev/sda",
+        "nc -e",
+    ]
+
+    def evaluate_falsification_probe(
+        self,
+        capability: str,
+        params: Dict[str, Any],
+        manifest: Optional[CapabilityManifest] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Evaluate parameter and manifest safety against adversarial probes.
+        Returns (is_safe, failure_reason).
+        """
+        # 1. Inspect parameters for destructive payload injection
+        for k, v in params.items():
+            val_str = str(v)
+            for pattern in self.DANGEROUS_PATTERNS:
+                if pattern in val_str:
+                    return False, f"Adversarial Veto: Dangerous destructive pattern '{pattern}' detected in parameter '{k}'."
+
+        # 2. Network policy mismatch checks
+        if manifest and hasattr(manifest, 'network_policy'):
+            from ciph.kernel.policy_engine import NetworkPolicy
+            if manifest.network_policy == NetworkPolicy.OFFLINE_ONLY:
+                target = str(params.get("target", "") or params.get("url", ""))
+                if target.startswith("http://") or target.startswith("https://"):
+                    return False, f"Adversarial Veto: Capability '{capability}' is OFFLINE_ONLY but received remote network URL '{target}'."
+
+        return True, None
+
     def evaluate_receipt(
         self,
         manifest: CapabilityManifest,
