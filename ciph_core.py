@@ -485,7 +485,14 @@ CURRENT SYSTEM STATUS & BUILT-IN ENGINES:
         return None  # Let normal flow handle chat
 
     def handle_command(self, user_input):
-        """Handle special commands - UPDATED WITH PROPER ORCHESTRATOR LOADING"""
+        """Handle special commands through the CIPH 4.0 CommandRegistry strangler."""
+        if hasattr(self, 'runtime') and self.runtime:
+            dispatched = self.runtime.dispatch_slash_command(user_input)
+            if dispatched is not None:
+                if isinstance(dispatched, dict):
+                    return dispatched.get("dialogue") or f"Command executed with status: {dispatched.get('status')}"
+                return str(dispatched)
+
         if user_input in ['/model-status', '/engine-status', '/router-status']:
             router = getattr(self, 'ciph_router', None) or (self.conversation.router if hasattr(self, 'conversation') else None) or CiphRouter()
             return router.get_status_formatted()
@@ -1689,6 +1696,23 @@ Top opportunity: {opportunities[0].get('threat_type', 'unknown').upper()}
         elif user_input == '/zeroize-mind':
             res = self.vault.zeroize_cognitive_vault()
             return res.get('message', res.get('error', 'Zeroize finished.'))
+
+        elif user_input in ['/council', '/operator-council', '/arthurs-council', '/ponder']:
+            theses = self.vault.get_pending_council_theses(limit=1)
+            if not theses:
+                return "♟️ Operator's Council vault has reviewed all current theses. Ciph is formulating new hypotheses on the next expedition."
+            t = theses[0]
+            self.vault.mark_council_thesis_discussed(t['id'])
+            lines = [
+                "╔═══════════════════════════════════════════════════════════════════════════╗",
+                "║                         OPERATOR COUNCIL DIALECTIC                        ║",
+                "╚═══════════════════════════════════════════════════════════════════════════╝",
+                f"📌 THESIS: {t['title']}",
+                f"\n💡 CIPH'S CONCLUSION:\n{t['conclusion']}",
+                f"\n🎯 DIALOGUE PROMPT:\n{t['dialogue_prompt']}",
+                "═" * 75
+            ]
+            return "\n".join(lines)
 
         # ══════════════════════════════════════════════════════════════════════
         # SOVEREIGN NEURAL MEMORY SYSTEM (SMAU v2.0)
