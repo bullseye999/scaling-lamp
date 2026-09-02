@@ -8,6 +8,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from ciph.kernel.policy_engine import CapabilityManifest
+from ciph.kernel.network_sandbox import enforce_network_policy, NetworkPolicyViolation
 from ciph.workers.receipts import ExecutionReceipt, OutcomeCategory
 
 
@@ -36,7 +37,8 @@ class BaseCapability(ABC):
         started_at = time.time()
         
         try:
-            raw_results = self.run(params, context)
+            with enforce_network_policy(self.manifest.network_policy):
+                raw_results = self.run(params, context)
             completed_at = time.time()
             output_hash = ExecutionReceipt.hash_payload(raw_results)
             
@@ -61,6 +63,31 @@ class BaseCapability(ABC):
                 attempt_number=context.get("attempt_number", 1),
                 requested_network_policy=self.manifest.network_policy,
                 actual_transport_used=context.get("actual_transport_used", self.manifest.network_policy.value),
+                error_message=error_msg,
+                provenance=context.get("provenance", {})
+            )
+        except NetworkPolicyViolation as e:
+            completed_at = time.time()
+            error_msg = str(e)
+            output_hash = ExecutionReceipt.hash_payload({"error": error_msg})
+            
+            return ExecutionReceipt(
+                receipt_id=f"rcpt_{uuid.uuid4().hex[:12]}",
+                job_id=job_id,
+                capability=self.manifest.name,
+                target=str(target) if target else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                input_hash=input_hash,
+                output_hash=output_hash,
+                exit_code=1,
+                outcome=OutcomeCategory.SANDBOX_VIOLATION,
+                results={"error": error_msg},
+                side_effects=[],
+                idempotency_key=idempotency_key,
+                attempt_number=context.get("attempt_number", 1),
+                requested_network_policy=self.manifest.network_policy,
+                actual_transport_used="NETWORK_SANDBOX_BLOCKED",
                 error_message=error_msg,
                 provenance=context.get("provenance", {})
             )
