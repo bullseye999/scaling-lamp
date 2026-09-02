@@ -5,7 +5,7 @@ Demarcates facts, observations, inferences, hypotheses, recommendations, and unk
 
 from typing import Dict, Any, List, Optional
 from ciph.workers.receipts import ExecutionReceipt
-from ciph.kernel.transmutation_dag import TransmutationNode
+from ciph.kernel.transmutation_dag import TransmutationNode, EpistemicCategory
 
 
 class DialogueFormatter:
@@ -72,3 +72,73 @@ class DialogueFormatter:
             assure_tag = f"({int(c.assurance_score * 100)}%)"
             lines.append(f"  • {c.subject} -> {c.predicate}: {c.value} {state_tag} {assure_tag}")
         return "\n".join(lines)
+
+    @classmethod
+    def format_grounded_response(cls, claim: TransmutationNode) -> str:
+        """Format a single claim strictly grounded in its epistemic category and evidence."""
+        if not claim.evidence_receipt_ids and claim.state == EpistemicCategory.OBSERVED:
+            reg = "UNKNOWN"
+        elif claim.state == EpistemicCategory.SUPPORTED:
+            reg = "FACT" if claim.assurance_score >= 0.90 else "OBSERVATION"
+        elif claim.state == EpistemicCategory.INFERRED:
+            reg = "INFERENCE"
+        elif claim.state == EpistemicCategory.HYPOTHESIZED:
+            reg = "HYPOTHESIS"
+        elif claim.state == EpistemicCategory.DISPUTED:
+            reg = "UNKNOWN"
+        else:
+            reg = "OBSERVATION"
+
+        evidence_str = claim.evidence_receipt_ids[0] if claim.evidence_receipt_ids else None
+        return cls.format_entry(
+            register=reg,
+            content=f"{claim.subject} [{claim.predicate}]: {claim.value}",
+            evidence_id=evidence_str,
+            assurance=claim.assurance_score
+        )
+
+    @classmethod
+    def format_hypothesis_card(
+        cls,
+        hypothesis_id: str,
+        premise: str,
+        parent_evidence_ids: List[str],
+        proposed_test: str
+    ) -> str:
+        """Render a testable hypothesis card demarcating premises and required empirical experiments."""
+        ev_str = ", ".join(parent_evidence_ids) if parent_evidence_ids else "None (Unsubstantiated)"
+        return "\n".join([
+            f"🧪 [HYPOTHESIS {hypothesis_id}]",
+            f"  Premise      : {premise}",
+            f"  Grounding Ev : {ev_str}",
+            f"  Proposed Test: {proposed_test}"
+        ])
+
+    @classmethod
+    def format_epistemic_audit_report(cls, claims: List[TransmutationNode]) -> str:
+        """Generate an audit breakdown of beliefs by epistemic category."""
+        counts: Dict[str, int] = {}
+        for c in claims:
+            k = c.state.value
+            counts[k] = counts.get(k, 0) + 1
+
+        lines = ["⚖️ EPISTEMIC AUDIT REPORT:"]
+        for cat, count in sorted(counts.items()):
+            lines.append(f"  • {cat:<18}: {count}")
+        return "\n".join(lines)
+
+    @classmethod
+    def verify_epistemic_integrity(cls, text: str) -> bool:
+        """
+        Verify that all assertion lines begin with a valid epistemic register tag.
+        Used to prevent ungrounded assertions from reaching the operator.
+        """
+        valid_tags = tuple(cls.REGISTERS.values())
+        for line in text.strip().splitlines():
+            s = line.strip()
+            if not s or s.startswith("•") or s.startswith("🏛️") or s.startswith("✅") or s.startswith("❌") or s.startswith("⚖️") or s.startswith("🧪") or s.startswith("╔") or s.startswith("║") or s.startswith("╚"):
+                continue
+            if not any(s.startswith(tag) for tag in valid_tags):
+                return False
+        return True
+

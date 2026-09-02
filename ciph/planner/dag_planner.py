@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Set
 from collections import deque
-from ciph.planner.schemas import PlanStep, ExecutionDAG, ReversibilityClass
+from ciph.planner.schemas import PlanStep, ExecutionDAG, ReversibilityClass, PlanValidationResult, AuthorizationTier
 from ciph.planner.predicates import evaluate_success_condition
 from ciph.capabilities.registry import CapabilityRegistry
 from ciph.workers.receipts import ExecutionReceipt
@@ -31,6 +31,35 @@ class DAGExecutor:
         self.registry = registry
         self.backups_dir = Path(backups_dir)
         self.backups_dir.mkdir(exist_ok=True)
+
+    def validate_plan(self, dag: ExecutionDAG) -> PlanValidationResult:
+        """
+        Statically validates DAG topology, capability availability, and authorization tier requirements.
+        """
+        errors = []
+        required_grants = []
+
+        # 1. Check topological validity
+        try:
+            self.topological_sort(dag.steps)
+        except ValueError as ex:
+            errors.append(f"Topology Error: {str(ex)}")
+
+        # 2. Check capability existence & authorization tiers
+        for step in dag.steps:
+            cap = self.registry.get(step.capability)
+            if not cap:
+                errors.append(f"Unregistered capability '{step.capability}' in step '{step.step_id}'.")
+            else:
+                if cap.manifest.authorization == AuthorizationTier.MANDATORY_INTERRUPT:
+                    required_grants.append(step.step_id)
+
+        return PlanValidationResult(
+            plan_id=dag.plan_id,
+            is_valid=len(errors) == 0,
+            errors=errors,
+            required_grants=required_grants
+        )
 
     def topological_sort(self, steps: List[PlanStep]) -> List[PlanStep]:
         """
