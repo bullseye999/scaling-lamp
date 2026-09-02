@@ -1,7 +1,10 @@
 """
-ciph.planner.schemas - Canonical schemas for PlanStep, ExecutionDAG, and SkillTemplate.
+ciph.planner.schemas - Canonical schemas for PlanStep, ExecutionDAG, SkillTemplate, and IntentProposal.
 """
 
+import time
+import json
+import hashlib
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, List, Optional
@@ -14,6 +17,33 @@ class SkillPromotionTier(str, Enum):
     APPROVED  = "APPROVED"   # Signed off by operator
     ACTIVE    = "ACTIVE"     # Available for fast-path compilation
     REVOKED   = "REVOKED"    # Deprecated / environment drifted
+
+
+@dataclass
+class IntentProposal:
+    proposal_id: str
+    objective: str
+    proposed_capability: str
+    provided_parameters: Dict[str, Any] = field(default_factory=dict)
+    missing_parameters: List[str] = field(default_factory=list)
+    scope_reference: Optional[str] = None
+    constraints: Dict[str, Any] = field(default_factory=dict)
+    requested_outcome: Optional[str] = None
+    created_at: float = field(default_factory=time.time)
+
+    def is_executable_proposal(self) -> bool:
+        """Check if proposal has all mandatory parameters resolved."""
+        return len(self.missing_parameters) == 0 and bool(self.proposed_capability)
+
+
+@dataclass
+class PlanValidationResult:
+    plan_id: str
+    is_valid: bool
+    errors: List[str] = field(default_factory=list)
+    missing_parameters: List[str] = field(default_factory=list)
+    required_grants: List[str] = field(default_factory=list)
+    validated_at: float = field(default_factory=time.time)
 
 
 @dataclass
@@ -31,6 +61,16 @@ class PlanStep:
     idempotency_key: str = ""
     timeout_seconds: int = 30
     authorization_tier: AuthorizationTier = AuthorizationTier.AUTO
+    scope_grant_id: Optional[str] = None
+    authorization_grant_id: Optional[str] = None
+
+    def compute_params_hash(self) -> str:
+        """Deterministically hash parameters dictionary."""
+        try:
+            canonical_str = json.dumps(self.parameters, sort_keys=True, default=str)
+        except Exception:
+            canonical_str = str(self.parameters)
+        return hashlib.sha256(canonical_str.encode('utf-8')).hexdigest()
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -56,6 +96,14 @@ class ExecutionDAG:
     rollback_snapshot_id: Optional[str] = None
     is_parameterized_template: bool = False
     template_signature: Optional[str] = None
+
+    def compute_plan_hash(self) -> str:
+        """Compute canonical cryptographic hash of the compiled execution DAG."""
+        step_fingerprints = []
+        for s in sorted(self.steps, key=lambda x: x.step_id):
+            step_fingerprints.append(f"{s.step_id}:{s.capability}:{s.compute_params_hash()}:{sorted(s.depends_on)}")
+        raw = f"{self.plan_id}:{self.objective}:{';'.join(step_fingerprints)}"
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
     def get_step(self, step_id: str) -> Optional[PlanStep]:
         for s in self.steps:
