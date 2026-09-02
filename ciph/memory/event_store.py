@@ -26,10 +26,23 @@ class EventStore:
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA busy_timeout = 5000;")
         conn.row_factory = sqlite3.Row
+
+        # Global exclusive maintenance lease check
+        try:
+            now = time.time()
+            cursor = conn.execute("SELECT holder_id FROM ciph_maintenance_leases WHERE expires_at > ? LIMIT 1;", (now,))
+            lease_row = cursor.fetchone()
+            if lease_row:
+                conn.close()
+                raise sqlite3.OperationalError(f"Database locked: Active exclusive maintenance lease held by '{lease_row[0]}'.")
+        except sqlite3.OperationalError as ex:
+            if "no such table" not in str(ex):
+                raise ex
+
         return conn
 
     def _init_db(self):
-        with self._get_connection() as conn:
+        with sqlite3.connect(self.db_path, timeout=5.0) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS ciph_event_store (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
