@@ -86,3 +86,114 @@ class TransmutationNode:
         d['state'] = self.state.value
         d['reliability'] = self.reliability.value
         return d
+
+
+class TransmutationDAG:
+    """
+    Epistemic Transmutation DAG Engine.
+    Enforces the Weakest-Link Principle: No derived inference can have
+    greater assurance than its weakest supporting premise.
+    """
+
+    def __init__(self):
+        self._nodes: Dict[str, TransmutationNode] = {}
+        self._children: Dict[str, List[str]] = {}
+
+    def add_node(self, node: TransmutationNode) -> None:
+        """Add or update a node in the Transmutation DAG."""
+        self._nodes[node.claim_id] = node
+        for parent_id in node.parent_claim_ids:
+            if parent_id not in self._children:
+                self._children[parent_id] = []
+            if node.claim_id not in self._children[parent_id]:
+                self._children[parent_id].append(node.claim_id)
+
+    def get_node(self, claim_id: str) -> Optional[TransmutationNode]:
+        """Retrieve node by claim_id."""
+        return self._nodes.get(claim_id)
+
+    def derive_inference(
+        self,
+        derived_claim_id: str,
+        subject: str,
+        predicate: str,
+        value: Any,
+        parent_claim_ids: List[str],
+        rule_name: str,
+        condition: Optional[str] = None,
+        freshness_deadline: Optional[float] = None
+    ) -> TransmutationNode:
+        """
+        Derive an INFERRED belief from supporting premise nodes.
+        Strictly applies the Weakest-Link Principle:
+        assurance(C) <= min(assurance(P) for P in parents)
+        """
+        if not parent_claim_ids:
+            raise ValueError("Inference must be grounded in at least one parent claim premise.")
+
+        parent_nodes = []
+        for pid in parent_claim_ids:
+            pnode = self.get_node(pid)
+            if not pnode:
+                raise ValueError(f"Parent claim premise '{pid}' does not exist in the DAG.")
+            parent_nodes.append(pnode)
+
+        # Weakest-link assurance cap
+        min_parent_assurance = min(p.assurance_score for p in parent_nodes)
+        
+        # Deduction confidence penalty (small 5% deduction discount)
+        inferred_assurance = round(min_parent_assurance * 0.95, 3)
+
+        # Inherit strictest reliability from parents
+        reliability_order = [
+            ReliabilityClass.UNVERIFIED_INCOMING,
+            ReliabilityClass.PASSIVE_RECON,
+            ReliabilityClass.THIRD_PARTY_FEED,
+            ReliabilityClass.DIRECT_SENSOR,
+            ReliabilityClass.AUTHORITATIVE_LOCAL
+        ]
+        min_rel = min(parent_nodes, key=lambda p: reliability_order.index(p.reliability)).reliability
+
+        # Aggregate evidence receipts from all supporting parents
+        inherited_evidence = []
+        for p in parent_nodes:
+            inherited_evidence.extend(p.evidence_receipt_ids)
+
+        node = TransmutationNode(
+            claim_id=derived_claim_id,
+            subject=subject,
+            predicate=predicate,
+            value=value,
+            condition=condition or f"rule:{rule_name}",
+            state=EpistemicCategory.INFERRED,
+            reliability=min_rel,
+            assurance_score=inferred_assurance,
+            evidence_receipt_ids=list(set(inherited_evidence)),
+            parent_claim_ids=parent_claim_ids,
+            freshness_deadline=freshness_deadline
+        )
+        self.add_node(node)
+        return node
+
+    def verify_weakest_link_invariants(self, claim_id: str) -> bool:
+        """
+        Formally verifies that a claim's assurance score is bounded by all its ancestors.
+        Fails closed if any parent premise is missing or if assurance exceeds any parent.
+        """
+        node = self.get_node(claim_id)
+        if not node:
+            return False
+        if not node.parent_claim_ids:
+            return True
+
+        for pid in node.parent_claim_ids:
+            parent = self.get_node(pid)
+            if not parent:
+                return False  # Missing parent fails invariant verification
+            if node.assurance_score > parent.assurance_score:
+                return False
+            # Recursively verify upstream
+            if not self.verify_weakest_link_invariants(pid):
+                return False
+        return True
+
