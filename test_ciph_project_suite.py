@@ -29,7 +29,7 @@ def run_suite():
         # Personal Library & Wisdom Suite
         ("/library", "PDF Knowledge Library", False),
         ("/book-advice dealing with complex systems and adversaries", "Situational Advice Extraction", False),
-        ("/operator-council", "Council Theses Consultation", False),
+        ("/arthurs-council", "Council Theses Consultation", False),
 
         # Private Recon, Darknet & OSINT
         ("/darknet-status", "Darknet Onion Sensor Status", False),

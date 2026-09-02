@@ -95,6 +95,123 @@ class TestCiphWorkers(unittest.TestCase):
         finally:
             daemon.stop()
 
+    def test_crash_recovery_and_at_least_once_delivery(self):
+        """Simulate worker process crash and verify watchdog recovers job without corruption."""
+        # Enqueue job with 2 retries
+        job_id = self.queue.enqueue_job("test.crash_recovery", {"param": 100}, max_retries=2)
+        
+        # Worker 1 leases job with 0.05s TTL, then crashes (does not complete or heartbeat)
+        leased = self.queue.lease_next_job("crashed-worker-1", lease_ttl_seconds=0.05)
+        self.assertIsNotNone(leased)
+        self.assertEqual(leased["job_id"], job_id)
+        self.assertEqual(leased["attempt_number"], 1)
+
+        # Wait for lease to expire
+        time.sleep(0.1)
+
+        # Watchdog reclaims expired leases
+        reclaimed = self.queue.reclaim_expired_leases()
+        self.assertEqual(reclaimed, 1)
+
+        reclaimed_job = self.queue.get_job(job_id)
+        self.assertEqual(reclaimed_job["status"], JobState.RETRYING.value)
+        self.assertIsNone(reclaimed_job["leased_to"])
+
+        # Worker 2 successfully leases attempt 2 and completes the job
+        leased2 = self.queue.lease_next_job("healthy-worker-2", lease_ttl_seconds=10)
+        self.assertIsNotNone(leased2)
+        self.assertEqual(leased2["job_id"], job_id)
+        self.assertEqual(leased2["attempt_number"], 2)
+
+        self.queue.complete_job(job_id, "healthy-worker-2", {"recovered": True})
+        final_job = self.queue.get_job(job_id)
+        self.assertEqual(final_job["status"], JobState.SUCCEEDED.value)
+        self.assertEqual(final_job["attempt_number"], 2)
+
+    def test_idempotency_key_deduplication(self):
+        """Re-enqueueing with identical idempotency_key must return existing job and prevent duplicate execution."""
+        idemp_token = "idemp_test_token_abc_123"
+
+        # 1. First enqueue
+        job_id_1 = self.queue.enqueue_job(
+            capability="math.square",
+            params={"n": 4},
+            idempotency_key=idemp_token
+        )
+
+        # 2. Worker completes first job
+        leased = self.queue.lease_next_job("worker_1", lease_ttl_seconds=30)
+        self.assertIsNotNone(leased)
+        self.queue.complete_job(job_id_1, "worker_1", {"square": 16}, receipt_id="rcpt_16")
+
+        # 3. Duplicate enqueue attempt with same idempotency key
+        job_id_2 = self.queue.enqueue_job(
+            capability="math.square",
+            params={"n": 4},
+            idempotency_key=idemp_token
+        )
+
+        # Must return the existing job_id
+        self.assertEqual(job_id_1, job_id_2)
+
+        # Check by query helper
+        job_lookup = self.queue.get_job_by_idempotency_key(idemp_token)
+        self.assertIsNotNone(job_lookup)
+        self.assertEqual(job_lookup["job_id"], job_id_1)
+        self.assertEqual(job_lookup["status"], JobState.SUCCEEDED.value)
+        self.assertEqual(job_lookup["receipt_id"], "rcpt_16")
+
+    def test_drain_once_with_hmac_signing_and_event_store(self):
+        """Verify synchronous single-step execution, HMAC signing, and EventStore commit."""
+        from ciph.memory.event_store import EventStore
+
+        class MultiplyCapability(BaseCapability):
+            @property
+            def manifest(self) -> CapabilityManifest:
+                return CapabilityManifest(
+                    name="math.multiply",
+                    description="Multiply",
+                    risk_tier=RiskTier.NONE,
+                    network_policy=NetworkPolicy.OFFLINE_ONLY,
+                    reversibility=ReversibilityClass.READ_ONLY,
+                    authorization=AuthorizationTier.AUTO,
+                )
+
+            def run(self, params, context=None):
+                return {"result": params.get("a", 0) * params.get("b", 0)}
+
+        event_store = EventStore(self.TEST_DB)
+        self.registry.register(MultiplyCapability())
+        worker_key = b"test_worker_signing_key_secret_32b!"
+
+        daemon = DurableWorkerDaemon(
+            queue=self.queue,
+            registry=self.registry,
+            event_store=event_store,
+            db_path=self.TEST_DB,
+            worker_secret_key=worker_key
+        )
+
+        # Enqueue job
+        job_id = self.queue.enqueue_job("math.multiply", {"a": 7, "b": 8}, idempotency_key="idemp_mult_56")
+        
+        # Drain once
+        receipt = daemon.drain_once(worker_id="worker_drain_01")
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt.exit_code, 0)
+        self.assertEqual(receipt.results["result"], 56)
+        self.assertTrue(receipt.verify_signature(worker_key))
+
+        # Check job in queue
+        job = self.queue.get_job(job_id)
+        self.assertEqual(job["status"], JobState.SUCCEEDED.value)
+        self.assertEqual(job["receipt_id"], receipt.receipt_id)
+
+        # Check EventStore
+        events = event_store.get_events(aggregate_id=receipt.receipt_id)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["payload"]["results"]["result"], 56)
+
 
 if __name__ == "__main__":
     unittest.main()

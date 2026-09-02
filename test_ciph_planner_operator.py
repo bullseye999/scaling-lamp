@@ -324,6 +324,116 @@ class TestCiphPlannerOperator(unittest.TestCase):
         self.assertEqual(len(received_obs), 1)
         self.assertEqual(received_obs[0].value, "main")
 
+    def test_weakest_link_assurance_cap_in_dag(self):
+        """Verify weakest-link assurance cap in Transmutation DAG."""
+        from ciph.kernel.transmutation_dag import TransmutationDAG, TransmutationNode, EpistemicCategory
+        from ciph.perception.observation import ReliabilityClass
+
+        dag = TransmutationDAG()
+
+        # Parent 1: High assurance local fact (0.95)
+        p1 = TransmutationNode(
+            claim_id="CLM-P1",
+            subject="api_service",
+            predicate="port",
+            value=443,
+            state=EpistemicCategory.SUPPORTED,
+            reliability=ReliabilityClass.AUTHORITATIVE_LOCAL,
+            assurance_score=0.95,
+            evidence_receipt_ids=["rcpt_01"]
+        )
+        # Parent 2: Moderate assurance sensor telemetry (0.60)
+        p2 = TransmutationNode(
+            claim_id="CLM-P2",
+            subject="api_service",
+            predicate="response_status",
+            value="502_BAD_GATEWAY",
+            state=EpistemicCategory.OBSERVED,
+            reliability=ReliabilityClass.PASSIVE_RECON,
+            assurance_score=0.60,
+            evidence_receipt_ids=["rcpt_02"]
+        )
+        dag.add_node(p1)
+        dag.add_node(p2)
+
+        # Derived Inference: API is degrading
+        inferred = dag.derive_inference(
+            derived_claim_id="CLM-INF-01",
+            subject="api_service",
+            predicate="health",
+            value="DEGRADED",
+            parent_claim_ids=["CLM-P1", "CLM-P2"],
+            rule_name="bad_gateway_correlation"
+        )
+
+        # Assurance must be capped by weakest parent: 0.60 * 0.95 = 0.57
+        self.assertEqual(inferred.assurance_score, 0.57)
+        self.assertLessEqual(inferred.assurance_score, p2.assurance_score)
+        self.assertLessEqual(inferred.assurance_score, p1.assurance_score)
+        self.assertEqual(inferred.state, EpistemicCategory.INFERRED)
+        self.assertTrue(dag.verify_weakest_link_invariants("CLM-INF-01"))
+
+        # Inferred node inherits all parent evidence receipts
+        self.assertIn("rcpt_01", inferred.evidence_receipt_ids)
+        self.assertIn("rcpt_02", inferred.evidence_receipt_ids)
+
+    def test_grounded_dialogue_register_formatting(self):
+        """Verify epistemic dialogue formatting across categories."""
+        # 1. Supported Fact (Assurance >= 0.90)
+        fact_node = TransmutationNode(
+            claim_id="CLM-FACT-01",
+            subject="firewall",
+            predicate="status",
+            value="ACTIVE",
+            state=EpistemicCategory.SUPPORTED,
+            assurance_score=0.95,
+            evidence_receipt_ids=["rcpt_fw_01"]
+        )
+        dialogue = DialogueFormatter.format_grounded_response(fact_node)
+        self.assertTrue(dialogue.startswith("[FACT]"))
+        self.assertIn("Evidence: rcpt_fw_01", dialogue)
+        self.assertIn("Assurance: 95%", dialogue)
+
+        # 2. Inferred belief
+        inf_node = TransmutationNode(
+            claim_id="CLM-INF-01",
+            subject="network",
+            predicate="congestion",
+            value="HIGH",
+            state=EpistemicCategory.INFERRED,
+            assurance_score=0.65,
+            evidence_receipt_ids=["rcpt_traffic"]
+        )
+        inf_dialogue = DialogueFormatter.format_grounded_response(inf_node)
+        self.assertTrue(inf_dialogue.startswith("[INFERENCE]"))
+
+    def test_epistemic_integrity_verification(self):
+        """Verify epistemic tagging validator."""
+        valid_text = """
+        [FACT] Firewall rule applied successfully (Evidence: rcpt_01 | Assurance: 95%)
+        [OBSERVATION] Target responded on port 8080 (Assurance: 80%)
+        [INFERENCE] Backend proxy is misconfigured (Evidence: rcpt_02 | Assurance: 60%)
+        """
+        self.assertTrue(DialogueFormatter.verify_epistemic_integrity(valid_text))
+
+        invalid_text = """
+        [FACT] Firewall rule applied.
+        This server is definitely compromised without any evidence tag.
+        """
+        self.assertFalse(DialogueFormatter.verify_epistemic_integrity(invalid_text))
+
+    def test_hypothesis_card_rendering(self):
+        """Verify hypothesis card formatting."""
+        card = DialogueFormatter.format_hypothesis_card(
+            hypothesis_id="HYP-AUTH-BYPASS",
+            premise="JWT token lacks signature verification on /admin endpoint",
+            parent_evidence_ids=["rcpt_recon_44"],
+            proposed_test="Replay crafted request with None alg header"
+        )
+        self.assertIn("🧪 [HYPOTHESIS HYP-AUTH-BYPASS]", card)
+        self.assertIn("Premise      : JWT token lacks signature verification", card)
+        self.assertIn("Grounding Ev : rcpt_recon_44", card)
+
 
 if __name__ == "__main__":
     unittest.main()
