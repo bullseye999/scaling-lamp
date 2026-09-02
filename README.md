@@ -4,7 +4,7 @@
 ### Operator-Governed Security Research, Intelligence, Analytics & Cognitive Automation Runtime
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-52%2F52%20Passing-success?style=flat-square)](test_ciph_contracts.py)
+[![Tests](https://img.shields.io/badge/Tests-80%2F80%20Passing-success?style=flat-square)](test_ciph_hardened_invariants.py)
 [![Storage](https://img.shields.io/badge/Storage-Fernet%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
 [![Transport](https://img.shields.io/badge/Transport-Tor%20SOCKS5h%20%7C%20Direct--Approved-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
 [![State](https://img.shields.io/badge/Epistemic%20Graph-9%20States-008080?style=flat-square)](ciph/kernel/transmutation_dag.py)
@@ -425,10 +425,10 @@ Never commit `.env`, `*.key`, `*.salt`, SQLite databases, reports containing tar
 ## Security Boundaries
 
 1. **Authorization is external ground truth.** CIPH is for systems you own or are explicitly authorized to assess. Stored scope parsing currently does not enforce target denial automatically.
-2. **Transport guarantees are component-specific.** `GhostTransport` fails closed over SOCKS5h Tor. `WorldTelemetry` can fall back to direct clearnet. `CiphRuntime` blocks `NETWORK_DENIED`, but centralized socket enforcement for every manifest policy is still incomplete.
+2. **Transport & Network Policy Enforcement.** `GhostTransport` fails closed over SOCKS5h Tor. `WorldTelemetry` handles configurable transport. `CiphRuntime` and `network_sandbox.py` enforce `OFFLINE_ONLY`, `LOCAL_ONLY`, and `TOR_MANDATORY` at runtime across `socket` and `_socket` using CPython PEP 578 audit hooks.
 3. **Rollback is explicit.** `DAGExecutor` restores only file and directory paths supplied for a reversible plan. External requests, messages, trades, and other irreversible effects cannot be rolled back by copying files.
 4. **Predicates avoid Python `eval()`.** DAG success conditions use a restricted AST interpreter. This does not make arbitrary generated code safe.
-5. **Code staging is not an OS sandbox.** It performs AST parsing, compilation, and timeout-bound subprocess execution. Review staged code and dependency installation before approval.
+5. **Code Staging & Evolution Filesystem Isolation.** Code self-evolution performs static AST analysis, fail-closed manifest extraction, and timeout-bound subprocess execution with PEP 578 filesystem isolation hooks preventing host-side modifications outside sandbox directories.
 6. **Encryption is scoped.** Sensitive `CipherVault` fields use Fernet authenticated encryption (AES-128-CBC with HMAC-SHA256). Event-store payloads, job queues, and materialized projections are not blanket-encrypted; protect the host and database file.
 7. **Adversarial gating is opt-in.** Gate logic can reject execution failures, soft-404s, and unsupported takeover claims, but current built-in manifests do not require it by default.
 8. **Analytics are not guarantees.** Market, arbitrage, and sports outputs are probabilistic or heuristic and are not financial advice or automatic live execution.
@@ -438,32 +438,34 @@ Never commit `.env`, `*.key`, `*.salt`, SQLite databases, reports containing tar
 
 ## Verification
 
-The current suite covers typed contracts, lane derivation, receipts, policy blocking, safe predicates, event integrity, multi-claim leases, recursive invalidation, durable workers, DAG compensation, rollback, skill promotion, cadence, authentication, and 25 command-level regression paths.
+The current suite covers typed contracts, lane derivation, cryptographic receipts, network policy blocking, safe predicates, event integrity, multi-claim leases, recursive invalidation, durable workers with atomic CAS leases, DAG compensation, rollback, skill promotion, cadence, authentication, and 25 command-level regression paths.
 
 ```text
 ======================================================================
   Test Suite                                      Pass / Total   Result
 ======================================================================
-  test_ciph_contracts.py (Contracts & Policy)         9 / 9       PASS
-  test_ciph_memory.py (Leases & Invalidation)         5 / 5       PASS
-  test_ciph_workers.py (Queue & Daemon)                2 / 2       PASS
-  test_ciph_planner_operator.py (DAG & Operator)       6 / 6       PASS
-  test_auth.py (Authentication & OpSec)                5 / 5       PASS
+  test_ciph_hardened_invariants.py (Security)        16 / 16      PASS
+  test_ciph_contracts.py (Contracts & Policy)        13 / 13      PASS
+  test_ciph_planner_operator.py (DAG & Operator)     10 / 10      PASS
+  test_ciph_memory.py (Leases & Invalidation)         8 / 8       PASS
+  test_ciph_commands.py (Governed Commands)           6 / 6       PASS
+  test_ciph_curiosity.py (Curiosity & Inquiry)        5 / 5       PASS
+  test_ciph_workers.py (Queue, Leases & Daemon)       5 / 5       PASS
+  test_auth.py (Authentication & OpSec)               5 / 5       PASS
+  test_ciph_dag_compensation.py (Compensations)       4 / 4       PASS
+  test_ciph_evolution.py (Evolution & Staging)        4 / 4       PASS
+  test_ciph_reference_loop.py (Execution Loop)        4 / 4       PASS
+----------------------------------------------------------------------
   test_ciph_project_suite.py (Command Regression)     25 / 25      PASS
 ======================================================================
-  TOTAL: 52 / 52 Tests Passing
+  TOTAL: 80 / 80 Unit & Integration Tests + 25 / 25 Audit Commands
 ======================================================================
 ```
 
 Run the same verification locally:
 
 ```bash
-python3 -m unittest -v \
-  test_ciph_contracts.py \
-  test_ciph_memory.py \
-  test_ciph_workers.py \
-  test_ciph_planner_operator.py \
-  test_auth.py
+python3 -m unittest discover -s . -p "test_*.py"
 python3 test_ciph_project_suite.py
 ```
 
@@ -474,11 +476,9 @@ Passing tests demonstrate the covered behavior; they are not a claim that every 
 ## Near-Term Engineering Priorities
 
 - Route more interactive commands through `CiphRuntime` and the persistent worker queue.
-- Enforce Tor/local/offline socket policies centrally rather than relying only on individual transports.
 - Couple worker checkout to automatic epistemic dependency leases.
 - Make stored bounty scope deny by default before dispatch.
 - Promote adversarial gating only where deterministic tests and latency budgets justify it.
-- Strengthen code staging with real OS/container isolation.
 - Define encrypted or redacted storage policy for event, queue, and projection payloads.
 - Add package metadata that enforces the Python 3.12 minimum mechanically.
 - Add a standalone `LICENSE` file matching the MIT declaration in this README.
