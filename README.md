@@ -4,7 +4,7 @@
 ### Operator-Governed Security Research, Intelligence, Analytics & Cognitive Automation Runtime
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-80%2F80%20Passing-success?style=flat-square)](test_ciph_hardened_invariants.py)
+[![Governance](https://img.shields.io/badge/Governance%20Matrix-16%2F16%20Compliant-success?style=flat-square)](ciph_matrix_audit.py)
 [![Storage](https://img.shields.io/badge/Storage-Fernet%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
 [![Transport](https://img.shields.io/badge/Transport-Tor%20SOCKS5h%20%7C%20Direct--Approved-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
 [![State](https://img.shields.io/badge/Epistemic%20Graph-9%20States-008080?style=flat-square)](ciph/kernel/transmutation_dag.py)
@@ -26,7 +26,7 @@ The project has two connected layers:
 - A mature interactive command core in `ciph_core.py` that exposes CIPH's domain engines.
 - A CIPH 4.0 governing layer that adds typed capability manifests, deterministic execution lanes, authorization checks, receipts, durable workers, DAG execution, epistemic state, and remediation primitives.
 
-CIPH 4.0 is an incremental migration, not a claim that every legacy command already traverses every new subsystem. This README marks the distinction directly.
+Phase 4 command execution now uses the governed registry exclusively. Unsupported legacy commands return `COMMAND_UNAVAILABLE`; they have no raw-module fallback. The current supported surface, intentional retirements, grant lifecycle, and verification limits are recorded in [COMMAND_MIGRATION.md](COMMAND_MIGRATION.md). Older command catalogs below describe historical module functionality and do not imply those commands remain executable.
 
 ### Status legend
 
@@ -242,7 +242,7 @@ A successful process exit is evidence that a job ran; it is not automatically pr
 | Area | Current boundary |
 | :--- | :--- |
 | Interactive command core | `ciph_core.py` remains the primary interactive CLI path. The thinner runtime migration is incremental. |
-| Live runtime routing | `/bounty-scan` and `/predict` route through `CiphRuntime`. The OSINT adapter is registered, while `/osint` remains on the legacy path. |
+| Live runtime routing | All supported slash commands, including `/bounty-scan`, `/predict`, and `/osint`, route through `CiphRuntime`; unregistered legacy commands are explicitly unavailable. |
 | Network enforcement | Runtime blocks `NETWORK_DENIED` and enforces `MANDATORY_INTERRUPT`. Central enforcement of every `TOR_MANDATORY`, `LOCAL_ONLY`, and `OFFLINE_ONLY` socket boundary is not complete. |
 | Durable dispatch | Queue, daemon, leases, heartbeat, retries, and recovery work in focused tests and `run_worker.py`; interactive commands do not universally enqueue through it. |
 | DAG execution | Dependency ordering, restricted predicates, compensation, and explicit-path rollback work. Natural-language requests do not universally compile into DAGs. |
@@ -444,7 +444,7 @@ The current suite covers typed contracts, lane derivation, cryptographic receipt
 ======================================================================
   Test Suite                                      Pass / Total   Result
 ======================================================================
-  test_ciph_hardened_invariants.py (Security)        16 / 16      PASS
+  test_ciph_hardened_invariants.py (Security)        14 / 14      PASS
   test_ciph_contracts.py (Contracts & Policy)        13 / 13      PASS
   test_ciph_planner_operator.py (DAG & Operator)     10 / 10      PASS
   test_ciph_memory.py (Leases & Invalidation)         8 / 8       PASS
@@ -458,7 +458,7 @@ The current suite covers typed contracts, lane derivation, cryptographic receipt
 ----------------------------------------------------------------------
   test_ciph_project_suite.py (Command Regression)     25 / 25      PASS
 ======================================================================
-  TOTAL: 80 / 80 Unit & Integration Tests + 25 / 25 Audit Commands
+  TOTAL: 78 / 78 Unit & Integration Tests + 25 / 25 Audit Commands
 ======================================================================
 ```
 

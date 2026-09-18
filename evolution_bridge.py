@@ -52,47 +52,36 @@ class SelfRelevanceAnalyzer:
         Analyze a cognitive blueprint to determine architectural self-relevance to Ciph.
         Returns a structured Engineering Hypothesis if relevant, or None if no direct code mutation applies.
         """
-        text_corpus = f"{blueprint.get('topic', '')} {blueprint.get('core_axiom', '')} {blueprint.get('mechanics', '')} {blueprint.get('strategic_application', '')}".lower()
-        
-        matched_concept = None
-        best_score = 0
-
-        for concept, meta in self.CAPABILITY_MAPPINGS.items():
-            score = sum(1 for kw in meta["keywords"] if kw in text_corpus)
-            if score > best_score:
-                best_score = score
-                matched_concept = concept
-
-        # Epistemic Honesty: If no capability matches, do not force-feed a random mutation.
-        if not matched_concept or best_score == 0:
+        from ciph.evolution.gap_detector import EngineeringGapDetector
+        from ciph.memory.event_store import EventStore
+        import hashlib
+        db_path=getattr(self.vault,'db_path',None)
+        if not db_path:
+            raise ValueError('DURABLE_EVOLUTION_STORE_REQUIRED')
+        gap_id=blueprint.get('engineering_gap_id')
+        if not gap_id:
+            EventStore(db_path).append_event('NoRelevanceFoundEvent',blueprint.get('blueprint_id','unbound'),
+                {'reason':'VERIFIED_ENGINEERING_GAP_REQUIRED','timestamp':time.time()})
             return None
-
-        concept_meta = self.CAPABILITY_MAPPINGS[matched_concept]
-        target_file = random.choice(concept_meta["targets"])
-        target_path = os.path.join(self.project_dir, target_file)
-
-        # Inspect target module AST
-        module_health = self._inspect_target_module(target_path)
-
-        hypothesis_id = f"HYP-{int(time.time())}-{random.randint(100, 999)}"
-        hypothesis = {
-            "hypothesis_id": hypothesis_id,
-            "blueprint_id": blueprint.get("blueprint_id", "EXP-UNKNOWN"),
-            "domain": blueprint.get("domain", "General"),
-            "topic": blueprint.get("topic", "System Architecture"),
-            "concept_class": matched_concept,
-            "target_module": target_file,
-            "target_path": target_path,
-            "module_health": module_health,
-            "hypothesis_text": concept_meta["hypothesis"],
-            "expected_metric": "Execution latency (ms) & exception resistance",
-            "timestamp": time.time(),
-            "status": "FORMULATED"
-        }
-
-        # Store hypothesis in vault
-        self._record_hypothesis(hypothesis)
-        return hypothesis
+        detector=EngineeringGapDetector(db_path)
+        gap=detector.get_gap(gap_id)
+        if not gap:
+            detector.evidence.record('NO_RELEVANCE_FOUND',{'gap_id':gap_id,'reason':'UNKNOWN_ENGINEERING_GAP'})
+            return None
+        target=os.path.abspath(blueprint.get('target_path',''))
+        if os.path.commonpath([target,os.path.abspath(self.project_dir)])!=os.path.abspath(self.project_dir):
+            raise ValueError('EVOLUTION_TARGET_OUTSIDE_PROJECT')
+        from ciph.evolution.file_activation import locked_target,read_at
+        with locked_target(target) as (parent,name):source,_=read_at(parent,name)
+        if hashlib.sha256(source).hexdigest()!=gap.affected_revision:
+            raise ValueError('ENGINEERING_TARGET_REVISION_MISMATCH')
+        hypothesis={'gap_id':gap.gap_id,'blueprint_id':blueprint.get('blueprint_id'),
+            'domain':'engineering','topic':gap.target_capability,'concept_class':gap.category.value,
+            'target_module':os.path.basename(target),'target_path':target,
+            'module_health':self._inspect_target_module(target),'hypothesis_text':gap.testable_improvement_criterion,
+            'expected_metric':gap.testable_improvement_criterion,'timestamp':time.time(),'status':'FORMULATED'}
+        identity=detector.evidence.record('ENGINEERING_HYPOTHESIS_PROPOSED',hypothesis)
+        return {**hypothesis,'hypothesis_id':identity}
 
     def reanalyze_historical_blueprints(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retroactively analyze stored blueprints in vault and extract testable hypotheses."""

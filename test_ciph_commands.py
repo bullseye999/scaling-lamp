@@ -1,3 +1,4 @@
+from phase5_test_support import offline_fixture
 """
 test_ciph_commands.py - Unit and Integration Tests for CIPH 4.0 Declarative Command Registry (Phase 4).
 """
@@ -24,7 +25,7 @@ class TestCiphCommands(unittest.TestCase):
             def predict_match(self, home, away):
                 return {"home": home, "away": away, "winner": home, "prob_home": 0.65}
 
-        self.runtime.register_capability(SportsPredictCapability(MockSportsPredictor()))
+        self.runtime.register_capability(offline_fixture(SportsPredictCapability(MockSportsPredictor())))
 
     def tearDown(self):
         self.runtime.shutdown()
@@ -92,7 +93,8 @@ class TestCiphCommands(unittest.TestCase):
 
     def test_dispatch_code_audit_slash_command(self):
         """Test declarative /code-audit on code_staging.py."""
-        res = self.runtime.dispatch_slash_command("/code-audit code_staging.py")
+        fixture = os.path.join(os.path.dirname(os.path.abspath(__file__)), "code_staging.py")
+        res = self.runtime.dispatch_slash_command(f"/code-audit {fixture}")
         self.assertIsNotNone(res)
         self.assertEqual(res["status"], "SUCCESS")
         receipt = res["receipt"]
@@ -112,6 +114,61 @@ class TestCiphCommands(unittest.TestCase):
         self.assertIn("/memory", help_card)
         self.assertIn("/tor", help_card)
         self.assertIn("/code-audit", help_card)
+
+    def test_dispatch_memory_set_routes_to_memory_store(self):
+        """Verify /memory set dynamically resolves to memory.store capability."""
+        res = self.runtime.dispatch_slash_command("/memory set operator_handle operator")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["status"], "SUCCESS")
+        receipt = res["receipt"]
+        self.assertEqual(receipt.capability, "memory.store")
+
+    def test_tor_status_honest_unavailable_when_backend_missing(self):
+        """Verify /tor returns honest failure when backend is absent (no fake simulation)."""
+        res = self.runtime.dispatch_slash_command("/tor")
+        self.assertIsNotNone(res)
+        self.assertEqual(res['status'], 'SANDBOX_UNAVAILABLE')
+        self.assertIsNone(res.get('receipt'))
+
+    def test_dispatch_darknet_status_slash_command(self):
+        """Verify /darknet-status executes through governed reference loop."""
+        res = self.runtime.dispatch_slash_command("/darknet-status")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["status"], "SUCCESS")
+        receipt = res["receipt"]
+        self.assertEqual(receipt.capability, "darknet.get_status")
+        self.assertIn("feeds_monitored", receipt.results["status"])
+
+    def test_dispatch_darknet_report_slash_command(self):
+        """Verify /darknet-report executes through governed reference loop."""
+        res = self.runtime.dispatch_slash_command("/darknet-report")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["status"], "SUCCESS")
+        receipt = res["receipt"]
+        self.assertEqual(receipt.capability, "darknet.get_detailed_report")
+        self.assertIn("report", receipt.results)
+
+    def test_dispatch_upgrades_slash_command(self):
+        """Verify /upgrades executes through governed reference loop."""
+        res = self.runtime.dispatch_slash_command("/upgrades")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["status"], "SUCCESS")
+        receipt = res["receipt"]
+        self.assertEqual(receipt.capability, "code.list_staged")
+        self.assertIn("staged", receipt.results)
+
+    def test_code_promote_requires_mandatory_interrupt_grant(self):
+        """Verify code.promote_upgrade halts without mandatory cryptographic operator grant."""
+        from ciph.planner.schemas import IntentProposal
+        proposal = IntentProposal(
+            proposal_id="prop_promote_unauth",
+            objective="Promote unverified upgrade patch",
+            proposed_capability="code.promote_upgrade",
+            provided_parameters={"proposal_id": "UP-999"}
+        )
+        res = self.runtime.execute_reference_loop(proposal)
+        self.assertEqual(res["status"], "AUTHORIZATION_REQUIRED")
+        self.assertIn("Operator authorization required", res["dialogue"])
 
 
 if __name__ == "__main__":

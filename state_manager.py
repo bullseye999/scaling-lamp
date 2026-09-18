@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-# state_manager.py - Three-tier isolated state store for CIPH
-# Tier 1: System State (Ground Truth, only executor modifies)
-# Tier 2: Background State (Isolated tasks, no LLM access)
-# Tier 3: Runtime Snapshot (Sanitized view exposed to LLM)
+# state_manager.py - Clean separation of state types
+# System State (truth), Background State (no LLM access), Runtime Snapshot (LLM sees)
 
 import time
 from typing import Dict, Any, List
 
 class StateManager:
-    """Three isolated state stores: System State, Background State, and Runtime Snapshot."""
+    """Three isolated state stores: System, Background, Snapshot."""
 
     def __init__(self):
         # System State - TRUTH (only executor can modify)
@@ -152,6 +150,24 @@ class StateManager:
     def get_change_log(self, limit: int = 20) -> List[Dict]:
         """Debugging: see recent state changes."""
         return self.change_log[-limit:]
+
+    def get_epistemic_snapshot(self, vault=None) -> Dict:
+        """Grounding snapshot of verified claims, graveyard, and win history."""
+        if not vault:
+            return {"verified_real_count": 0, "graveyard_count": 0, "win_count": 0}
+        try:
+            real_claims = vault.get_active_real_claims(limit=50)
+            graveyard = vault.get_recent_graveyard(limit=50)
+            wins = vault.get_recent_wins(limit=50)
+            return {
+                "verified_real_count": len(real_claims),
+                "graveyard_count": len(graveyard),
+                "win_count": len(wins),
+                "recent_verified_subjects": [c['subject'] for c in real_claims[:5]],
+                "recent_refuted_subjects": [g['subject'] for g in graveyard[:5]]
+            }
+        except Exception:
+            return {"verified_real_count": 0, "graveyard_count": 0, "win_count": 0}
 
     # ========== INITIALIZATION ==========
     def initialize_from_core(self, modules: List[str], tor_active: bool, workflows: int, ai_enabled: bool):

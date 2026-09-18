@@ -14,6 +14,8 @@ from ciph.kernel.policy_engine import (
     ReversibilityClass,
     AuthorizationTier,
     AuthorizationGrant,
+    ScopeGrant,
+    ScopeType,
 )
 from ciph.planner.schemas import PlanStep, ExecutionDAG
 
@@ -246,6 +248,76 @@ class TestCiphDAGCompensation(unittest.TestCase):
         )
         self.assertTrue(res_auth["success"])
         self.assertEqual(res_auth["status"], "SUCCESS")
+
+    def test_dag_step_receipts_are_cryptographically_signed(self):
+        """Every step executed in a DAG must produce a cryptographically signed receipt."""
+        dag = ExecutionDAG(
+            plan_id="PLAN-SIGNED-01",
+            objective="Provision signed step",
+            steps=[
+                PlanStep(step_id="S1", capability="cloud.provision", parameters={"res_id": "signed_vm"})
+            ]
+        )
+        res = self.runtime.execute_dag_plan(dag)
+        self.assertTrue(res["success"])
+        receipt_dict = res["step_receipts"]["S1"]
+        self.assertIsNotNone(receipt_dict.get("worker_signature"))
+        self.assertTrue(len(receipt_dict["worker_signature"]) > 0)
+
+    def test_dag_compensation_produces_signed_receipts_and_events(self):
+        """Compensations executed during rollback must emit signed receipts and EventStore events."""
+        dag = ExecutionDAG(
+            plan_id="PLAN-COMP-RECEIPT-01",
+            objective="Provision then fail with compensation receipting",
+            steps=[
+                PlanStep(
+                    step_id="S1",
+                    capability="cloud.provision",
+                    parameters={"res_id": "ephemeral_node"},
+                    compensation_action="cloud.destroy",
+                    compensation_params={"res_id": "ephemeral_node"}
+                ),
+                PlanStep(
+                    step_id="S2",
+                    capability="cloud.fail_step",
+                    parameters={},
+                    depends_on=["S1"]
+                )
+            ]
+        )
+        res = self.runtime.execute_dag_plan(dag)
+        self.assertFalse(res["success"])
+        self.assertIn("compensation_receipts", res)
+        self.assertGreaterEqual(len(res["compensation_receipts"]), 1)
+        comp_rcpt = res["compensation_receipts"][0]
+        self.assertIsNotNone(comp_rcpt.get("worker_signature"))
+
+        # Verify EventStore recorded the compensation event
+        comp_events = self.runtime.event_store.get_events(event_type="CompensationExecutionReceiptStoredEvent")
+        self.assertGreaterEqual(len(comp_events), 1)
+
+    def test_dag_enforces_scope_grant_fail_closed(self):
+        """A DAG step targeting an unpermitted target must fail closed with POLICY_BLOCKED."""
+        scope = ScopeGrant(
+            scope_id="scope_cloud_allowed",
+            scope_type=ScopeType.LOCAL_SYSTEM,
+            allowed_targets=["allowed_target_host"]
+        )
+        dag = ExecutionDAG(
+            plan_id="PLAN-SCOPE-BLOCKED-01",
+            objective="Attempt probe outside scope",
+            steps=[
+                PlanStep(
+                    step_id="S1",
+                    capability="cloud.provision",
+                    parameters={"res_id": "r1", "target": "forbidden_external_host"}
+                )
+            ]
+        )
+        res = self.runtime.execute_dag_plan(dag, scope_grant=scope)
+        self.assertFalse(res["success"])
+        self.assertEqual(res["status"], "POLICY_BLOCKED")
+        self.assertEqual(res["step_id"], "S1")
 
 
 if __name__ == "__main__":

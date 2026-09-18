@@ -19,8 +19,8 @@ class SelfAwareness:
     - Identifies real problems from usage patterns
     - Proposes meaningful upgrades
     - Writes the upgrade code itself via unified CiphRouter
-    - Creates proposal files for the Operator to review with empirical benchmarks
-    - Nothing touches existing files without the Operator's approval
+    - Creates proposal files for the operator to review with empirical benchmarks
+    - Nothing touches existing files without operator approval
     """
 
     CIPH_MODULES = [
@@ -459,7 +459,7 @@ class SelfAwareness:
                 "Current triggers include darknet, exploit, vulnerability etc. "
                 "Write 10 additional trigger phrases I should add to OLLAMA_TOPICS list "
                 "as a Python list called ADDITIONAL_TRIGGERS. "
-                "Focus on: OPSEC topics, personal/emotional topics the Operator might discuss, "
+                "Focus on: OPSEC topics, personal/emotional topics the operator might discuss, "
                 "security testing topics. Keep it as a simple Python list assignment."
             )
             if code:
@@ -486,7 +486,7 @@ class SelfAwareness:
             return code
         return None
     # ─────────────────────────────────────────────
-    # PROPOSAL FILES — What the Operator reviews
+    # PROPOSAL FILES — What the operator reviews
     # ─────────────────────────────────────────────
 
     def _save_proposal_file(self, proposal_id: str, filename: str, content: str,
@@ -494,75 +494,17 @@ class SelfAwareness:
                              module: str, is_new_file: bool = True):
         """
         Save a proposal as a readable file in ciph_proposals/.
-        This is what the Operator sees and reviews before approving.
+        This is what the operator sees and reviews before approving.
         """
-        # Strict AST Syntax Check BEFORE writing proposal file
-        validation = self._validate_proposal_code(content)
-        if not validation.get('valid'):
-            print(f"❌ [SelfAwareness] Proposal {proposal_id} aborted: Syntax error in proposed code: {validation.get('error')}")
-            return False
-
-        proposal_path = os.path.join(self.PROPOSALS_DIR, f"{proposal_id}_{filename}")
-
-        # Write the actual code/content file
-        with open(proposal_path, 'w', encoding='utf-8') as f:
-            f.write(f"# CIPH UPGRADE PROPOSAL {proposal_id}\n")
-            f.write(f"# Title: {title}\n")
-            f.write(f"# Priority: {priority.upper()}\n")
-            f.write(f"# Target module: {module}\n")
-            f.write(f"# Action: {'NEW FILE' if is_new_file else 'MODIFY EXISTING'}\n")
-            f.write(f"# Description: {description}\n")
-            f.write(f"# Proposed at: {datetime.now().isoformat()}\n")
-            f.write(f"# To apply: /apply-upgrade {proposal_id}\n")
-            f.write(f"# To reject: /reject-upgrade {proposal_id}\n")
-            f.write("#\n# " + "=" * 60 + "\n\n")
-            f.write(content)
-
-        # Run Empirical Pre/Post Benchmark if modifying an existing file
-        bench_data = None
-        if not is_new_file and os.path.exists(module):
-            try:
-                bench_res = self.benchmark.compare(module, proposal_path, iterations=3)
-                bench_data = {
-                    'verdict': bench_res.get('verdict', 'UNKNOWN'),
-                    'delta_pct': bench_res.get('delta_pct', 0.0),
-                    'recommendation': bench_res.get('recommendation', 'UNKNOWN'),
-                    'baseline_ms': bench_res.get('baseline_ms', 0.0),
-                    'candidate_ms': bench_res.get('candidate_ms', 0.0),
-                    'reason': bench_res.get('reason', '')
-                }
-            except Exception:
-                bench_data = None
-
-        # Register in pending upgrades
-        proposal = {
-            'id':            proposal_id,
-            'module':        module,
-            'title':         title,
-            'description':   description,
-            'priority':      priority,
-            'proposed_at':   datetime.now().isoformat(),
-            'status':        'PENDING',
-            'proposal_file': proposal_path,
-            'target_file':   filename,
-            'is_new_file':   is_new_file,
-            'benchmark':     bench_data
-        }
-        self.pending_upgrades.append(proposal)
-        self._save_pending()
-
-        bench_str = ""
-        if bench_data:
-            b_emoji = "✅" if bench_data['verdict'] in ['IMPROVED', 'NEUTRAL'] else "❌"
-            bench_str = f"\n   Benchmark: {b_emoji} {bench_data['verdict']} ({bench_data['delta_pct']:+.1f}% vs baseline)"
-
-        print(f"\n🧬 PROPOSAL {proposal_id}: {title}")
-        print(f"   Priority: {priority.upper()} | Target: {module}")
-        print(f"   File: {proposal_path}{bench_str}")
-        print(f"   Review: cat {proposal_path}")
-        print(f"   Apply:  /apply-upgrade {proposal_id}")
-        print(f"   Reject: /reject-upgrade {proposal_id}")
-        return True
+        # Legacy keyword/LLM proposal writers have no evidence or evaluation grant.
+        # Approved candidates are staged by runtime.evolution.evaluate(), which
+        # records inspection, hypothesis, design, and grant-bound provenance.
+        from ciph.memory.event_store import EventStore
+        db_path=getattr(self.vault,'db_path',None)
+        if db_path:
+            EventStore(db_path).append_event('NoRelevanceFoundEvent',proposal_id,
+                {'reason':'VERIFIED_ENGINEERING_GAP_AND_EVALUATION_GRANT_REQUIRED'})
+        return False
 
     def _create_upgrade_proposal(self, module: str, title: str,
                                    problem: str, priority: str) -> Optional[Dict]:

@@ -4,14 +4,12 @@
 import re
 import os
 import time
-import textwrap
 from datetime import datetime
-from typing import Optional, Dict, Any
 
 class ResponseFormatter:
     """
     Makes Ciph's terminal output look clean, readable, and operator-grade.
-    Preserves multi-line formatting, ASCII layouts, tables, and lists.
+    No clutter. No noise. Just signal.
     """
 
     def __init__(self):
@@ -27,8 +25,7 @@ class ResponseFormatter:
 
     def _get_terminal_width(self) -> int:
         try:
-            w = os.get_terminal_size().columns
-            return max(60, min(w, 120))
+            return os.get_terminal_size().columns
         except Exception:
             return 80
 
@@ -37,16 +34,11 @@ class ResponseFormatter:
     # ─────────────────────────────────────────────
 
     def print_ciph(self, response: str):
-        """Print Ciph's response with proper line and block preservation."""
-        if not response:
-            return
-        # Clean ‖ delimiters if present
-        clean_res = response.strip()
-        if clean_res.startswith("‖") and clean_res.endswith("‖"):
-            clean_res = clean_res[1:-1].strip()
-
-        formatted = self._wrap_text(clean_res, indent=2)
-        print(f"\n{self.ciph_color}{self.bold}🕶️ Ciph:{self.reset}\n{self.ciph_color}{formatted}{self.reset}")
+        """Print Ciph's response — clean, readable"""
+        print(f"\n{self.ciph_color}{self.bold}Ciph:{self.reset}", end=" ")
+        # Word-wrap long responses
+        formatted = self._wrap_text(response, indent=6)
+        print(f"{self.ciph_color}{formatted}{self.reset}")
 
     def print_system(self, message: str):
         """Print system message — dimmed, unobtrusive"""
@@ -74,12 +66,12 @@ class ResponseFormatter:
         """Clean startup banner"""
         width = self.terminal_width
         now = datetime.now().strftime("%H:%M · %d %b %Y")
-        ai_tag = "AI ✓" if ai_enabled else "AI ✗"
+        ai_tag     = "AI ✓"   if ai_enabled   else "AI ✗"
         status_line = f"  {now}  ·  Modules: {module_count}  ·  Memory: {memory_entities}  ·  {ai_tag}"
 
         print(f"\n{self.ciph_color}{'█' * width}{self.reset}")
         print(f"{self.ciph_color}{'█':<{width}}{self.reset}")
-        title = "C I P H  3 . 0"
+        title = "C I P H"
         padding = (width - len(title)) // 2
         print(f"{self.ciph_color}{'█'}{' ' * padding}{self.bold}{title}{self.reset}{self.ciph_color}{' ' * padding}{'█'}{self.reset}")
         print(f"{self.ciph_color}{'█':<{width}}{self.reset}")
@@ -92,37 +84,38 @@ class ResponseFormatter:
         for _ in range(3):
             for frame in frames:
                 print(f"\r{self.system_color}{self.dim}thinking {frame}{self.reset}", end='', flush=True)
-                time.sleep(0.12)
+                time.sleep(0.15)
         print('\r' + ' ' * 20 + '\r', end='')
 
     def format_command_response(self, response: str) -> str:
-        """Format command responses — clean up outer ‖ markers while preserving newlines."""
-        if not response:
-            return ""
-        resp = response.strip()
-        if resp.startswith("‖") and resp.endswith("‖"):
-            resp = resp[1:-1].strip()
-        return resp
+        """Format command responses — strip ‖ markers, clean up"""
+        # Replace ‖ with clean formatting
+        response = response.replace('‖', '').strip()
+        # Clean multiple spaces
+        response = re.sub(r'  +', ' ', response)
+        return response
 
     def print_command_response(self, response: str):
-        """Print command output cleanly preserving layout."""
+        """Print command output cleanly"""
         cleaned = self.format_command_response(response)
-        lines = cleaned.split('\n')
+        # Check if it's a multi-line report
+        lines = cleaned.strip().split('\n')
         if len(lines) > 3:
             self.print_divider('thin')
             for line in lines:
-                print(f"  {line}")
+                if line.strip():
+                    print(f"  {self.system_color}{line}{self.reset}")
             self.print_divider('thin')
         else:
-            print(f"\n  {cleaned}")
+            print(f"\n{self.system_color}  {cleaned}{self.reset}")
 
     def print_status_grid(self, status_items: dict):
         """Print a clean status grid"""
         self.print_divider('thin')
         for key, value in status_items.items():
-            key_str = f"{key:<22}"
+            key_str   = f"{key:<20}"
             val_color = self.success_color if any(
-                word in str(value).upper() for word in ['ACTIVE', 'ON', 'READY', 'OK', 'ENABLED', 'SECURE']
+                word in str(value).upper() for word in ['ACTIVE', 'ON', 'READY', 'OK', 'ENABLED']
             ) else self.system_color
             print(f"  {self.dim}{key_str}{self.reset}  {val_color}{value}{self.reset}")
         self.print_divider('thin')
@@ -139,39 +132,34 @@ class ResponseFormatter:
     # ─────────────────────────────────────────────
 
     def _wrap_text(self, text: str, indent: int = 0) -> str:
-        """
-        Word-wraps text preserving explicit linebreaks (\n), ASCII art, lists, and headers.
-        Never smashes multi-line blocks into single paragraphs.
-        """
-        if not text:
-            return ""
-
-        max_width = max(40, self.terminal_width - indent - 2)
+        """Word-wrap text to terminal width preserving paragraphs and formatting"""
+        width = max(20, self.terminal_width - indent - 2)
         indent_str = ' ' * indent
-        raw_lines = text.split('\n')
-        out_lines = []
-
-        for line in raw_lines:
-            # Preserve raw ASCII frames, boxes, and dividers directly
-            if any(box_char in line for box_char in ['╔', '║', '═', '╚', '┌', '│', '└', '─', '█', '▓']):
-                out_lines.append(f"{indent_str}{line}")
+        paragraphs = text.split('\n')
+        wrapped_paragraphs = []
+        for paragraph in paragraphs:
+            if not paragraph.strip():
+                wrapped_paragraphs.append("")
                 continue
-
-            if len(line.rstrip()) <= max_width:
-                out_lines.append(f"{indent_str}{line}")
-            else:
-                # Detect leading whitespace for indentation preservation
-                leading_spaces = len(line) - len(line.lstrip(' '))
-                sub_indent = indent_str + (' ' * leading_spaces)
-                wrapped = textwrap.wrap(
-                    line,
-                    width=max_width,
-                    initial_indent=indent_str,
-                    subsequent_indent=sub_indent + "  "
-                )
-                out_lines.extend(wrapped)
-
-        return "\n".join(out_lines)
+            words = paragraph.split(' ')
+            lines = []
+            current_line = []
+            current_len = 0
+            for word in words:
+                if not word:
+                    continue
+                if current_len + len(word) + (1 if current_line else 0) <= width:
+                    current_line.append(word)
+                    current_len += len(word) + (1 if len(current_line) > 1 else 0)
+                else:
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                    current_line = [word]
+                    current_len = len(word)
+            if current_line:
+                lines.append(' '.join(current_line))
+            wrapped_paragraphs.append(f"\n{indent_str}".join(lines))
+        return f"\n{indent_str}".join(wrapped_paragraphs)
 
     def get_user_prompt(self) -> str:
         """Styled user input prompt"""

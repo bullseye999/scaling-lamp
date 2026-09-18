@@ -1,3 +1,4 @@
+from phase5_test_support import claim, memory_claim
 """
 test_ciph_curiosity.py - Unit and Integration Tests for CIPH 4.0 Sensory Bus & Curiosity Daemon (Phase 8).
 """
@@ -31,55 +32,19 @@ class TestCiphCuriosity(unittest.TestCase):
                 pass
 
     def test_curiosity_discovers_and_refreshes_stale_claims(self):
-        """Test autonomous discovery and refresh of stale epistemic gaps."""
-        now = time.time()
-        # Insert a stale claim in worldview
-        stale_claim = TransmutationNode(
-            claim_id="CLM-STALE-MEM",
-            subject="memory.vault",
-            predicate="active_profile",
-            value="old_val",
-            state=EpistemicCategory.SUPPORTED,
-            freshness_deadline=now - 50.0,
-            created_at=now - 200.0
-        )
-        self.runtime.worldview.upsert_claim(stale_claim)
-
-        # Run curiosity cycle
-        results = self.runtime.run_curiosity_cycle()
-        self.assertGreaterEqual(len(results), 1)
-        self.assertEqual(results[0]["status"], "SUCCESS")
-        self.assertIsNotNone(results[0]["receipt_id"])
-
-        # Check EventStore recorded the refresh event
-        events = self.runtime.event_store.get_events(aggregate_id=results[0]["receipt_id"])
-        self.assertEqual(len(events), 1)
+        candidate=memory_claim(self.runtime,'stale-memory',deadline=time.time()-1)
+        results=self.runtime.run_curiosity_cycle()
+        self.assertGreaterEqual(len(results),1)
+        self.assertEqual(results[0]['status'],'SUCCESS')
+        events=self.runtime.event_store.get_events(aggregate_id=results[0]['receipt_id'],event_type='ExecutionReceiptStoredEvent')
+        self.assertEqual(len(events),1)
+        self.assertEqual(self.runtime.worldview.get_claim(candidate.claim_id).lifecycle_state.value,'DORMANT')
 
     def test_curiosity_respects_tabu_graveyard(self):
-        """Claims buried in Tabu Graveyard must not be selected as inquiry gaps."""
-        now = time.time()
-        # 1. Buried claim
-        self.runtime.worldview.bury_in_graveyard(
-            subject="exploit.cve_2026_0001",
-            predicate="vulnerable",
-            reason="Confirmed patched by vendor"
-        )
-        
-        # Insert matching stale node
-        stale_refuted = TransmutationNode(
-            claim_id="CLM-REFUTED",
-            subject="exploit.cve_2026_0001",
-            predicate="vulnerable",
-            value=True,
-            state=EpistemicCategory.STALE,
-            freshness_deadline=now - 10.0
-        )
-        self.runtime.worldview.upsert_claim(stale_refuted)
-
-        gaps = self.runtime.curiosity_daemon.discover_epistemic_gaps(self.runtime.worldview)
-        # Must not contain the buried claim
-        gap_subjects = [g.subject for g in gaps]
-        self.assertNotIn("exploit.cve_2026_0001", gap_subjects)
+        candidate=claim(self.runtime,'buried',deadline=time.time()-1)
+        self.runtime.worldview.bury_in_graveyard(candidate.subject,candidate.predicate,'maintenance',claim_id=candidate.claim_id)
+        gaps=self.runtime.curiosity_daemon.discover_epistemic_gaps(self.runtime.worldview)
+        self.assertEqual(gaps,[])
 
     def test_curiosity_rate_limiter_budget(self):
         """Inquiries must strictly respect hourly rate limit."""
@@ -124,7 +89,7 @@ class TestCiphCuriosity(unittest.TestCase):
             value="unknown",
             state=EpistemicCategory.INTELLIGENCE_GAP
         )
-        self.runtime.worldview.upsert_claim(gap_node)
+        claim(self.runtime, "CLM-CODE-GAP", subject="code.fixture", deadline=time.time()-1)
 
         results = self.runtime.run_curiosity_cycle()
         self.assertGreaterEqual(len(results), 1)

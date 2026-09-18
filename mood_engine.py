@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple
 
 class MoodEngine:
     """
-    Ciph reads the Operator's energy from every message.
+    Ciph reads Operator's energy from every message.
     Adjusts tone, pacing, and response depth accordingly.
     No forced positivity. Just real calibration.
     """

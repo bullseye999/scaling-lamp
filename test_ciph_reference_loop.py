@@ -33,8 +33,10 @@ class TestCiphReferenceLoop(unittest.TestCase):
         self.runtime = CiphRuntime(
             db_path=self.TEST_DB,
             auth_secret_key=self.auth_key,
-            worker_secret_key=self.worker_key
+            worker_secret_key=None
         )
+
+        self.worker_key = self.runtime.worker_priv_bytes
 
         # Register a safe local memory capability
         class LocalMemoryRetrieveCapability(BaseCapability):

@@ -130,77 +130,46 @@ class SecurityLayer:
         )
         
         return f"‖ Footprint cleaning complete: {len(cleaned)} actions ‖"
-
-    def clean_shell_footprints(self) -> Dict[str, Any]:
-        """Clean shell and temporary footprint traces"""
-        msg = self.footprint_cleaner()
-        return {
-            "success": True,
-            "message": msg,
-            "history_files_cleared": 1
-        }
     
-    def create_encrypted_backup(self, backup_path: str = None) -> str:
-        """Create encrypted backup archive"""
-        return self.encrypted_backup(backup_path)
-
     def encrypted_backup(self, backup_path: str = None) -> str:
         """Create encrypted backup of Ciph system"""
         if not backup_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"ciph_backup_{timestamp}.tar.gpg"
-
-        backup_passphrase = os.environ.get("BACKUP_PASSPHRASE")
-        if not backup_passphrase:
-            return "‖ Backup failed: set BACKUP_PASSPHRASE before creating an encrypted backup. ‖"
-
+        
         try:
             # Create backup archive
             import tarfile
             with tarfile.open("temp_backup.tar", "w") as tar:
-                if os.path.exists("ciph_vault.db"):
-                    tar.add("ciph_vault.db", arcname="vault.db")
-                if os.path.exists("ciph.key"):
-                    tar.add("ciph.key", arcname="encryption.key")
+                tar.add("ciph_vault.db", arcname="vault.db")
+                tar.add("ciph.key", arcname="encryption.key")
                 # Add config files if they exist
-                for config_file in ["config.json", "ciph_config.yaml", ".env"]:
+                for config_file in ["config.json", "settings.yaml"]:
                     if os.path.exists(config_file):
                         tar.add(config_file)
             
-            # Encrypt with GPG non-interactively
+            # Encrypt with GPG (if available)
             try:
                 result = subprocess.run([
-                    "gpg", "--batch", "--yes", "--pinentry-mode", "loopback",
-                    "--symmetric", "--cipher-algo", "AES256",
-                    "--passphrase", backup_passphrase,
+                    "gpg", "--symmetric", "--cipher-algo", "AES256",
+                    "--passphrase", os.environ.get("BACKUP_PASSPHRASE", "ciph_backup_passphrase"),
                     "-o", backup_path, "temp_backup.tar"
-                ], capture_output=True, timeout=5)
+                ], capture_output=True)
                 
                 if result.returncode == 0:
-                    if os.path.exists("temp_backup.tar"):
-                        os.remove("temp_backup.tar")
+                    # Clean up temporary files
+                    os.remove("temp_backup.tar")
                     return f"‖ Encrypted backup created: {backup_path} ‖"
                 else:
-                    if os.path.exists("temp_backup.tar"):
-                        os.remove("temp_backup.tar")
-                    return "‖ Backup failed: GPG encryption failed; no plaintext archive was retained. ‖"
-            except Exception as exc:
-                if os.path.exists("temp_backup.tar"):
-                    os.remove("temp_backup.tar")
-                return f"‖ Backup failed: encryption unavailable ({str(exc)[:80]}). ‖"
+                    return "‖ GPG encryption failed ‖"
+            except Exception:
+                # Fallback: just compress without encryption
+                os.rename("temp_backup.tar", backup_path)
+                return f"‖ Backup created (unencrypted): {backup_path} ‖"
                 
         except Exception as e:
             return f"‖ Backup failed: {str(e)} ‖"
     
-    def verify_core_integrity(self) -> List[str]:
-        """Verify core files integrity and return list of altered files"""
-        res = self.integrity_check()
-        modified = []
-        for fn, details in res.get('files_checked', {}).items():
-            if details.get('status') != 'OK':
-                modified.append(f"{fn} ({details.get('status')})")
-        return modified
-
     def integrity_check(self) -> Dict[str, Any]:
         """Check integrity of Ciph system files"""
         print("🔍 Running integrity check...")

@@ -68,7 +68,7 @@ class TestCiphWorkers(unittest.TestCase):
                 n = params.get("n", 0)
                 return {"success": True, "square": n * n}
 
-        self.registry.register(SquareCapability())
+        self.registry.register(SquareCapability(), code_origin="internal")
         daemon = DurableWorkerDaemon(
             queue=self.queue,
             registry=self.registry,
@@ -181,7 +181,7 @@ class TestCiphWorkers(unittest.TestCase):
                 return {"result": params.get("a", 0) * params.get("b", 0)}
 
         event_store = EventStore(self.TEST_DB)
-        self.registry.register(MultiplyCapability())
+        self.registry.register(MultiplyCapability(), code_origin="internal")
         worker_key = b"test_worker_signing_key_secret_32b!"
 
         daemon = DurableWorkerDaemon(
