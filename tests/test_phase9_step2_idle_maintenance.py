@@ -318,7 +318,7 @@ try:
 except Exception:
     sys.exit(42)
 """
-        ciph_dir = os.path.dirname(os.path.abspath(__file__))
+        ciph_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = {**os.environ, "PYTHONPATH": ciph_dir}
         proc = subprocess.run([sys.executable, "-c", ext_script], capture_output=True, text=True, env=env)
         self.assertEqual(proc.returncode, 42, f"External process succeeded writing during maintenance: stdout={proc.stdout} stderr={proc.stderr}")

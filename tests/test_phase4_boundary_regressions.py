@@ -69,7 +69,7 @@ class TestPhase4Boundaries(unittest.TestCase):
         self.assertEqual(self.core.code_staging.mock_calls, [])
 
     def test_complete_legacy_inventory_has_no_fallback(self):
-        inventory = json.loads((Path(__file__).parent/'ciph/capabilities/legacy_command_inventory.json').read_text())
+        inventory = json.loads((Path(__file__).parent.parent/'ciph/capabilities/legacy_command_inventory.json').read_text())
         self.assertGreater(len(inventory), 150)
         with mock.patch.object(self.runtime, 'execute_reference_loop', side_effect=AssertionError('raw route')):
             for command in inventory:
@@ -78,7 +78,7 @@ class TestPhase4Boundaries(unittest.TestCase):
                         result = self.runtime.dispatch_slash_command(command+' fixture')
                         self.assertEqual(result['status'], 'COMMAND_UNAVAILABLE')
                         self.assertIn('unavailable', self.core.handle_command(command+' fixture'))
-        tree = ast.parse((Path(__file__).parent/'ciph_core.py').read_text())
+        tree = ast.parse((Path(__file__).parent.parent/'ciph_core.py').read_text())
         handler = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'handle_command')
         calls = [n.func.attr for n in ast.walk(handler) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]
         self.assertFalse(set(calls) & {'apply', 'rollback', 'port_scan', 'web_vulnerability_scan', 'run', 'execute'})

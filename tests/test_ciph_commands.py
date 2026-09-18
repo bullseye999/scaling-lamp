@@ -93,7 +93,7 @@ class TestCiphCommands(unittest.TestCase):
 
     def test_dispatch_code_audit_slash_command(self):
         """Test declarative /code-audit on code_staging.py."""
-        fixture = os.path.join(os.path.dirname(os.path.abspath(__file__)), "code_staging.py")
+        fixture = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "code_staging.py")
         res = self.runtime.dispatch_slash_command(f"/code-audit {fixture}")
         self.assertIsNotNone(res)
         self.assertEqual(res["status"], "SUCCESS")

@@ -474,7 +474,7 @@ worker._execute_leased_job(job, 'killed_process')
                 marker = str(Path(self.temp.name) / (phase + '.marker'))
                 process = subprocess.Popen([sys.executable, '-B', '-c', source, self.db, jid, marker, phase, self.runtime.worker_key_id],
                     cwd=self.temp.name, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    env={**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parent)})
+                    env={**os.environ, 'PYTHONPATH': os.pathsep.join([str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parent.parent)])})
                 try:
                     self.wait_for(lambda: Path(marker).exists() or process.poll() is not None)
                     self.assertIsNone(process.poll(), process.communicate() if process.poll() is not None else None)
