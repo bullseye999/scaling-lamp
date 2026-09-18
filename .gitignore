@@ -55,10 +55,14 @@ sports_predictions/
 sports_logs/
 system_proposals/
 *.json  # (but keep example configs)
+*_results.json
+*_audit_results.json
 code_index.json
 test_audit_results.json
+*.pid
 !requirements.txt
 !ciph_version.json
+!ciph/capabilities/legacy_command_inventory.json
 
 # Environment & secrets
 .env
@@ -101,3 +105,10 @@ private_operator/
 operator_profile.json
 operator_profile.yaml
 operator_profile.yml
+
+# Sanitization guard (added for public release)
+*.env
+*.json.gz
+ciph_vault.db*
+ciph_books/
+ciph_predictions/

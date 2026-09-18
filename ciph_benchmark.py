@@ -43,44 +43,9 @@ class CiphBenchmark:
             return {"valid": False, "error": str(e)}
 
     def measure_import_speed(self, filepath: str, iterations: int = 5) -> Dict[str, Any]:
-        """Measure cold-start load and execution latency in an isolated subprocess"""
-        if not os.path.exists(filepath):
-            return {"success": False, "avg_latency_ms": 0.0, "error": "File not found"}
-
-        abs_path = os.path.abspath(filepath)
-        module_dir = os.path.dirname(abs_path)
-
-        latencies = []
-        errors = 0
-
-        for _ in range(iterations):
-            code_runner = (
-                "import sys, time, importlib.util; "
-                f"sys.path.insert(0, '{module_dir}'); "
-                "t0 = time.perf_counter(); "
-                f"spec = importlib.util.spec_from_file_location('bench_target', '{abs_path}'); "
-                "mod = importlib.util.module_from_spec(spec); "
-                "spec.loader.exec_module(mod); "
-                "print(f'{(time.perf_counter()-t0)*1000:.2f}')"
-            )
-            cmd = ["python3", "-c", code_runner]
-            try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if res.returncode == 0:
-                    val = float(res.stdout.strip().splitlines()[-1])
-                    latencies.append(val)
-                else:
-                    errors += 1
-            except Exception:
-                errors += 1
-
-        avg_lat = sum(latencies) / len(latencies) if latencies else 0.0
-        return {
-            "success": errors == 0 and len(latencies) > 0,
-            "avg_latency_ms": round(avg_lat, 2),
-            "samples": len(latencies),
-            "errors": errors
-        }
+        """Legacy import execution is retired; evaluation requires signed consent."""
+        return {"success":False,"avg_latency_ms":0.0,"samples":0,"errors":1,
+                "error":"EVALUATION_GRANT_REQUIRED: use IndependentBenchmarkHarness"}
 
     def run_functional_capability_audit(self, baseline_path: str, candidate_path: str) -> Dict[str, Any]:
         """

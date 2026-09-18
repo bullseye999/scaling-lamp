@@ -6,7 +6,14 @@ import requests
 from typing import List, Dict, Any, Optional, Set
 from urllib.parse import urlparse
 
-from ghost_transport import GhostTransport
+TOR_PROXY = {
+    "http":  "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050"
+}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
+}
 
 class OSINTCatalog:
     """
@@ -17,10 +24,15 @@ class OSINTCatalog:
 
     def __init__(self):
         self.degraded_providers: Set[str] = set()
-        self.transport = GhostTransport()
 
     def _tor_get(self, url: str, timeout: int = 10) -> Optional[requests.Response]:
-        return self.transport.get(url, timeout=timeout)
+        try:
+            return requests.get(url, proxies=TOR_PROXY, headers=HEADERS, timeout=timeout)
+        except Exception:
+            try:
+                return requests.get(url, headers=HEADERS, timeout=timeout)
+            except Exception:
+                return None
 
     def query_passive_subdomains(self, domain: str) -> Dict[str, Any]:
         """

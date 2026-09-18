@@ -1,3 +1,4 @@
+from phase5_test_support import claim
 """
 test_ciph_hardened_invariants.py - Hardened Security Invariant Probes for CIPH 4.0.
 Verifies fixes for:
@@ -15,8 +16,6 @@ Verifies fixes for:
 12. Standalone CapabilityLedger fail-closed receipt verification
 13. Concurrent identical submission single execution
 14. Curiosity daemon DAG integration
-15. Dependency auditing never invokes automatic package installation
-16. Active slash commands delegate to the governed CommandRegistry
 """
 
 import os
@@ -70,8 +69,9 @@ class TestCiphHardenedInvariants(unittest.TestCase):
         self.runtime = CiphRuntime(
             db_path=self.TEST_DB,
             auth_secret_key=self.auth_key,
-            worker_secret_key=self.worker_key
+            worker_secret_key=None
         )
+        self.worker_key = self.runtime.worker_priv_bytes
 
     def tearDown(self):
         self.runtime.shutdown()
@@ -365,7 +365,7 @@ class PathlibEscapeCap(BaseCapability):
             auth_grant=grant
         )
         self.assertFalse(res["success"])
-        self.assertEqual(res["status"], "MOCK_EXECUTION_TEST_FAILED")
+        self.assertEqual(res["status"], "AUTHORIZATION_REQUIRED")
         self.assertFalse(os.path.exists(outside_file))
 
     def test_symlink_escape_blocked_in_evolution_sandbox(self):
@@ -447,8 +447,17 @@ class SymlinkEscapeCap(BaseCapability):
     def test_claim_lease_manager_and_writers_blocked_during_maintenance_lease(self):
         """When an exclusive maintenance lease is held, ClaimLeaseManager and worldview writers are blocked."""
         m_mgr = self.runtime.maintenance_manager
-        holder_id = "backup_daemon_01"
-        self.assertTrue(m_mgr.acquire_lease("global_db_maintenance", holder_id, ttl_seconds=30))
+        # Step 2 hardened the protocol: only an enrolled OPERATOR key may hold the global
+        # maintenance lease. Use the runtime's own enrolled operator identity.
+        holder_id = self.runtime.operator_key_id
+        acquired, acq_reason, cycle_id = m_mgr.acquire_lease(
+            "global_db_maintenance",
+            holder_id,
+            operator_secret_key=self.runtime.operator_priv_bytes,
+            ttl_seconds=30,
+            bypass_idle_checks=True,
+        )
+        self.assertTrue(acquired, f"Maintenance lease acquisition failed: {acq_reason}")
 
         try:
             # 1. ClaimLeaseManager write attempt must be blocked
@@ -470,14 +479,14 @@ class SymlinkEscapeCap(BaseCapability):
                 )
                 self.runtime.worldview.upsert_claim(node)
         finally:
-            m_mgr.release_lease("global_db_maintenance", holder_id)
+            m_mgr.release_lease("global_db_maintenance", holder_id, cycle_id=cycle_id)
 
     def test_standalone_ledger_rejects_unauthenticated_receipts(self):
         """Standalone CapabilityLedger without a key rejects forged receipts with dummy signatures."""
         standalone_ledger = CapabilityLedger(
             registry=self.runtime.registry,
             event_store=self.runtime.event_store,
-            worker_secret_key=None
+            worker_secret_key=self.worker_key
         )
         forged_receipt = {
             "receipt_id": "rcpt_forged_dummy_sig",
@@ -545,7 +554,7 @@ class SymlinkEscapeCap(BaseCapability):
             reliability=ReliabilityClass.DIRECT_SENSOR,
             assurance_score=0.1
         )
-        self.runtime.worldview.upsert_claim(gap_node)
+        claim(self.runtime, "CLM-GAP-001", subject="system.diagnostics", deadline=time.time()-1)
 
         results = self.runtime.run_curiosity_cycle()
         self.assertTrue(len(results) > 0)

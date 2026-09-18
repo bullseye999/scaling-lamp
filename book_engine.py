@@ -11,7 +11,7 @@ class BookEngine:
     Ciph's personal library.
     Reads PDFs, chunks them intelligently, stores them searchable.
     Ciph can query any book by topic, chapter, or situation.
-    All knowledge serves Operator.
+    All knowledge serves the operator.
     """
 
     CHUNK_SIZE = 800       # words per chunk
@@ -255,7 +255,7 @@ class BookEngine:
 
     def get_situational_advice(self, situation: str) -> str:
         """
-        Given a situation Operator is facing, pull relevant wisdom
+        Given a situation the operator is facing, pull relevant wisdom
         from all books in the library.
         """
         results = self.search(situation, limit=3)
@@ -330,7 +330,7 @@ class BookEngine:
     def build_book_context(self, user_input: str) -> str:
         """
         Build book context to inject into Ciph's system prompt.
-        Automatically surfaces relevant passages when Operator is talking
+        Automatically surfaces relevant passages when the operator is talking
         about strategy, power, decisions, or situations.
         """
         if not self.library:

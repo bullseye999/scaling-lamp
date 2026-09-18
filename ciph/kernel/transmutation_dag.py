@@ -9,25 +9,13 @@ from typing import List, Optional, Dict, Any
 from ciph.perception.observation import ReliabilityClass
 
 
-class EpistemicCategory(str, Enum):
-    INTELLIGENCE_GAP = "INTELLIGENCE_GAP"  # Explicitly acknowledged unknown
-    OBSERVED         = "OBSERVED"          # Point-in-time telemetry received
-    INFERRED         = "INFERRED"          # Derived via deterministic model logic
-    HYPOTHESIZED     = "HYPOTHESIZED"      # Formal testable premise
-    SUPPORTED        = "SUPPORTED"         # Corroborated with verified receipts
-    DISPUTED         = "DISPUTED"          # Quarantined pending secondary confirmation
-    REFUTED          = "REFUTED"           # Negative result -> Sent to Tabu Graveyard
-    STALE            = "STALE"             # Freshness deadline expired
-    SUPERSEDED       = "SUPERSEDED"        # Overridden by newer valid event
-
-
-RELIABILITY_BASE_WEIGHTS = {
-    ReliabilityClass.AUTHORITATIVE_LOCAL: 0.95,
-    ReliabilityClass.DIRECT_SENSOR: 0.85,
-    ReliabilityClass.THIRD_PARTY_FEED: 0.70,
-    ReliabilityClass.PASSIVE_RECON: 0.60,
-    ReliabilityClass.UNVERIFIED_INCOMING: 0.40,
-}
+from ciph.contracts.enums import (
+    EpistemicCategory,
+    EpistemicState,
+    LifecycleState,
+    DecayProfile,
+    RELIABILITY_BASE_WEIGHTS,
+)
 
 
 def calculate_assurance_score(
@@ -72,6 +60,15 @@ class TransmutationNode:
     parent_claim_ids: List[str] = field(default_factory=list)
     superseded_by: Optional[str] = None
     freshness_deadline: Optional[float] = None
+    lifecycle_state: LifecycleState = LifecycleState.ACTIVE
+    decay_profile: DecayProfile = DecayProfile.SOFTWARE_BEHAVIOR
+    valid_from: Optional[float] = None
+    valid_until: Optional[float] = None
+    predicate_class: Optional[str] = None
+    normalized_context_hash: Optional[str] = None
+    verifier_provenance: Optional[str] = None
+    migration_status: str = "CANONICAL"
+    invalidation_barrier: int = 0
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -81,10 +78,18 @@ class TransmutationNode:
         now = current_time if current_time is not None else time.time()
         return now > self.freshness_deadline
 
+    def is_fresh(self, current_time: Optional[float] = None) -> bool:
+        if self.freshness_deadline is None:
+            return True
+        now = current_time if current_time is not None else time.time()
+        return now <= self.freshness_deadline
+
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        d['state'] = self.state.value
-        d['reliability'] = self.reliability.value
+        d['state'] = self.state.value if hasattr(self.state, "value") else str(self.state)
+        d['reliability'] = self.reliability.value if hasattr(self.reliability, "value") else str(self.reliability)
+        d['lifecycle_state'] = self.lifecycle_state.value if hasattr(self.lifecycle_state, "value") else str(self.lifecycle_state)
+        d['decay_profile'] = self.decay_profile.value if hasattr(self.decay_profile, "value") else str(self.decay_profile)
         return d
 
 
@@ -101,16 +106,43 @@ class TransmutationDAG:
 
     def add_node(self, node: TransmutationNode) -> None:
         """Add or update a node in the Transmutation DAG."""
-        self._nodes[node.claim_id] = node
-        for parent_id in node.parent_claim_ids:
-            if parent_id not in self._children:
-                self._children[parent_id] = []
-            if node.claim_id not in self._children[parent_id]:
-                self._children[parent_id].append(node.claim_id)
+        import copy
+        candidate = copy.deepcopy(node)
+        graph = dict(self._nodes)
+        graph[node.claim_id] = candidate
+        children = {}
+        visiting = set()
+        depths = {}
+        def depth(cid):
+            if cid in visiting: raise ValueError("DEPENDENCY_CYCLE")
+            if cid in depths: return depths[cid]
+            if cid not in graph: raise ValueError("DANGLING_PARENT")
+            visiting.add(cid)
+            if len(visiting)>17: raise ValueError("GRAPH_DEPTH_EXCEEDED")
+            result=max((depth(pid)+1 for pid in graph[cid].parent_claim_ids),default=0)
+            visiting.remove(cid)
+            if result>16: raise ValueError("GRAPH_DEPTH_EXCEEDED")
+            depths[cid]=result
+            return result
+        for cid, entry in graph.items():
+            depth(cid)
+            for pid in entry.parent_claim_ids:
+                children.setdefault(pid,[]).append(cid)
+                if len(children[pid])>256: raise ValueError("GRAPH_WIDTH_EXCEEDED")
+        for pid in candidate.parent_claim_ids:
+            parent=graph[pid]
+            if not parent.is_fresh() or parent.lifecycle_state != LifecycleState.ACTIVE or parent.state in (EpistemicState.DISPUTED,EpistemicState.REFUTED,EpistemicState.SUPERSEDED):
+                raise ValueError("INACTIVE_PARENT")
+            candidate.assurance_score=min(candidate.assurance_score,parent.assurance_score)
+            if parent.freshness_deadline is not None:
+                candidate.freshness_deadline=min(candidate.freshness_deadline,parent.freshness_deadline) if candidate.freshness_deadline is not None else parent.freshness_deadline
+        self._nodes=graph
+        self._children=children
 
     def get_node(self, claim_id: str) -> Optional[TransmutationNode]:
         """Retrieve node by claim_id."""
-        return self._nodes.get(claim_id)
+        import copy
+        return copy.deepcopy(self._nodes.get(claim_id))
 
     def derive_inference(
         self,
@@ -173,27 +205,27 @@ class TransmutationDAG:
             freshness_deadline=freshness_deadline
         )
         self.add_node(node)
-        return node
+        return self.get_node(derived_claim_id)
 
     def verify_weakest_link_invariants(self, claim_id: str) -> bool:
-        """
-        Formally verifies that a claim's assurance score is bounded by all its ancestors.
-        Fails closed if any parent premise is missing or if assurance exceeds any parent.
-        """
-        node = self.get_node(claim_id)
-        if not node:
-            return False
-        if not node.parent_claim_ids:
-            return True
-
-        for pid in node.parent_claim_ids:
-            parent = self.get_node(pid)
-            if not parent:
-                return False  # Missing parent fails invariant verification
-            if node.assurance_score > parent.assurance_score:
+        """Bound validation work across shared ancestors; incomplete checks reject."""
+        pending = [claim_id]
+        visited = set()
+        while pending:
+            cid = pending.pop()
+            if cid in visited:
+                continue
+            if len(visited) >= 1024:
                 return False
-            # Recursively verify upstream
-            if not self.verify_weakest_link_invariants(pid):
+            visited.add(cid)
+            node = self._nodes.get(cid)
+            if node is None:
                 return False
+            for pid in node.parent_claim_ids:
+                parent = self._nodes.get(pid)
+                if parent is None or node.assurance_score > parent.assurance_score:
+                    return False
+                if not parent.is_fresh() or parent.lifecycle_state != LifecycleState.ACTIVE:
+                    return False
+                pending.append(pid)
         return True
-

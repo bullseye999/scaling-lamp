@@ -2,6 +2,7 @@
 ciph.capabilities.evolution - Governed Self-Evolution, Isolated Subprocess Sandboxing & Canary Pipeline (CIPH 4.0 Blueprint Phase 8).
 Enforces fail-closed static AST manifest extraction, early authorization verification prior to any execution,
 and restricted-filesystem sandboxed subprocess execution within isolated temporary directories.
+Candidate code is NEVER imported or instantiated in the host supervisor's memory.
 """
 
 import os
@@ -14,8 +15,9 @@ import tempfile
 import subprocess
 import hashlib
 import contextvars
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, field
+import sqlite3
+from typing import Dict, Any, List, Optional, Tuple, Union
+
 from ciph.capabilities.base import BaseCapability
 from ciph.capabilities.registry import CapabilityRegistry
 from ciph.kernel.policy_engine import (
@@ -29,6 +31,16 @@ from ciph.kernel.policy_engine import (
 )
 from ciph.planner.schemas import SkillTemplate, SkillPromotionTier, PlanStep, ExecutionDAG
 from ciph.planner.skill_registry import SkillRegistry
+from ciph.contracts.evolution import (
+    EngineeringGapCandidate,
+    EvolutionEvaluationGrant,
+    EvolutionDeploymentGrant,
+    CanaryCriteria,
+    EvolutionReceipt,
+    GapCategory,
+    DeploymentStage,
+)
+from ciph.kernel.crypto_identity import KeyRole, KeyStatus, TrustRegistry
 
 
 _host_fs_isolation_active: contextvars.ContextVar[bool] = contextvars.ContextVar(
@@ -63,23 +75,32 @@ class CanaryStatus(str):
     ROLLED_BACK = "ROLLED_BACK"
 
 
-@dataclass
-class EngineeringGapCandidate:
-    candidate_id: str
-    gap_description: str
-    target_capability_name: str
-    hypothesis: str
-    staged_code: str
-    class_name: str
-    created_at: float = field(default_factory=time.time)
-    test_params: Dict[str, Any] = field(default_factory=dict)
-    benchmark_score: float = 0.0
-    canary_status: str = CanaryStatus.PENDING
-    canary_runs: int = 0
-    canary_errors: int = 0
-    promoted_at: Optional[float] = None
-    rolled_back_at: Optional[float] = None
-    operator_grant_id: Optional[str] = None
+class IsolatedEvolvedCapability(BaseCapability):
+    """
+    Governed capability wrapper that represents an evolved capability in the registry.
+    Strictly forbids executing candidate code inside the supervisor's memory.
+    All executions are dispatched to an isolated subprocess; candidate code is NEVER
+    imported or instantiated into the supervisor's Python process.
+    """
+    def __init__(
+        self,
+        manifest: CapabilityManifest,
+        code_source: str,
+        class_name: str,
+        allowed_isolation_tier: str = "DISPOSABLE_PROCESS"
+    ):
+        self._manifest = manifest
+        self._code_source = code_source
+        self._class_name = class_name
+        self._allowed_isolation_tier = allowed_isolation_tier
+
+    @property
+    def manifest(self) -> CapabilityManifest:
+        return self._manifest
+
+    def run(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Legacy detached wrappers cannot bypass the governed evolution pipeline."""
+        raise PermissionError("GOVERNED_CANARY_REQUIRED: detached evolved wrappers cannot execute")
 
 
 class HotReloadEngine:
@@ -87,6 +108,7 @@ class HotReloadEngine:
     Sandboxed Self-Evolution & Capability Hot-Reload Engine.
     Enforces fail-closed static AST manifest extraction, early authorization verification BEFORE any execution,
     and sandboxed subprocess execution with host filesystem isolation.
+    Candidate code is NEVER imported or instantiated in the host supervisor's memory.
     """
 
     FORBIDDEN_AST_CALLS = {
@@ -97,10 +119,22 @@ class HotReloadEngine:
         "breakpoint"
     }
 
-    def __init__(self, red_team_gate: Optional[AdversarialRedTeamGate] = None):
+    def __init__(self, red_team_gate: Optional[AdversarialRedTeamGate] = None, db_path: Optional[str] = None):
         self.red_team_gate = red_team_gate or AdversarialRedTeamGate()
-        self.candidates: Dict[str, EngineeringGapCandidate] = {}
+        self.candidates: Dict[str, Any] = {}
+        self.db_path = db_path
         _ensure_host_fs_hook_installed()
+
+    def _init_consumed_grants_table(self, conn: sqlite3.Connection):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ciph_consumed_evolution_grants (
+                grant_id TEXT PRIMARY KEY,
+                candidate_hash TEXT NOT NULL,
+                consumed_at REAL NOT NULL,
+                status TEXT NOT NULL
+            )
+        """)
+        conn.commit()
 
     def audit_code_safety(self, code_source: str) -> Tuple[bool, List[str]]:
         """Static AST security analysis of candidate capability code."""
@@ -120,13 +154,13 @@ class HotReloadEngine:
 
         return len(errors) == 0, errors
 
-    def extract_static_manifest_info(self, code_source: str) -> Dict[str, str]:
+    def extract_static_manifest_info(self, code_source: str) -> Dict[str, Any]:
         """
         Statically inspects AST to extract manifest properties.
         FAIL-CLOSED PRINCIPLE: Any dynamic expression, getattr, variable reference,
         or unrecognized AST structure defaults strictly to MANDATORY_INTERRUPT and CRITICAL.
         """
-        info = {
+        info: Dict[str, Any] = {
             "name": "unknown.capability",
             "authorization": AuthorizationTier.MANDATORY_INTERRUPT.value,
             "risk_tier": RiskTier.CRITICAL.value,
@@ -170,284 +204,52 @@ class HotReloadEngine:
 
         return info
 
-    def test_in_disposable_subprocess(
-        self,
-        code_source: str,
-        class_name: str,
-        test_params: Dict[str, Any]
-    ) -> Tuple[bool, Dict[str, Any], List[str]]:
-        """
-        Execute mock test in an isolated disposable subprocess inside a clean temp directory
-        with strict host filesystem write restrictions across all filesystem operations.
-        """
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_dir_abs = os.path.abspath(tmp_dir)
-            runner_script = f"""
-import os
-import sys
-import json
-import builtins
-import io
-import pathlib
+    def build_manifest_from_static_info(self, info: Dict[str, Any]) -> CapabilityManifest:
+        """Construct CapabilityManifest safely from validated static AST info."""
+        name = info.get("name", "evolved.capability")
+        desc = info.get("description", "Evolved sandboxed capability")
+        rt = RiskTier(info.get("risk_tier", RiskTier.CRITICAL.value))
+        np = NetworkPolicy(info.get("network_policy", NetworkPolicy.OFFLINE_ONLY.value))
+        rc = ReversibilityClass(info.get("reversibility", ReversibilityClass.IRREVERSIBLE.value))
+        at = AuthorizationTier(info.get("authorization", AuthorizationTier.MANDATORY_INTERRUPT.value))
+        return CapabilityManifest(
+            name=name,
+            description=desc,
+            risk_tier=rt,
+            network_policy=np,
+            reversibility=rc,
+            authorization=at,
+            timeout_seconds=15
+        )
 
-tmp_dir_abs = {repr(tmp_dir_abs)}
-
-def _fs_audit_hook(event, args):
-    if event == "open":
-        path = args[0]
-        mode = args[1] if len(args) > 1 else "r"
-        flags = args[2] if len(args) > 2 else 0
-        is_write = False
-        if isinstance(mode, str) and any(m in mode for m in ("w", "a", "+", "x")):
-            is_write = True
-        elif isinstance(flags, int) and (flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | getattr(os, "O_APPEND", 0) | getattr(os, "O_TRUNC", 0))):
-            is_write = True
-        if is_write:
-            p = os.path.abspath(os.fsdecode(path))
-            if not p.startswith(tmp_dir_abs):
-                raise PermissionError(f"File write blocked outside sandbox: {{p}}")
-    elif event in ("os.mkdir", "os.remove", "os.unlink", "os.rmdir", "os.chmod", "os.chown", "os.truncate"):
-        p = os.path.abspath(os.fsdecode(args[0]))
-        if not p.startswith(tmp_dir_abs):
-            raise PermissionError(f"Filesystem mutation blocked outside sandbox: {{p}}")
-    elif event in ("os.symlink", "os.link"):
-        p = os.path.abspath(os.fsdecode(args[1]))
-        if not p.startswith(tmp_dir_abs):
-            raise PermissionError(f"Link creation blocked outside sandbox: {{p}}")
-    elif event in ("os.rename", "os.replace"):
-        for idx in (0, 1):
-            p = os.path.abspath(os.fsdecode(args[idx]))
-            if not p.startswith(tmp_dir_abs):
-                raise PermissionError(f"Path rename/replace blocked outside sandbox: {{p}}")
-
-sys.addaudithook(_fs_audit_hook)
-
-sys.path.insert(0, {json.dumps(os.path.abspath("."))})
-{code_source}
-
-try:
-    instance = {class_name}()
-    manifest = instance.manifest
-    test_params = json.loads({json.dumps(json.dumps(test_params))})
-    receipt = instance.execute(test_params)
-    out = {{
-        "success": receipt.exit_code == 0,
-        "exit_code": receipt.exit_code,
-        "results": receipt.results,
-        "manifest": {{
-            "name": manifest.name,
-            "risk_tier": manifest.risk_tier.value,
-            "network_policy": manifest.network_policy.value,
-            "reversibility": manifest.reversibility.value,
-            "authorization": manifest.authorization.value
-        }},
-        "error": receipt.error_message
-    }}
-    print(json.dumps(out))
-except Exception as ex:
-    print(json.dumps({{"success": False, "exit_code": 1, "error": str(ex)}}))
-"""
-            clean_env = {
-                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                "PYTHONPATH": os.path.abspath("."),
-                "LANG": "C.UTF-8"
-            }
-            try:
-                proc = subprocess.run(
-                    [sys.executable, "-c", runner_script],
-                    capture_output=True,
-                    text=True,
-                    timeout=8,
-                    cwd=tmp_dir,
-                    env=clean_env
-                )
-                if proc.returncode != 0:
-                    return False, {}, [f"Subprocess test crashed: {proc.stderr}"]
-                
-                output_lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
-                if not output_lines:
-                    return False, {}, [f"Subprocess produced no output. Stderr: {proc.stderr}"]
-                
-                result_data = json.loads(output_lines[-1])
-                if not result_data.get("success"):
-                    return False, result_data, [result_data.get("error") or "Mock run failed in isolated subprocess."]
-                
-                return True, result_data, []
-            except subprocess.TimeoutExpired:
-                return False, {}, ["Subprocess execution timed out (>8s)."]
-            except Exception as ex:
-                return False, {}, [f"Subprocess runner exception: {str(ex)}"]
-
-    def stage_and_instantiate_capability(
-        self,
-        code_source: str,
-        class_name: str
-    ) -> Tuple[Optional[BaseCapability], List[str]]:
-        """Instantiate capability instance for registration in a host-isolated compilation scope."""
-        is_safe, audit_errors = self.audit_code_safety(code_source)
-        if not is_safe:
-            return None, audit_errors
-
-        safe_builtins = dict(__builtins__ if isinstance(__builtins__, dict) else __builtins__.__dict__)
-
-        sandbox_globals: Dict[str, Any] = {
-            "__builtins__": safe_builtins,
-            "BaseCapability": BaseCapability,
-            "CapabilityManifest": CapabilityManifest,
-            "RiskTier": RiskTier,
-            "NetworkPolicy": NetworkPolicy,
-            "ReversibilityClass": ReversibilityClass,
-            "AuthorizationTier": AuthorizationTier,
-            "time": time,
-            "Dict": Dict,
-            "Any": Any,
-            "Optional": Optional,
-            "List": List,
-        }
-
-        # Activate host filesystem mutation block via audit hook
-        tok = _host_fs_isolation_active.set(True)
-        try:
-            compiled = compile(code_source, filename="<ciph_evolved_capability>", mode="exec")
-            exec(compiled, sandbox_globals)
-
-            target_cls = sandbox_globals.get(class_name)
-            if not target_cls or not issubclass(target_cls, BaseCapability):
-                return None, [f"Class '{class_name}' not found or does not inherit from BaseCapability."]
-
-            instance = target_cls()
-            _ = instance.manifest
-            return instance, []
-        except Exception as ex:
-            return None, [f"Failed to instantiate capability: {str(ex)}"]
-        finally:
-            _host_fs_isolation_active.reset(tok)
+    def test_in_disposable_subprocess(self, code_source, class_name, test_params,
+                                     isolation_tier="DISPOSABLE_PROCESS", evaluation_grant=None, trust_registry=None):
+        """Retired shortcut: budgets and independent assertions live in one harness."""
+        return False, {}, ["AUTHORIZATION_REQUIRED: use IndependentBenchmarkHarness with a single-use evaluation grant"]
 
     def hot_reload_capability(
         self,
         code_source: str,
         class_name: str,
         runtime: Any,
-        auth_grant: Optional[AuthorizationGrant] = None,
-        test_params: Optional[Dict[str, Any]] = None
+        auth_grant: Optional[Any] = None,
+        deployment_grant: Optional[Any] = None,
+        test_params: Optional[Dict[str, Any]] = None,
+        allowed_isolation_tier: str = "DISPOSABLE_PROCESS"
     ) -> Dict[str, Any]:
-        """
-        Hardened hot-reload evolution cycle:
-        1. Static AST Audit
-        2. Fail-Closed Static Manifest Extraction (Zero Execution)
-        3. EARLY Cryptographic Authorization Verification BEFORE any subprocess
-        4. Falsification Probe Check
-        5. Sandboxed Subprocess Test Execution (Isolated filesystem)
-        6. Safe Host Instantiation & Registration
-        """
-        test_params = test_params or {}
+        """Compatibility refusal for the retired direct hot-reload interface."""
+        # Runtime registration is an activation. Only the durable canary manager
+        # may perform it after independent evidence and per-stage consent checks.
+        grant = deployment_grant or auth_grant
+        if not isinstance(grant, EvolutionDeploymentGrant):
+            return {"success": False, "status": "AUTHORIZATION_REQUIRED",
+                    "errors": ["Operator EvolutionDeploymentGrant and governed canary activation required"]}
+        valid, reason = grant.verify_signature(runtime.trust_registry)
+        if not valid:
+            return {"success": False, "status": "INVALID_AUTHORIZATION_SIGNATURE", "errors": [reason]}
+        return {"success": False, "status": "GOVERNED_CANARY_REQUIRED",
+                "errors": ["Use CanaryDeploymentManager; direct live registry replacement is disabled"]}
 
-        # 1. Static AST Audit
-        is_safe, audit_errors = self.audit_code_safety(code_source)
-        if not is_safe:
-            return {
-                "success": False,
-                "status": "COMPILATION_OR_AUDIT_FAILED",
-                "errors": audit_errors
-            }
-
-        # 2. Fail-Closed Static Manifest Extraction without executing code
-        static_manifest = self.extract_static_manifest_info(code_source)
-        auth_tier = static_manifest.get("authorization")
-        risk_tier = static_manifest.get("risk_tier")
-        cap_name = static_manifest.get("name", class_name)
-        is_proven_safe = static_manifest.get("is_statically_proven_safe", False)
-
-        # 3. EARLY Authorization Verification (Checked BEFORE any subprocess or host execution)
-        if not is_proven_safe or auth_tier == AuthorizationTier.MANDATORY_INTERRUPT.value or risk_tier in ("HIGH", "CRITICAL"):
-            if not auth_grant or not isinstance(auth_grant, AuthorizationGrant) or not auth_grant.verify_signature(runtime.auth_secret_key):
-                return {
-                    "success": False,
-                    "status": "AUTHORIZATION_REQUIRED",
-                    "capability": cap_name,
-                    "errors": ["Operator cryptographic AuthorizationGrant required BEFORE executing or staging candidate capability."]
-                }
-
-        # 4. Red Team Falsification Probe
-        safe, reason = self.red_team_gate.evaluate_falsification_probe(
-            capability=cap_name,
-            params=test_params,
-            manifest=None
-        )
-        if not safe:
-            return {
-                "success": False,
-                "status": "RED_TEAM_FALSIFICATION_VETO",
-                "errors": [reason]
-            }
-
-        # 5. Test in Isolated Disposable Subprocess (inside clean temp directory with write sandbox)
-        sub_ok, sub_data, sub_errors = self.test_in_disposable_subprocess(code_source, class_name, test_params)
-        if not sub_ok:
-            return {
-                "success": False,
-                "status": "MOCK_EXECUTION_TEST_FAILED",
-                "errors": sub_errors
-            }
-
-        # 6. Safe host instantiation & registration
-        instance, inst_errors = self.stage_and_instantiate_capability(code_source, class_name)
-        if not instance:
-            return {
-                "success": False,
-                "status": "COMPILATION_OR_AUDIT_FAILED",
-                "errors": inst_errors
-            }
-
-        # Double check actual instance manifest after instantiation
-        real_manifest = instance.manifest
-        if real_manifest.authorization == AuthorizationTier.MANDATORY_INTERRUPT or real_manifest.risk_tier in (RiskTier.HIGH, RiskTier.CRITICAL):
-            if not auth_grant or not isinstance(auth_grant, AuthorizationGrant) or not auth_grant.verify_signature(runtime.auth_secret_key):
-                return {
-                    "success": False,
-                    "status": "AUTHORIZATION_REQUIRED",
-                    "capability": real_manifest.name,
-                    "errors": ["Operator cryptographic AuthorizationGrant required for instantiated high-risk capability."]
-                }
-
-        runtime.register_capability(instance)
-
-        return {
-            "success": True,
-            "status": "HOT_RELOAD_SUCCESS",
-            "capability_name": instance.manifest.name,
-            "lane": instance.manifest.derive_execution_lane().value,
-            "sandbox_tested": True
-        }
-
-    def promote_skill_with_operator_grant(
-        self,
-        signature: str,
-        skill_registry: SkillRegistry,
-        auth_grant: AuthorizationGrant,
-        auth_secret_key: bytes
-    ) -> Dict[str, Any]:
-        """Promote a candidate skill template to ACTIVE status using cryptographic operator grant."""
-        if not auth_grant or not auth_grant.verify_signature(auth_secret_key):
-            return {
-                "success": False,
-                "status": "INVALID_AUTHORIZATION_SIGNATURE",
-                "signature": signature
-            }
-
-        template = skill_registry._templates.get(signature)
-        if not template:
-            return {
-                "success": False,
-                "status": "SKILL_TEMPLATE_NOT_FOUND",
-                "signature": signature
-            }
-
-        skill_registry.approve_skill(signature, auto_activate=True)
-
-        return {
-            "success": True,
-            "status": "SKILL_PROMOTED_ACTIVE",
-            "signature": signature,
-            "promotion_tier": template.promotion_tier.value
-        }
+    def promote_skill_with_operator_grant(self, signature, skill_registry, auth_grant, auth_secret_key):
+        return {"success": False, "status": "GOVERNED_CANARY_REQUIRED",
+                "errors": ["Legacy skill promotion cannot substitute HMAC consent for evolution verification"]}

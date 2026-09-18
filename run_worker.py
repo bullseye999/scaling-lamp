@@ -60,7 +60,9 @@ def main():
         registry=registry,
         vault=vault,
         num_workers=args.workers,
-        db_path=args.db
+        db_path=args.db,
+        enable_watchdog=True,
+        supervised=True
     )
 
     def handle_signal(sig, frame):

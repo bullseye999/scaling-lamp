@@ -9,9 +9,10 @@ class QueryRouter:
     """Handles factual questions by directly querying system state.
     NEVER touches the LLM for state answers. Returns pure facts."""
 
-    def __init__(self, state_manager, vault=None):
+    def __init__(self, state_manager, vault=None, runtime=None):
         self.state = state_manager
         self.vault = vault
+        self.runtime = runtime
 
     def can_handle(self, user_input: str) -> bool:
         """Check if this query can be answered directly from state or basic math."""
@@ -64,13 +65,14 @@ class QueryRouter:
         ]):
             return True
         
-        # Count questions
+        # Capability / self-knowledge questions
         if any(phrase in text for phrase in [
-            'how many alerts', 'alert count', 'notifications',
-            'pending notifications', 'how many modules'
+            'what can you do', 'what are your capabilities', 'ciph capabilities',
+            'what capabilities', 'list capabilities', 'what can ciph do',
+            'what do you do', 'what are you capable of', 'show capabilities'
         ]):
             return True
-        
+
         return False
 
     def _eval_ast_math(self, node):
@@ -141,6 +143,18 @@ class QueryRouter:
             now = datetime.now()
             return f"📅 {now.strftime('%A, %B %d, %Y')}"
         
+        # Capability / self-knowledge query
+        if any(phrase in text for phrase in [
+            'what can you do', 'what are your capabilities', 'ciph capabilities',
+            'what capabilities', 'list capabilities', 'what can ciph do',
+            'what do you do', 'what are you capable of', 'show capabilities'
+        ]):
+            if self.runtime:
+                return self.runtime.answer_capability_query(text)
+            elif self.vault and hasattr(self.vault, "runtime") and self.vault.runtime:
+                return self.vault.runtime.answer_capability_query(text)
+            return "[UNKNOWN] Capability Ledger: Runtime not bound to query router."
+
         # Module list query
         if any(phrase in text for phrase in ['modules', 'loaded']):
             snapshot = self.state.get_snapshot()

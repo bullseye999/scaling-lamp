@@ -70,9 +70,9 @@ class TestCiphPlannerOperator(unittest.TestCase):
             def run(self, params, context=None):
                 return {"success": False, "error": "Simulated hardware error"}
 
-        registry.register(CreateItemCapability())
-        registry.register(DeleteItemCapability())
-        registry.register(FailingCapability())
+        registry.register(CreateItemCapability(), code_origin="internal")
+        registry.register(DeleteItemCapability(), code_origin="internal")
+        registry.register(FailingCapability(), code_origin="internal")
 
         executor = DAGExecutor(registry)
 
@@ -213,8 +213,8 @@ class TestCiphPlannerOperator(unittest.TestCase):
             def run(self, params, context=None):
                 return {"success": False, "error": "Planned crash"}
 
-        registry.register(MutateFileCapability())
-        registry.register(FailingStepCapability())
+        registry.register(MutateFileCapability(), code_origin="internal")
+        registry.register(FailingStepCapability(), code_origin="internal")
 
         executor = DAGExecutor(registry, backups_dir="test_backups")
 

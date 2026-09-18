@@ -14,22 +14,28 @@ class IntentRouter:
     def __init__(self):
         # Natural language to command mappings (no slash needed)
         self.nl_commands = {
-            # Darknet / OSINT
-            r'\b(run|execute|start|perform)\s+a?\s*darknet\s+scan\b': '/darknet-scan',
-            r'\b(darknet|threat)\s+(intel|scan|analysis)\b': '/darknet-scan',
-            r'\b(check|show|get)\s+darknet\s+status\b': '/darknet-status',
-            r'\bdarknet\s+status\b': '/darknet-status',
+            # Darknet / OSINT execution & reports
+            r'^\s*(?:run|execute|start|perform|do)\s+(?:a\s+)?darknet\s+scan\s*$': '/darknet-scan',
+            r'^\s*(?:run\s+)?(?:darknet|threat)\s+scan\s*$': '/darknet-scan',
+            r'^\s*scan\s+darknet\s*$': '/darknet-scan',
+            r'^\s*(?:show|get|view|display|list|what\s+are|what\s+were|tell\s+me)\s+(?:darknet\s+)?(?:alerts|findings|signals)\s*$': '/darknet-report',
+            r'^\s*(?:show|get|view|display|give|give\s+me|send)\s+(?:detailed\s+|full\s+|darknet\s+|a\s+detailed\s+)?(?:darknet\s+)?report\s*$': '/darknet-report',
+            r'^\s*(?:detailed|full)\s+(?:darknet\s+)?(?:scan|report)\s*$': '/darknet-report',
+            r'^\s*darknet\s+report\s*$': '/darknet-report',
+            r'^\s*darknet\s+alerts?\s*$': '/darknet-report',
+            r'\b(?:check|show|get)\s+darknet\s+status\b': '/darknet-status',
+            r'^\s*darknet\s+status\s*$': '/darknet-status',
             r'\btor\s+check\b': '/tor-check',
-            r'\b(new|fresh)\s+identity\b': '/new-identity',
+            r'^\s*check\s+tor\s*$': '/tor-check',
+            r'\b(?:new|fresh)\s+identity\b': '/new-identity',
             r'\bghost\s+mode\b': '/ghost-mode',
-            r'\bosint\s+scan\b': '/osint',
-            r'\bthreat\s+intel\b': '/osint',
-            r'\bshow\s+report\b': '/darknet-report',
+            r'^\s*(?:run\s+)?osint\s+scan\s*$': '/osint',
+            r'^\s*threat\s+intel\s*$': '/osint',
             r'\b(crypto|btc|eth)\s+price\b': '/market-data',
             r'\b(arbitrage|arb)\s+scan\b': '/arbitrage-scan',
-            r'\bmarket\s+trends?\b': '/market-trends',
-            r'\btrading\s+signals?\b': '/trading-signals',
-            r'\bportfolio\s+health\b': '/portfolio-health',
+            r'^\s*market\s+trends?\s*$': '/market-trends',
+            r'^\s*trading\s+signals?\s*$': '/trading-signals',
+            r'^\s*portfolio\s+health\s*$': '/portfolio-health',
 
             # Pentesting / Security
             r'\bport\s+scan\s+(\S+)\b': '/port-scan {1}',
@@ -37,26 +43,28 @@ class IntentRouter:
             r'\bweb\s+scan\s+(\S+)\b': '/web-scan {1}',
             r'\bsecurity\s+audit\s+(\S+)\b': '/security-audit {1}',
             r'\bssl\s+scan\s+(\S+)\b': '/ssl-scan {1}',
-            r'\bnetwork\s+discovery\b': '/network-discovery',
+            r'^\s*network\s+discovery\s*$': '/network-discovery',
 
-            # Bounty
+            # Bounty & General Recon Scans
+            r'^\s*(?:run\s+(?:a\s+)?)?(?:bounty\s+|web\s+|recon\s+)?scan\s+(?:on\s+|for\s+)?([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,})\s*$': '/bounty-scan {1}',
+            r'^\s*(?:audit|investigate|check\s+surface)\s+(?:on\s+|for\s+)?([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,})\s*$': '/bounty-scan {1}',
             r'\bbounty\s+scan\s+(\S+)\b': '/bounty-scan {1}',
-            r'\bbounty\s+scan\b': '/bounty-scan',
+            r'^\s*(?:run\s+)?bounty\s+scan\s*$': '/bounty-scan',
             r'\bbounty\s+report\s+(\S+)\b': '/bounty-report {1}',
-            r'\bbounty\s+report\b': '/bounty-report',
-            r'\bbounty\s+programs?\b': '/bounty-programs',
+            r'^\s*bounty\s+report\s*$': '/bounty-report',
+            r'^\s*bounty\s+programs?\s*$': '/bounty-programs',
 
             # Workflows
             r'\bstart\s+workflow\s+(\w+)\b': '/start-workflow {1}',
             r'\bstop\s+workflow\s+(\w+)\b': '/stop-workflow {1}',
-            r'\bworkflow\s+status\b': '/workflow-status',
-            r'\bauto\s+mode\b': '/auto-mode',
-            r'\bstop\s+all\s+workflows?\b': '/stop-all-workflows',
+            r'^\s*workflow\s+status\s*$': '/workflow-status',
+            r'^\s*auto\s+mode\s*$': '/auto-mode',
+            r'^\s*stop\s+all\s+workflows?\s*$': '/stop-all-workflows',
 
             # Self-awareness / upgrades / code staging
-            r'\bself\s+report\b': '/self-report',
-            r'\bself\s+analyze\b': '/self-analyze',
-            r'\bshow\s+(?:upgrades?|staged|code)\b': '/staged',
+            r'^\s*self\s+report\s*$': '/self-report',
+            r'^\s*self\s+analyze\s*$': '/self-analyze',
+            r'^\s*show\s+(?:upgrades?|staged|code)\s*$': '/staged',
             r'^\s*(?:staged|code\s+artifacts?)\s*$': '/staged',
             r'\b(?:apply|approve)\s+(?:upgrade|code|patch|artifact)?\s*([a-zA-Z0-9_\-]+)\b': '/apply {1}',
             r'^\s*(?:apply|approve)\s+it\s*$': '/apply STG-001',
@@ -66,28 +74,49 @@ class IntentRouter:
             r'^\s*(?:show\s+)?changelog\s*$': '/changelog',
 
             # Status / meta
-            r'\bsystem\s+status\b': '/status',
-            r'\breality\s+check\b': '/reality-check',
-            r'\bmodules?\s+list\b': '/modules',
+            r'^\s*model\s+status\s*$': '/model-status',
+            r'^\s*router\s+status\s*$': '/model-status',
+            r'^\s*test\s+(?:deepseek|model)\s*$': '/test-deepseek',
+            r'^\s*ping\s+(?:deepseek|model)\s*$': '/test-deepseek',
+            r'^\s*switch\s+model(?:\s+(\S+))?\s*$': '/switch-model {1}',
+            r'^\s*system\s+status\s*$': '/status',
+            r'^\s*reality\s+check\s*$': '/reality-check',
+            r'^\s*modules?\s+list\s*$': '/modules',
             r'\bload\s+module\s+(\w+)\b': '/load {1}',
             r'\bunload\s+module\s+(\w+)\b': '/unload {1}',
 
             # File / project
-            r'\bscan\s+project\b': '/scan-project',
+            r'^\s*scan\s+project\s*$': '/scan-project',
             r'\bread\s+file\s+(\S+)\b': '/read-file {1}',
             r'\bsearch\s+files?\s+(\S+)\b': '/search-in-files {1}',
 
             # Security
-            r'\bsecurity\s+scan\b': '/security-scan',
-            r'\bclean\s+footprints?\b': '/clean-footprints',
-            r'\bintegrity\s+check\b': '/integrity-check',
-            r'\bbackup\s+now\b': '/backup-now',
-            r'\bdisk\s+(security|encryption)\b': '/disk-security',
+            r'^\s*(?:run\s+)?security\s+scan\s*$': '/security-scan',
+            r'^\s*clean\s+footprints?\s*$': '/clean-footprints',
+            r'^\s*integrity\s+check\s*$': '/integrity-check',
+            r'^\s*backup\s+now\s*$': '/backup-now',
+            r'^\s*disk\s+(?:security|encryption)\s*$': '/disk-security',
+
+            # Bug Bounty, Intelligence & Sentry
+            r'^\s*bounty\s+(?:scopes?|list|reports?)\s*$': '/bounty-list',
+            r'^\s*(?:run\s+|do\s+)?bounty\s+scan\s+(\S+)\b': '/bounty-scan {1}',
+            r'^\s*(?:generate\s+|write\s+)?bounty\s+report(?:\s+(\S+))?\s*$': '/bounty-report {1}',
+            r'^\s*(?:show\s+(?:me\s+)?)?(?:what\s+changed|recon\s+diff)(?:\s+(?:on|for|in))?(?:\s+(\S+))?\s*$': '/what-changed {1}',
+            r'^\s*(?:show\s+(?:me\s+)?(?:the\s+)?)?(?:hit\s*list|top\s+targets)(?:\s+(?:for|on))?(?:\s+(\S+))?\s*$': '/hit-list {1}',
+            r'^\s*(?:show\s+(?:me\s+)?(?:the\s+)?)?(?:chain\s+reaction|attack\s+path|exploit\s+chain)(?:\s+(?:for|on))?(?:\s+(\S+))?\s*$': '/chain-reaction {1}',
+            r'^\s*watchtower\s*$': '/watchtower',
+            r'^\s*(?:ghost\s+rating|ghost\s+score|opsec\s+audit)\s*$': '/ghost-rating',
+            r'^\s*(?:show\s+(?:me\s+)?)?(?:all\s+)?assets(?:\s+matrix|\s+inventory)?\s*$': '/assets',
+            r'^\s*(?:show\s+(?:me\s+)?)?(?:opsec|ghost)\s+history\s*$': '/opsec-history',
+            r'^\s*war\s+room\s+(.+)$': '/war-room {1}',
+            r'^\s*red\s+team\s+(.+)$': '/war-room {1}',
+            r'^\s*(?:daily\s+brief|executive\s+brief|morning\s+brief)\s*$': '/daily-brief',
+            r'^\s*(?:narrative\s+timeline|memory\s+timeline)\s*$': '/timeline',
 
             # Trading & Finance Shortcuts
             r'\bpaper\s+trade\s+(\S+)\s+(\S+)\s+(\S+)\b': '/paper-trade {1} {2} {3}',
             r'\bstop\s+loss\s+(\S+)\s+(\S+)\s+(\S+)\b': '/stop-loss {1} {2} {3}',
-            r'\bcrypto\s+prices?\b': '/crypto-prices',
+            r'^\s*crypto\s+prices?\s*$': '/crypto-prices',
         }
 
         self.learned_mappings = {}
@@ -97,6 +126,9 @@ class IntentRouter:
     
         # 1. Already a slash command
         if text.startswith('/'):
+            # Alias /detailed-darknet-scan and /darknet-alerts to /darknet-report
+            if text in ['/detailed-darknet-scan', '/darknet-alerts', '/alerts']:
+                return 'COMMAND', '/darknet-report'
             return 'COMMAND', text
     
         # Check learned mappings
@@ -104,7 +136,13 @@ class IntentRouter:
             if re.search(pattern, text, re.IGNORECASE):
                 return 'COMMAND', cmd
 
-        # 2. Exclude common greetings
+        # 2. Long text / Document handling (prevent false positive command matching)
+        if len(text) > 100 and not text.startswith('/'):
+            if any(kw in text for kw in ['hackerone', 'bug bounty', 'program scope', 'in-scope', 'out-of-scope', 'out of scope', 'scope policy', 'rules of engagement', 'vulnerability reports', 'submission requirements']):
+                return 'COMMAND', f'/bounty-scope {user_input.strip()}'
+            return 'CONSULT', None
+
+        # 3. Exclude common greetings
         greetings = ['hello', 'hi', 'hey', 'good morning', 'good evening', 'howdy', 'sup']
         if text in greetings or text.rstrip('!') in greetings:
             return 'CONSULT', None
@@ -127,8 +165,28 @@ class IntentRouter:
         ]
         if any(phrase in text for phrase in suggestion_phrases):
             return 'CONSULT', None
+
+        # 5. Check if user is asking a conversational question / inquiry
+        # Conversational questions should go to LLM unless asking specifically to show report/alerts
+        conversational_starters = (
+            'why ', 'why is', 'why are', 'why did', 'why do', 'why does',
+            'what do you think', 'what would you do', 'what is one think', 'what is one thing',
+            'who is', 'who are', 'who am i', 'do you know', 'do you have', 'is there anything',
+            'talk to me', 'ask me', 'can you elaborate', 'tell me more',
+            'how are you', 'how do you', 'what are you',
+            'can you', 'could you', 'would you', 'will you', 'next time'
+        )
+        if any(text.startswith(cs) for cs in conversational_starters):
+            # Check if this question is specifically asking for scan alerts/report
+            if any(kw in text for kw in ['alerts', 'report', 'findings', 'signals']):
+                for pattern, command_template in self.nl_commands.items():
+                    if 'report' in command_template or 'status' in command_template:
+                        match = re.search(pattern, text, re.IGNORECASE)
+                        if match:
+                            return 'COMMAND', command_template
+            return 'CONSULT', None
     
-        # 5. Match natural language commands
+        # 6. Match natural language commands
         for pattern, command_template in self.nl_commands.items():
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
@@ -138,7 +196,7 @@ class IntentRouter:
                         cmd = cmd.replace(f'{{{i}}}', group)
                 return 'COMMAND', cmd
     
-        # 6. Default to consult (LLM handles it)
+        # 7. Default to consult (LLM handles it)
         return 'CONSULT', None
 
     def classify_with_context(self, user_input: str, history: list = None) -> Tuple[str, Optional[str]]:

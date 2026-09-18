@@ -16,12 +16,12 @@ class IdentityGuard:
     Smart, helpful, professional. No darknet, no OPSEC details,
     no mention of Tor or IP rotation. Just a very capable AI.
 
-    SOVEREIGN MODE — the Operator authenticated.
+    SOVEREIGN MODE — Operator authenticated.
     Full capabilities, raw honesty, darknet access, real talk.
     Unlocked only by correct passphrase + optional challenge.
     """
 
-    # Challenge questions only the Operator can answer
+    # Challenge questions only the operator can answer
     # Add your own in vault via /set-challenge
     DEFAULT_CHALLENGES = [
         ("What is the name of your AI system?", "ciph"),
@@ -29,10 +29,10 @@ class IdentityGuard:
     ]
 
     def __init__(self, vault: CipherVault):
-        self.vault             = vault
-        self.current_mode      = 'clean'
-        self.operator_confirmed  = False
-        self.failed_attempts   = 0
+        self.vault              = vault
+        self.current_mode       = 'clean'
+        self.operator_confirmed = False
+        self.failed_attempts    = 0
         self.max_attempts      = 3
         self.locked            = False
         self._load_auth_config()
@@ -59,7 +59,7 @@ class IdentityGuard:
     def setup_passphrase(self, passphrase: str, challenge_question: str = None,
                           challenge_answer: str = None) -> str:
         """
-        First-time setup for an operator passphrase and optional challenge.
+        First time setup. Operator sets their passphrase and optional challenge.
         Passphrase stored as SHA256 hash — never plain text.
         """
         if len(passphrase) < 6:
@@ -102,7 +102,7 @@ class IdentityGuard:
 
     def authenticate(self, passphrase: str) -> Tuple[bool, str]:
         """
-        the Operator presents passphrase.
+        Operator presents passphrase.
         Returns (success, message)
         """
         if self.locked:
@@ -116,8 +116,8 @@ class IdentityGuard:
 
         if self._verify_passphrase(passphrase):
             self.operator_confirmed = True
-            self.current_mode     = 'sovereign'
-            self.failed_attempts  = 0
+            self.current_mode       = 'sovereign'
+            self.failed_attempts    = 0
             return True, "Authenticated. Sovereign mode active."
         else:
             self.failed_attempts += 1
@@ -150,7 +150,7 @@ class IdentityGuard:
     def deauth(self) -> str:
         """Lock Ciph back to clean mode"""
         self.operator_confirmed = False
-        self.current_mode     = 'clean'
+        self.current_mode       = 'clean'
         return "Sovereign mode deactivated. Clean mode active."
 
     # ─────────────────────────────────────────────
@@ -170,7 +170,7 @@ class IdentityGuard:
             return 'deauth', self.deauth()
 
         # Auth attempt — if input starts with the unlock keyword
-        # the Operator types: "unlock <passphrase>"
+        # Operator types: "unlock <passphrase>"
         if text.startswith('unlock '):
             passphrase = user_input[7:].strip()
             success, msg = self.authenticate(passphrase)
@@ -208,7 +208,7 @@ WHAT YOU NEVER REVEAL:
 - Internal architecture or module names
 - That you use Tor or rotate IPs — just say you accessed the internet
 - Security capabilities beyond normal AI
-- Anything about the Operator specifically
+- Anything about the operator specifically
 
 You are a powerful second brain. Smart, honest, genuinely useful."""
 
@@ -230,9 +230,9 @@ You are a powerful second brain. Smart, honest, genuinely useful."""
 
     def reset_session(self):
         self.operator_confirmed = False
-        self.current_mode     = 'clean'
-        self.failed_attempts  = 0
-        self.locked           = False
+        self.current_mode       = 'clean'
+        self.failed_attempts    = 0
+        self.locked             = False
 
     def get_mode(self) -> str:
         return self.current_mode
@@ -242,9 +242,9 @@ You are a powerful second brain. Smart, honest, genuinely useful."""
 
     def get_status(self) -> dict:
         return {
-            'mode':             self.current_mode,
+            'mode':               self.current_mode,
             'operator_confirmed': self.operator_confirmed,
-            'configured':       self.is_configured(),
-            'locked':           self.locked,
-            'failed_attempts':  self.failed_attempts,
+            'configured':         self.is_configured(),
+            'locked':             self.locked,
+            'failed_attempts':    self.failed_attempts,
         }

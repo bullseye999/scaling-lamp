@@ -2,7 +2,7 @@
 # brain_router.py - Routes to Ollama or OpenAI based on topic
 
 import re
-from typing import Tuple
+from typing import Tuple, Dict, Any, Optional, List
 
 class BrainRouter:
     """
@@ -34,7 +34,7 @@ class BrainRouter:
         # Add these to the existing list:
         'opsec', 'privacy', 'monitoring', 'surveillance', 'backdoor',
         'compromise', 'anxiety', 'stress', 'burnout',
-        'security testing', 'penetration test',
+        'security testing', 'penetration test'
 
         # Ciph internals
         'ciph capabilities', 'what can you do', 'darknet scan',
@@ -43,6 +43,9 @@ class BrainRouter:
         # Crypto / markets
         'monero', 'xmr', 'mixing', 'tumbler', 'laundering',
         'darknet market', 'vendor', 'escrow',
+
+        # Sensitive personal matters (routed to the local model)
+        'personal identity', 'personal history', 'medical', 'legal', 'financial hardship',
 
         # Added via UP-006
         'operational security',
@@ -181,4 +184,140 @@ class BrainRouter:
             'openai_routes': openai_count,
             'last_route': self.last_route,
             'sensitivity_threshold': self.sensitivity_threshold
+        }
+
+    # ─────────────────────────────────────────────────────────────
+    # COGNITIVE FILTERS & GUT CHECK PRE-FILTER (PHASE 3)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def normalize_hypothesis(raw_text: str) -> Dict[str, str]:
+        """
+        Normalizes a hypothesis into a structured canonical triple:
+        Subject (target/asset), Predicate (flaw/behavior), Condition (context/parameter).
+        """
+        text = raw_text.strip()
+        # Check if structured JSON provided
+        if text.startswith('{') and text.endswith('}'):
+            try:
+                import json
+                data = json.loads(text)
+                return {
+                    "subject": str(data.get("subject", "")).strip().lower(),
+                    "predicate": str(data.get("predicate", "")).strip().lower(),
+                    "condition": str(data.get("condition", "")).strip().lower()
+                }
+            except Exception:
+                pass
+                
+        # Regex extraction for common target patterns
+        # e.g., "Maybe target.com has cors on /api"
+        subject = "unknown_target"
+        predicate = "unspecified_hypothesis"
+        condition = ""
+        
+        url_match = re.search(r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)', text)
+        if url_match:
+            subject = url_match.group(1).lower()
+            
+        vuln_types = ['cors', 'xss', 'sqli', 'ssrf', 'rce', 'auth_bypass', 'port_open', 'tls', 'leak']
+        for v in vuln_types:
+            if v in text.lower():
+                predicate = v
+                break
+                
+        if not predicate or predicate == "unspecified_hypothesis":
+            predicate = re.sub(r'[^a-zA-Z0-9_]', '_', text[:30]).lower()
+            
+        return {
+            "subject": subject,
+            "predicate": predicate,
+            "condition": condition
+        }
+
+    def gut_check_hypothesis(
+        self,
+        subject: str,
+        predicate: str,
+        condition: Optional[str] = None,
+        vault = None
+    ) -> Tuple[bool, str, Optional[str]]:
+        """
+        Pre-filters hypotheses before they are surfaced or staged.
+        Checks:
+        1. Vagueness check
+        2. Tabu Graveyard check
+        3. Active VERIFIED_REAL contradiction check
+        4. Duplicate active hypothesis check
+        Returns: (passed: bool, reason: str, existing_claim_id: Optional[str])
+        """
+        subject = (subject or "").strip().lower()
+        predicate = (predicate or "").strip().lower()
+        
+        # 1. Vagueness / Testability Check
+        if not subject or subject == "unknown_target" or len(subject) < 3:
+            return False, "REJECTED_VAGUE: Missing specific testable target subject", None
+        if not predicate or predicate == "unspecified_hypothesis" or len(predicate) < 3:
+            return False, "REJECTED_VAGUE: Missing specific testable predicate flaw", None
+            
+        if not vault:
+            return True, "PASSED_GUT_CHECK", None
+            
+        # 2. Tabu Graveyard Check (Has it been disproven before?)
+        if vault.is_in_graveyard(subject, predicate):
+            return False, f"REJECTED_TABU: '{subject}:{predicate}' was previously tested and refuted in Graveyard", None
+            
+        # 3. Contradiction against active VERIFIED_REAL claims
+        real_claims = vault.get_active_real_claims(limit=50)
+        for c in real_claims:
+            if c['subject'].lower() == subject:
+                # Contradiction pattern e.g. port_open vs port_closed, patched vs vulnerable
+                if ("open" in c['predicate'] and "closed" in predicate) or \
+                   ("closed" in c['predicate'] and "open" in predicate) or \
+                   ("secure" in c['predicate'] and "vulnerable" in predicate):
+                    return False, f"REJECTED_CONTRADICTION: Contradicted by active verified reality '{c['predicate']}'", c['claim_id']
+                    
+        # 4. Deduplication Check against existing active hypotheses
+        existing_hypotheses = vault.get_claims_by_state(["HYPOTHESIS"], limit=50)
+        for h in existing_hypotheses:
+            if h['subject'].lower() == subject and h['predicate'].lower() == predicate:
+                return False, f"SUPPRESSED_DUPLICATE: Identical active hypothesis already staged ({h['claim_id']})", h['claim_id']
+                
+        return True, "PASSED_GUT_CHECK", None
+
+    def filter_and_stage_hypothesis(
+        self,
+        subject: str,
+        predicate: str,
+        condition: Optional[str] = None,
+        vault = None
+    ) -> Dict[str, Any]:
+        """
+        Validates through Gut Check, and if passed, creates the canonical claim in vault.
+        """
+        passed, reason, existing_id = self.gut_check_hypothesis(subject, predicate, condition, vault)
+        if not passed:
+            return {
+                "passed": False,
+                "reason": reason,
+                "claim_id": existing_id,
+                "subject": subject,
+                "predicate": predicate
+            }
+            
+        claim_id = None
+        if vault:
+            claim_id = vault.create_epistemic_claim(
+                subject=subject,
+                predicate=predicate,
+                condition=condition,
+                state="HYPOTHESIS"
+            )
+            
+        return {
+            "passed": True,
+            "reason": "PASSED_GUT_CHECK",
+            "claim_id": claim_id,
+            "subject": subject,
+            "predicate": predicate
         }

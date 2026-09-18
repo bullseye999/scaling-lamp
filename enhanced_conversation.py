@@ -13,7 +13,7 @@ from ciph_link_reader import CiphLinkReader
 
 
 class CiphConversation:
-    def __init__(self, vault, router: Optional[CiphRouter] = None, evolution_engine: Optional[Any] = None, smart_memory: Optional[Any] = None):
+    def __init__(self, vault, router: Optional[CiphRouter] = None, evolution_engine: Optional[Any] = None, smart_memory: Optional[Any] = None, runtime: Optional[Any] = None):
         self.vault = vault
         self.personality = CiphPersonality()
         self.history = []
@@ -23,6 +23,7 @@ class CiphConversation:
         self.link_reader = CiphLinkReader()
         self.evolution_engine = evolution_engine
         self.smart_memory = smart_memory
+        self.runtime = runtime
         self.running_session_summary = ""
 
     def _add_to_history(self, role: str, content: str):
@@ -36,8 +37,7 @@ class CiphConversation:
             self.history = self.history[2:]
             u_text = overflow_turn[0].get('content', '')[:160] if overflow_turn else ""
             a_text = overflow_turn[1].get('content', '')[:160] if len(overflow_turn) > 1 else ""
-            op_name = self.vault.get_operator_name() or "Operator"
-            summary_snippet = f"Earlier in session: {op_name} discussed '{u_text}' -> Ciph guided: '{a_text}'."
+            summary_snippet = f"Earlier in session: Operator discussed '{u_text}' -> Ciph guided: '{a_text}'."
             if self.running_session_summary:
                 self.running_session_summary = f"{self.running_session_summary}\n{summary_snippet}"[-800:]
             else:
@@ -119,6 +119,40 @@ class CiphConversation:
             except Exception:
                 pass
 
+        # Empirical Capability Grounding (Three-State Ledger View)
+        capability_context = ""
+        try:
+            rt = self.runtime
+            if not rt and self.vault and hasattr(self.vault, "runtime"):
+                rt = self.vault.runtime
+            if rt and hasattr(rt, "get_cached_capability_ledger"):
+                cached = rt.get_cached_capability_ledger()
+                if not cached and hasattr(rt, "generate_capability_briefing"):
+                    rt.generate_capability_briefing()
+                    cached = rt.get_cached_capability_ledger()
+                if cached:
+                    profiles, checkpoint = cached
+                    active = [p.capability_name for p in profiles.values() if getattr(p.health_status, "value", p.health_status) == "VERIFIED_ACTIVE"]
+                    untested = [p.capability_name for p in profiles.values() if getattr(p.health_status, "value", p.health_status) == "UNTESTED"]
+                    degraded = [p.capability_name for p in profiles.values() if getattr(p.health_status, "value", p.health_status) in ("DEGRADED", "OPERATIONAL_DEGRADED", "FAILING", "HISTORICAL_ONLY")]
+
+                    c_lines = ["[EMPIRICAL CAPABILITY STATUS (DERIVED STRICTLY FROM RECEIPT LEDGER)]"]
+                    if active:
+                        c_lines.append(f"  • [FACT] VERIFIED ACTIVE (Proven with receipts): {', '.join(active)}")
+                    if untested:
+                        c_lines.append(f"  • [OBSERVATION] UNTESTED (Declared in manifests; 0 verified runs): {', '.join(untested)}")
+                    if degraded:
+                        c_lines.append(f"  • [WARNING] STALE OR DEGRADED: {', '.join(degraded)}")
+                    c_lines.append(
+                        "CAPABILITY GROUNDING RULES:\n"
+                        "- State VERIFIED_ACTIVE capabilities as proven facts with empirical backing.\n"
+                        "- State UNTESTED capabilities as declared in manifests but not yet empirically verified. Never falsely claim they are verified, and never deny their existence in the codebase.\n"
+                        "- Never invent unbuilt or unregistered capabilities."
+                    )
+                    capability_context = "\n".join(c_lines)
+        except Exception:
+            pass
+
         full_op_context = operational_context
         if self.running_session_summary:
             full_op_context = f"{full_op_context}\n\n[RUNNING SESSION STATE & EARLIER TURNS]\n{self.running_session_summary}".strip() if full_op_context else f"[RUNNING SESSION STATE & EARLIER TURNS]\n{self.running_session_summary}"
@@ -128,6 +162,8 @@ class CiphConversation:
             full_op_context = f"{full_op_context}\n\n{daemon_status}".strip() if full_op_context else daemon_status
         if cognitive_context:
             full_op_context = f"{full_op_context}\n\n{cognitive_context}".strip() if full_op_context else cognitive_context
+        if capability_context:
+            full_op_context = f"{full_op_context}\n\n{capability_context}".strip() if full_op_context else capability_context
 
         return get_worldview(
             mood_context=mood_context,
@@ -155,7 +191,7 @@ class CiphConversation:
         if any(trigger in user_input.lower() for trigger in live_data_triggers):
             return "use /market-data for live crypto prices — I don't guess numbers."
 
-        # 1. Check for Operator Council Triggers
+        # 1. Check for Operator's Council Triggers
         council_triggers = [
             'talk to me', "what's on your mind", "what is on your mind",
             'what have you been thinking about', 'what have you been exploring',
@@ -167,7 +203,7 @@ class CiphConversation:
             if theses:
                 top_thesis = theses[0]
                 self.vault.mark_council_thesis_discussed(top_thesis['id'])
-                operational_context += f"\n\n[SOVEREIGN COUNCIL DIALECTIC THESIS]\nTitle: {top_thesis['title']}\nConclusion: {top_thesis['conclusion']}\nDialogue Prompt: {top_thesis['dialogue_prompt']}\nInitiate direct, thoughtful peer dialogue with the operator around this thesis."
+                operational_context += f"\n\n[OPERATOR'S COUNCIL DIALECTIC THESIS]\nTitle: {top_thesis['title']}\nConclusion: {top_thesis['conclusion']}\nDialogue Prompt: {top_thesis['dialogue_prompt']}\nInitiate direct, thoughtful peer dialogue with Operator around this thesis."
 
         # 2. Real-Time Operational Status / Sitrep / Catch-Up Trigger
         status_triggers = [
@@ -188,7 +224,7 @@ class CiphConversation:
                 "- Base your operational assessment STRICTLY on the real database numbers and items above.\n"
                 "- If no new scans, reports, or watchtower alerts occurred, state directly that the board is quiet, all systems are nominal/standby, and summarize the registered programs.\n"
                 "- NEVER invent fake background scans, fake server locations in foreign cities (e.g. Amsterdam, Frankfurt), fake darknet chatter, or fake asset diffs.\n"
-                "- NEVER claim you lack script execution or filesystem access, and NEVER plead for execution capabilities or invent fake yesterday conversations.\n"
+                "- NEVER claim unbuilt capabilities. Ground all capability answers strictly in verified ledger history.\n"
                 "- Deliver a crisp, confident, direct sitrep matching your razor-sharp persona without fabricating any unverified events."
             )
 
@@ -215,12 +251,12 @@ class CiphConversation:
                     "CRITICAL INSTRUCTION FOR TARGET RECOMMENDATIONS:\n"
                     "- You MUST recommend ONLY from the registered targets listed above.\n"
                     "- NEVER suggest phantom targets (like AWS or WordPress) unless they are in the above list.\n"
-                    "- Pick one of the active registered targets, give a sharp technical rationale based on its scope, and ask the operator if you should launch a passive recon scan."
+                    "- Pick one of the active registered targets, give a sharp technical rationale based on its scope, and ask Operator if you should launch a passive recon scan."
                 )
             else:
                 operational_context += (
                     "\n\n[ACTIVE REGISTERED TARGETS IN VAULT: None registered]\n"
-                    "State clearly that no bug bounty targets are currently registered in the vault, and ask the operator to register a target scope or provide a domain to scan."
+                    "State clearly that no bug bounty targets are currently registered in the vault, and ask Operator to register a target scope or provide a domain to scan."
                 )
 
         # 4. Scan Status & Progress Inquiry Trigger
@@ -257,6 +293,20 @@ class CiphConversation:
                 "- If completed receipts exist, summarize their verified findings.\n"
                 "- NEVER fabricate ongoing passes or invent fake subdomains/percentages not present in the receipts."
             )
+
+        # 5. Capability & Self-Knowledge Inquiry Trigger (Deterministic Ledger Interception)
+        capability_triggers = [
+            'what can you do', 'what are your capabilities', 'ciph capabilities',
+            'what capabilities', 'list capabilities', 'what can ciph do',
+            'what do you do', 'what are you capable of', 'show capabilities',
+            'what is in your toolbox', "what's in your toolbox"
+        ]
+        clean_user_input = user_input.lower().strip()
+        if any(trigger in clean_user_input for trigger in capability_triggers):
+            if self.runtime:
+                return self.runtime.answer_capability_query(user_input)
+            elif self.vault and hasattr(self.vault, "runtime") and self.vault.runtime:
+                return self.vault.runtime.answer_capability_query(user_input)
 
         # 3. Autonomous Dual-Spectrum URL Fetching & OPSEC Interception
         opsec_badge_prefix = ""

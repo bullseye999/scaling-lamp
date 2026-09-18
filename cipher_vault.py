@@ -39,11 +39,10 @@ class CipherVault:
     ENHANCED: PBKDF2 key derivation + MultiFernet backwards compatibility + strict WAL mode.
     """
 
-    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt", legacy_key_file: str = "ciph.legacy.key"):
+    def __init__(self, db_path: str = "ciph_vault.db", key_file: str = "ciph.key", salt_file: str = "ciph.salt"):
         self.db_path = db_path
         self.key_file = key_file
         self.salt_file = salt_file
-        self.legacy_key_file = legacy_key_file
         self._init_key()
         self._init_db()
 
@@ -62,69 +61,28 @@ class CipherVault:
             except Exception:
                 pass
 
-        # 2. Prefer an operator-supplied passphrase. Without one, use a
-        # random per-installation key stored in the ignored key file.
-        passphrase_value = os.getenv("CIPH_VAULT_PASSPHRASE")
-        stored_key = None
+        # 2. Derive key from passphrase using PBKDF2HMAC (SHA256, 480,000 iterations)
+        passphrase = os.getenv("CIPH_VAULT_PASSPHRASE", "CIPH_SOVEREIGN_MASTER_VAULT_SEED").encode()
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=480000,
+            backend=default_backend()
+        )
+        self.key = base64.urlsafe_b64encode(kdf.derive(passphrase))
+        
+        # 3. Setup MultiFernet for seamless backward compatibility with existing vaults
+        fernet_instances = [Fernet(self.key)]
         if os.path.exists(self.key_file):
             try:
                 with open(self.key_file, 'rb') as f:
-                    stored_key = f.read().strip()
-                if stored_key:
-                    Fernet(stored_key)  # Validate before use.
-            except Exception:
-                stored_key = None
-
-        # Optional ignored migration key ring keeps existing local vaults
-        # readable without embedding retired passphrases in public source.
-        legacy_keys = []
-        if self.legacy_key_file and os.path.exists(self.legacy_key_file):
-            try:
-                with open(self.legacy_key_file, 'rb') as f:
-                    candidates = [line.strip() for line in f if line.strip()]
-                for candidate in candidates:
-                    Fernet(candidate)
-                    if candidate not in legacy_keys:
-                        legacy_keys.append(candidate)
-            except Exception:
-                legacy_keys = []
-
-        fernet_instances = []
-        active_keys = []
-        if passphrase_value:
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                iterations=480000,
-                backend=default_backend()
-            )
-            self.key = base64.urlsafe_b64encode(kdf.derive(passphrase_value.encode()))
-            fernet_instances.append(Fernet(self.key))
-            active_keys.append(self.key)
-            if stored_key and stored_key != self.key:
-                fernet_instances.append(Fernet(stored_key))
-                active_keys.append(stored_key)
-        elif stored_key:
-            self.key = stored_key
-            fernet_instances.append(Fernet(self.key))
-            active_keys.append(self.key)
-        else:
-            self.key = Fernet.generate_key()
-            with open(self.key_file, 'wb') as f:
-                f.write(self.key)
-            try:
-                os.chmod(self.key_file, 0o600)
+                    legacy_key = f.read().strip()
+                if legacy_key and legacy_key != self.key:
+                    fernet_instances.append(Fernet(legacy_key))
             except Exception:
                 pass
-            fernet_instances.append(Fernet(self.key))
-            active_keys.append(self.key)
-
-        for legacy_key in legacy_keys:
-            if legacy_key not in active_keys:
-                fernet_instances.append(Fernet(legacy_key))
-                active_keys.append(legacy_key)
-
+        
         self.cipher_suite = MultiFernet(fernet_instances)
 
     def _encrypt(self, data: str) -> str:
@@ -142,13 +100,14 @@ class CipherVault:
             return ""
         return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self, calling_holder_id: Optional[str] = None) -> sqlite3.Connection:
         """Get database connection configured with WAL mode and busy timeout."""
         conn = sqlite3.connect(self.db_path, timeout=10.0)
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA busy_timeout = 5000;")
-        return conn
+        from ciph.maintenance.exclusion import ExcludedConnection
+        return ExcludedConnection(conn, calling_holder_id=calling_holder_id, db_path=self.db_path)
 
     def _init_db(self):
         """Initialize the encrypted database schema."""
@@ -164,6 +123,13 @@ class CipherVault:
                 context_tag TEXT
             )
         ''')
+        # Encrypted command memory is separate from configuration and conversations.
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS command_memory (
+                key TEXT PRIMARY KEY,
+                encrypted_value TEXT NOT NULL
+            )
+        """)
         # Configurations table (for API keys, settings - also encrypted)
         c.execute('''
             CREATE TABLE IF NOT EXISTS config (
@@ -262,9 +228,9 @@ class CipherVault:
                 created_at REAL
             )
         ''')
-        # Operator Council Vault table (Theses for dialogue)
+        # Operator's Council Vault table (Theses for dialogue)
         c.execute('''
-            CREATE TABLE IF NOT EXISTS operator_council_vault (
+            CREATE TABLE IF NOT EXISTS operators_council_vault (
                 id TEXT PRIMARY KEY,
                 thesis_title_enc TEXT NOT NULL,
                 ciph_conclusion_enc TEXT NOT NULL,
@@ -420,7 +386,7 @@ class CipherVault:
             CREATE TABLE IF NOT EXISTS runtime_receipts (
                 receipt_id TEXT PRIMARY KEY,
                 job_id TEXT NOT NULL,
-                receipt_type TEXT NOT NULL,
+                receipt_type TEXT NOT NULL, /* DISPATCH_RECEIPT, PROGRESS_RECEIPT, COMPLETION_RECEIPT */
                 tool_name TEXT NOT NULL,
                 target TEXT NOT NULL,
                 phase TEXT,
@@ -436,6 +402,33 @@ class CipherVault:
         
         conn.commit()
         conn.close()
+
+    def store_memory(self, key: str, value: Any) -> None:
+        """Persist command memory separately from configuration and conversation logs."""
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("Memory key must be a nonempty string")
+        encrypted = self._encrypt(json.dumps(value, ensure_ascii=False, allow_nan=False))
+        conn = self._get_connection()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO command_memory(key, encrypted_value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET encrypted_value=excluded.encrypted_value",
+                    (key, encrypted),
+                )
+        finally:
+            conn.close()
+
+    def get_memory(self, key: str) -> Any:
+        """Read authenticated encrypted memory; missing records return None."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT encrypted_value FROM command_memory WHERE key = ?", (key,)
+            ).fetchone()
+        finally:
+            conn.close()
+        return json.loads(self._decrypt(row[0])) if row else None
 
     def store_conversation(self, prompt: str, response: str, context_tag: str = "general"):
         """Store an encrypted conversation turn."""
@@ -521,17 +514,6 @@ class CipherVault:
             except Exception:
                 return None
         return None
-
-    def get_operator_name(self) -> Optional[str]:
-        """Get the authenticated operator's callsign/name from encrypted vault."""
-        return self.get_config("OPERATOR_NAME")
-
-    def set_operator_name(self, name: str) -> bool:
-        """Store the operator's callsign/name encrypted in vault."""
-        if not name or not name.strip():
-            return False
-        self.set_config("OPERATOR_NAME", name.strip())
-        return True
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         """Parse various date formats from feeds - FIXED TYPE HINT"""
@@ -780,6 +762,76 @@ class CipherVault:
                 'severity': r[5]
             })
         return events
+
+    def correlate_threat_advisories(self, keywords: List[str]) -> Dict[str, Any]:
+        """
+        Cross-correlate threat intel keywords/technologies against all active scopes,
+        recon snapshots, subdomains, and exposed endpoints in SQLite vault.
+        """
+        matches = []
+        try:
+            scopes = self.get_active_bounty_scopes()
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute('SELECT target, encrypted_snapshot_json FROM recon_snapshots ORDER BY timestamp DESC LIMIT 20')
+            rows = c.fetchall()
+            conn.close()
+
+            analyzed_targets = set()
+            for r in rows:
+                tgt = r[0]
+                if tgt in analyzed_targets:
+                    continue
+                analyzed_targets.add(tgt)
+                raw_json = self._decrypt(r[1]) or "{}"
+                try:
+                    snap = json.loads(raw_json)
+                except Exception:
+                    snap = {}
+
+                snap_str = json.dumps(snap).lower()
+                for kw in keywords:
+                    clean_kw = kw.strip().lower()
+                    if len(clean_kw) < 3:
+                        continue
+                    if clean_kw in snap_str:
+                        matched_tech = [t for t, v in snap.get('technologies', {}).items() if clean_kw in t.lower() or clean_kw in str(v).lower()]
+                        matched_subs = [s for s in snap.get('subdomains', []) if clean_kw in s.lower()]
+                        matched_endpoints = [e.get('url', e.get('path', '')) for e in snap.get('exposed_assets', snap.get('exposed_endpoints', [])) if clean_kw in str(e).lower()]
+                        
+                        matches.append({
+                            'target': tgt,
+                            'keyword': kw,
+                            'matched_technologies': matched_tech,
+                            'matched_subdomains': matched_subs[:5],
+                            'matched_endpoints': matched_endpoints[:5],
+                            'risk_indicator': f"Target {tgt} exhibits surface matching advisory keyword '{kw}'"
+                        })
+            
+            for sc in scopes:
+                pname = sc.get('program_name', '')
+                in_s = sc.get('scope', {}).get('in_scope', [])
+                scope_str = (pname + " " + " ".join(in_s)).lower()
+                for kw in keywords:
+                    clean_kw = kw.strip().lower()
+                    if len(clean_kw) < 3:
+                        continue
+                    if clean_kw in scope_str and not any(m['target'] == pname for m in matches):
+                        matches.append({
+                            'target': pname,
+                            'keyword': kw,
+                            'matched_technologies': [],
+                            'matched_subdomains': [s for s in in_s if clean_kw in s.lower()],
+                            'matched_endpoints': [],
+                            'risk_indicator': f"Active scope {pname} contains wildcard or asset matching '{kw}'"
+                        })
+
+            return {
+                'total_correlations': len(matches),
+                'matches': matches
+            }
+        except Exception as e:
+            return {'total_correlations': 0, 'matches': [], 'error': str(e)}
 
     def store_opsec_audit(self, score: int, exit_ip: str, latency_ms: float, status: str, details: str = "") -> int:
         """Store an OPSEC score snapshot in history."""
@@ -1089,12 +1141,12 @@ class CipherVault:
 
     def store_council_thesis(self, thesis_id: str, thesis_title: str,
                              ciph_conclusion: str, dialogue_prompt: str) -> bool:
-        """Store an encrypted thesis in Operator Council vault."""
+        """Store an encrypted thesis in Operator's Council vault."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
             c.execute('''
-                INSERT OR REPLACE INTO operator_council_vault
+                INSERT OR REPLACE INTO operators_council_vault 
                 (id, thesis_title_enc, ciph_conclusion_enc, dialogue_prompt_enc, discussed_with_operator, created_at)
                 VALUES (?, ?, ?, ?, 0, ?)
             ''', (
@@ -1112,13 +1164,13 @@ class CipherVault:
             return False
 
     def get_pending_council_theses(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve undiscussed theses from Operator Council vault."""
+        """Retrieve undiscussed theses from Operator's Council vault."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
             c.execute('''
                 SELECT id, thesis_title_enc, ciph_conclusion_enc, dialogue_prompt_enc, discussed_with_operator, created_at
-                FROM operator_council_vault WHERE discussed_with_operator = 0 ORDER BY created_at DESC LIMIT ?
+                FROM operators_council_vault WHERE discussed_with_operator = 0 ORDER BY created_at DESC LIMIT ?
             ''', (limit,))
             rows = c.fetchall()
             conn.close()
@@ -1143,7 +1195,7 @@ class CipherVault:
         try:
             conn = self._get_connection()
             c = conn.cursor()
-            c.execute('UPDATE operator_council_vault SET discussed_with_operator = 1 WHERE id = ?', (thesis_id,))
+            c.execute('UPDATE operators_council_vault SET discussed_with_operator = 1 WHERE id = ?', (thesis_id,))
             conn.commit()
             conn.close()
             return True
@@ -1223,7 +1275,7 @@ class CipherVault:
             total_connections = c.fetchone()[0]
 
             # 3. Total council theses
-            c.execute('SELECT COUNT(*), SUM(CASE WHEN discussed_with_operator = 1 THEN 1 ELSE 0 END) FROM operator_council_vault')
+            c.execute('SELECT COUNT(*), SUM(CASE WHEN discussed_with_operator = 1 THEN 1 ELSE 0 END) FROM operators_council_vault')
             council_stats = c.fetchone()
             total_theses = council_stats[0] if council_stats else 0
             discussed_theses = council_stats[1] if council_stats and council_stats[1] is not None else 0
@@ -1268,14 +1320,14 @@ class CipherVault:
             # Overwrite rows with high-entropy random bytes before dropping
             c.execute("UPDATE cognitive_blueprints SET topic_enc = hex(randomblob(64)), core_axiom_enc = hex(randomblob(64)), mechanics_enc = hex(randomblob(64)), human_subtext_enc = hex(randomblob(64)), strategic_application_enc = hex(randomblob(64))")
             c.execute("UPDATE cross_domain_connections SET connection_axiom_enc = hex(randomblob(64)), isomorphism_explanation_enc = hex(randomblob(64))")
-            c.execute("UPDATE operator_council_vault SET thesis_title_enc = hex(randomblob(64)), ciph_conclusion_enc = hex(randomblob(64)), dialogue_prompt_enc = hex(randomblob(64))")
+            c.execute("UPDATE operators_council_vault SET thesis_title_enc = hex(randomblob(64)), ciph_conclusion_enc = hex(randomblob(64)), dialogue_prompt_enc = hex(randomblob(64))")
             c.execute("UPDATE evolution_audit_log SET blind_spots_enc = hex(randomblob(64)), next_day_agenda_enc = hex(randomblob(64))")
             conn.commit()
 
             # Truncate tables cleanly
             c.execute("DELETE FROM cognitive_blueprints")
             c.execute("DELETE FROM cross_domain_connections")
-            c.execute("DELETE FROM operator_council_vault")
+            c.execute("DELETE FROM operators_council_vault")
             c.execute("DELETE FROM evolution_audit_log")
             conn.commit()
 
@@ -1456,6 +1508,33 @@ class CipherVault:
             print(f"‖ Vault Error searching entity graph: {e} ‖")
             return []
 
+    def delete_entity_link(self, link_id: str) -> bool:
+        """Delete an entity link from the knowledge graph."""
+        try:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute('DELETE FROM entity_graph WHERE id = ? OR target_entity = ?', (link_id, link_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"‖ Vault Error deleting entity link: {e} ‖")
+            return False
+
+    def clear_unverified_entity_links(self) -> int:
+        """Clear test/unverified entity links from the knowledge graph."""
+        try:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM entity_graph WHERE id LIKE 'link_target_%' OR id LIKE 'link_test_%' OR id LIKE 'link_00%' OR id LIKE 'link_%_CVE%'")
+            count = c.rowcount
+            conn.commit()
+            conn.close()
+            return count
+        except Exception as e:
+            print(f"‖ Vault Error clearing entity links: {e} ‖")
+            return 0
+
     def store_decision_outcome(self, decision_id: str, title: str, action: str, outcome: str, lessons: str = "") -> bool:
         """Store a decision history node and its real-world outcome feedback."""
         try:
@@ -1532,7 +1611,9 @@ class CipherVault:
             print(f"‖ Vault Error retrieving historical conversations: {e} ‖")
             return []
 
-# Enhanced example usage with new features
+    # ─────────────────────────────────────────────────────────────
+    # EPISTEMIC METHODS: EVIDENCE, CLAIMS, ACTIONS & MEMORY
+    # ─────────────────────────────────────────────────────────────
 
     def store_dispatch_receipt(
         self,
@@ -2231,7 +2312,6 @@ class CipherVault:
             conn.close()
 
 # Enhanced example usage with new features
-
 if __name__ == "__main__":
     vault = CipherVault()
 

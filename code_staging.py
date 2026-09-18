@@ -11,6 +11,9 @@ import subprocess
 import importlib
 import importlib.util
 import py_compile
+import fcntl
+import uuid
+import hashlib
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -19,9 +22,9 @@ class CodeStagingManager:
     Unified Code Staging & Governed Hot-Patching Engine.
     - Stages generated code artifacts into ciph_staging/
     - Safely audits missing pip dependencies without unauthorized auto-install
-    - Runs isolated auto-sandbox execution tests (syntax + subprocess timeout)
+    - Performs syntax inspection; execution requires the independent grant-bound harness
     - Generates clean ASCII Staging Cards (zero terminal clutter)
-    - Safe atomic application (/apply <id>) with automated backups
+    - Requires deployment and canary evidence for atomic file application
     - Rollback failsafe (/rollback <file>)
     - Structured audit changelog tracking (ciph_changelog.json)
     """
@@ -120,13 +123,15 @@ class CodeStagingManager:
         """
         status = {}
         for dep in dependencies:
+            if not isinstance(dep,str) or '.' in dep or not dep.isidentifier():
+                status[str(dep)] = False
+                continue
             try:
                 if hasattr(importlib.util, 'find_spec'):
                     spec = importlib.util.find_spec(dep)
                     status[dep] = (spec is not None)
                 else:
-                    importlib.import_module(dep)
-                    status[dep] = True
+                    status[dep] = False
             except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
                 status[dep] = False
             except Exception:
@@ -140,72 +145,14 @@ class CodeStagingManager:
     # AUTO-SANDBOX EXECUTION TEST
     # ─────────────────────────────────────────────
 
-    def run_sandbox_test(self, code: str, filename: str = "sandbox_test.py") -> Dict[str, Any]:
-        """
-        Execute isolated sandbox verification:
-        1. Strict AST parse & py_compile
-        2. Subprocess execution test with 3.0s timeout
-        """
-        result = {
-            'passed': False,
-            'syntax_valid': False,
-            'runtime_sec': 0.0,
-            'stdout': '',
-            'stderr': '',
-            'error': None
-        }
-
-        # 1. AST syntax verification
+    def run_sandbox_test(self, code: str, filename: str = 'candidate.py'):
+        """Legacy syntax inspection only. Never certify or execute a candidate."""
+        result={'passed':False,'syntax_valid':False,'runtime_sec':0.0,'stdout':'','stderr':'',
+                'error':'EVALUATION_GRANT_REQUIRED: use IndependentBenchmarkHarness'}
         try:
-            ast.parse(code)
-            result['syntax_valid'] = True
-        except SyntaxError as e:
-            result['error'] = f"SyntaxError at line {e.lineno}: {e.msg}"
-            return result
-        except Exception as e:
-            result['error'] = f"Parse Error: {e}"
-            return result
-
-        # 2. Subprocess compilation and execution test
-        temp_path = os.path.join(self.STAGING_DIR, f"_temp_{filename}")
-        try:
-            with open(temp_path, 'w') as f:
-                f.write(code)
-
-            start_t = time.time()
-            # Compile check
-            py_compile.compile(temp_path, doraise=True)
-
-            # Subprocess test: check basic syntax & module validity
-            proc = subprocess.run(
-                [sys.executable, "-m", "py_compile", temp_path],
-                capture_output=True,
-                text=True,
-                timeout=4.0
-            )
-
-            runtime = time.time() - start_t
-            result['runtime_sec'] = round(runtime, 2)
-
-            if proc.returncode == 0:
-                result['passed'] = True
-                result['stdout'] = proc.stdout.strip()
-            else:
-                result['passed'] = False
-                result['stderr'] = proc.stderr.strip()
-                result['error'] = proc.stderr.strip()[:200]
-
-        except subprocess.TimeoutExpired:
-            result['error'] = "Sandbox execution timed out (>4.0s)"
-        except Exception as e:
-            result['error'] = str(e)
-        finally:
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    pass
-
+            if len(code.encode())>262144:raise ValueError('CANDIDATE_SIZE_LIMIT')
+            ast.parse(code);result['syntax_valid']=True
+        except (SyntaxError,ValueError) as exc:result['error']=str(exc)
         return result
 
     # ─────────────────────────────────────────────
@@ -215,7 +162,7 @@ class CodeStagingManager:
     def stage_code(self, title: str, description: str, target_file: str,
                    code_content: str, is_new_file: bool = None) -> Dict[str, Any]:
         """
-        Stage a code artifact, resolve dependencies, run sandbox test, and store in index.
+        Save exact candidate bytes and syntax/dependency inspection results; never execute them.
         """
         stage_id = self._next_stage_id()
         base_name = os.path.basename(target_file)
@@ -227,15 +174,6 @@ class CodeStagingManager:
 
         # 1. Save staged file
         with open(staged_filepath, 'w') as f:
-            f.write(f"# CIPH STAGED CODE ARTIFACT: {stage_id}\n")
-            f.write(f"# Title: {title}\n")
-            f.write(f"# Target: {target_file}\n")
-            f.write(f"# Action: {'NEW FILE' if is_new_file else 'MODIFY EXISTING'}\n")
-            f.write(f"# Description: {description}\n")
-            f.write(f"# Staged At: {datetime.now().isoformat()}\n")
-            f.write(f"# To Apply: /apply {stage_id}\n")
-            f.write(f"# To Reject: /reject {stage_id}\n")
-            f.write("# " + "=" * 62 + "\n\n")
             f.write(code_content)
 
         # 2. Dependency resolution
@@ -245,23 +183,9 @@ class CodeStagingManager:
         # 3. Sandbox test
         sandbox_res = self.run_sandbox_test(code_content, base_name)
 
-        # 4. Empirical Benchmark comparison against baseline if modifying existing file
+        # Inert staging is not evaluation authority. A separately signed evaluation
+        # grant and the independent harness are required before any code executes.
         benchmark_data = None
-        if not is_new_file and os.path.exists(target_file):
-            try:
-                from ciph_benchmark import CiphBenchmark
-                bench = CiphBenchmark()
-                bench_comp = bench.compare(target_file, staged_filepath, iterations=3)
-                benchmark_data = {
-                    'verdict': bench_comp.get('verdict', 'UNKNOWN'),
-                    'delta_pct': bench_comp.get('delta_pct', 0.0),
-                    'recommendation': bench_comp.get('recommendation', 'UNKNOWN'),
-                    'baseline_ms': bench_comp.get('baseline_ms', 0.0),
-                    'candidate_ms': bench_comp.get('candidate_ms', 0.0),
-                    'reason': bench_comp.get('reason', '')
-                }
-            except Exception:
-                benchmark_data = None
 
         line_count = len(code_content.split('\n'))
 
@@ -369,91 +293,44 @@ class CodeStagingManager:
                     pass
         return None
 
-    def apply(self, identifier: str) -> Tuple[bool, str]:
-        """
-        Safely apply a staged code artifact or upgrade:
-        1. Backup target file to ciph_backups/
-        2. AST syntax check
-        3. Atomic write
-        4. Append to ciph_changelog.json
-        """
-        artifact = self.find_artifact(identifier)
-        if not artifact:
-            return False, f"‖ Artifact '{identifier}' not found in staging or proposals. ‖"
-
-        staged_file = artifact.get('staged_file', '')
-        target_file = artifact.get('target_file', '')
-
-        if not os.path.exists(staged_file):
-            return False, f"‖ Staged source file '{staged_file}' is missing. ‖"
-
-        # Read staged code (skip header comments)
+    def apply(self, identifier, deployment_grant=None, trust_registry=None, *, stage="PRODUCTION"):
+        """Promotion requires authentic evidence and a completed governed canary."""
+        from ciph.contracts.evolution import EvolutionDeploymentGrant
+        from ciph.evolution.evidence import EvolutionEvidenceStore
+        from ciph.evolution.file_activation import activate
+        if not isinstance(deployment_grant, EvolutionDeploymentGrant) or trust_registry is None:
+            return False, "Aborted: AUTHORIZATION_REQUIRED: EvolutionDeploymentGrant required"
         try:
-            with open(staged_file, 'r') as f:
-                lines = f.readlines()
-            code_lines = []
-            in_header = True
-            for l in lines:
-                if in_header and (l.startswith('#') or l.strip() == ''):
-                    continue
-                in_header = False
-                code_lines.append(l)
-            clean_code = ''.join(code_lines).strip()
-            if not clean_code:
-                clean_code = ''.join(lines).strip()
-        except Exception as e:
-            return False, f"‖ Failed to read staged code: {e} ‖"
-
-        # Strict AST syntax check before writing
-        try:
-            ast.parse(clean_code)
-        except SyntaxError as e:
-            return False, f"‖ Aborted (Fail-Closed): Syntax error in staged code at line {e.lineno}: {e.msg} ‖"
-
-        # 1. Safety Backup
-        backup_file = None
-        if os.path.exists(target_file):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base_name = os.path.basename(target_file)
-            backup_file = os.path.join(self.BACKUPS_DIR, f"{base_name}_{timestamp}.bak")
-            try:
-                shutil.copy2(target_file, backup_file)
-            except Exception as e:
-                return False, f"‖ Safety backup failed: {e}. Write aborted. ‖"
-
-        # 2. Atomic write
-        try:
-            # Ensure parent directories exist
-            target_dir = os.path.dirname(target_file)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
-
-            with open(target_file, 'w') as f:
-                f.write(clean_code + '\n')
-        except Exception as e:
-            # Attempt rollback if backup exists
-            if backup_file and os.path.exists(backup_file):
-                shutil.copy2(backup_file, target_file)
-            return False, f"‖ Write failed: {e}. Restored backup. ‖"
-
-        # 3. Update artifact status
-        artifact['status'] = 'APPLIED'
-        artifact['applied_at'] = datetime.now().isoformat()
-        artifact['backup_file'] = backup_file
-        self._save_index()
-
-        # 4. Append to Changelog
-        self._record_changelog(
-            item_id=artifact['id'],
-            target_file=target_file,
-            action="NEW_FILE" if artifact.get('is_new_file') else "MODIFIED",
-            description=artifact.get('description', artifact.get('title', '')),
-            backup_file=backup_file,
-            line_count=len(clean_code.split('\n'))
-        )
-
-        backup_msg = f"\n💾 Safety backup: {backup_file}" if backup_file else ""
-        return True, f"✅ Successfully applied {artifact['id']} to {target_file} ({len(clean_code.split('\n'))} lines).{backup_msg}\n🛡️ AST Syntax Check: PASSED (Zero errors)."
+            store = EvolutionEvidenceStore(trust_registry)
+            store.validate_deployment(deployment_grant)
+            if stage != "PRODUCTION" or stage not in deployment_grant.permitted_stages:
+                raise ValueError("PRODUCTION_STAGE_NOT_AUTHORIZED")
+            # A deployment approval alone cannot skip the canary gate.
+            with store.events._get_connection() as conn:
+                row = conn.execute("SELECT evidence_hash FROM ciph_canary_acceptance WHERE grant_id=?",
+                                   (deployment_grant.grant_id,)).fetchone()
+            if not row:
+                raise ValueError("VERIFIED_CANARY_REQUIRED")
+            evidence = store.verify(row[0], 'CANARY_ACCEPTED')
+            if (evidence['grant_hash'] != hashlib.sha256(deployment_grant.compute_canonical_payload()).hexdigest()
+                    or evidence['candidate_hash'] != deployment_grant.candidate_hash):
+                raise ValueError("CANARY_BINDING_MISMATCH")
+            shadow=store.verify(evidence['shadow_evidence'],'SHADOW_VERIFIED')
+            if shadow['candidate_hash']!=deployment_grant.candidate_hash:
+                raise ValueError('SHADOW_BINDING_MISMATCH')
+            artifact = self.find_artifact(identifier)
+            if not artifact:
+                raise ValueError("STAGED_ARTIFACT_NOT_FOUND")
+            if artifact.get('status') != 'PENDING':
+                raise ValueError('STAGED_ARTIFACT_NOT_PENDING')
+            applied,message = activate(artifact, deployment_grant, store)
+            if applied:
+                artifact['status']='APPLIED'
+                artifact['applied_at']=datetime.now().isoformat()
+                self._save_index()
+            return applied,message
+        except Exception as exc:
+            return False, "Aborted: " + str(exc)
 
     def review(self, identifier: str) -> str:
         """Cleanly review staged code without dumping hundreds of lines to scrollback"""
@@ -498,41 +375,19 @@ class CodeStagingManager:
 
         return f"🚫 Staged code artifact {artifact['id']} rejected and archived."
 
-    def rollback(self, target_filename: str) -> Tuple[bool, str]:
-        """Roll back a file to its most recent backup in ciph_backups/"""
-        base_name = os.path.basename(target_filename)
-        candidates = []
-
-        if os.path.exists(self.BACKUPS_DIR):
-            for fname in os.listdir(self.BACKUPS_DIR):
-                if fname.startswith(base_name) and fname.endswith(".bak"):
-                    full_path = os.path.join(self.BACKUPS_DIR, fname)
-                    candidates.append((os.path.getmtime(full_path), full_path))
-
-        if not candidates:
-            return False, f"‖ No backup found for '{target_filename}' in {self.BACKUPS_DIR}. ‖"
-
-        # Pick most recent
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        latest_backup = candidates[0][1]
-
+    def rollback(self, target_filename, candidate_hash=None, *, deployment_grant=None, trust_registry=None):
+        """Restore only the exact grant-bound revision, never a basename-selected backup."""
+        from ciph.contracts.evolution import EvolutionDeploymentGrant
+        from ciph.evolution.evidence import EvolutionEvidenceStore
+        from ciph.evolution.file_activation import restore
+        if not isinstance(deployment_grant, EvolutionDeploymentGrant) or trust_registry is None:
+            return False, "Rollback refused: AUTHORIZATION_REQUIRED"
         try:
-            shutil.copy2(latest_backup, target_filename)
-            self._record_changelog(
-                item_id="ROLLBACK",
-                target_file=target_filename,
-                action="ROLLBACK",
-                description=f"Restored from backup: {os.path.basename(latest_backup)}",
-                backup_file=latest_backup,
-                line_count=0
-            )
-            return True, f"🔄 Successfully rolled back {target_filename} from {os.path.basename(latest_backup)}."
-        except Exception as e:
-            return False, f"‖ Rollback failed: {e} ‖"
-
-    # ─────────────────────────────────────────────
-    # CHANGELOG & LISTING
-    # ─────────────────────────────────────────────
+            if os.path.abspath(target_filename) != os.path.abspath(deployment_grant.target_file_path) or candidate_hash != deployment_grant.candidate_hash:
+                raise ValueError("ROLLBACK_BINDING_MISMATCH")
+            return restore(deployment_grant, EvolutionEvidenceStore(trust_registry))
+        except Exception as exc:
+            return False, "Rollback refused: " + str(exc)
 
     def _record_changelog(self, item_id: str, target_file: str, action: str,
                           description: str, backup_file: Optional[str], line_count: int):

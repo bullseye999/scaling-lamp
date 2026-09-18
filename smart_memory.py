@@ -110,7 +110,7 @@ class SmartMemory:
     def build_memory_context(self, user_input: str) -> str:
         """
         Build a high-density memory context string to inject into the system prompt.
-        Fuses narrative milestones, Operator's profile, circadian emotion, entity graph,
+        Fuses narrative milestones, operator's profile, circadian emotion, entity graph,
         and temporal decision outcomes.
         """
         context_parts = []
@@ -124,19 +124,18 @@ class SmartMemory:
                     m_lines.append(f"• Milestone ({self._time_ago(m['timestamp'])}): {m['summary']}")
                     if m.get('decisions'):
                         m_lines.append(f"  Key Decisions: {m['decisions']}")
-                context_parts.append("Strategic Narrative Timeline:\n" + "\n".join(m_lines))
+                context_parts.append("[PAST SESSION ARCHIVES & HISTORICAL MILESTONES (FOR REFERENCE ONLY - NOT CURRENT STATUS)]:\n" + "\n".join(m_lines))
         except Exception:
             pass
 
         # 2. Operator's Strategic Profile (Implicit Long-Term Facts)
         try:
-            op_name = self.vault.get_operator_name() or "Operator"
             profile_facts = self.vault.get_profile_facts()
             if profile_facts:
                 p_lines = []
                 for f in profile_facts[:6]:
                     p_lines.append(f"• [{f['category'].upper()}] {f['key']}: {f['value']}")
-                context_parts.append(f"{op_name}'s Profile & Strategic Boundaries:\n" + "\n".join(p_lines))
+                context_parts.append("[USER PROFILE & STRATEGIC BOUNDARIES]:\n" + "\n".join(p_lines))
         except Exception:
             pass
 
@@ -148,7 +147,7 @@ class SmartMemory:
                 for link in relevant_links:
                     detail_str = f" ({link['details']})" if link.get('details') else ""
                     g_lines.append(f"• {link['source']} ──[{link['relation']}]──> {link['target']}{detail_str}")
-                context_parts.append("Active Associative Entity Graph:\n" + "\n".join(g_lines))
+                context_parts.append("[HISTORICAL KNOWLEDGE GRAPH ASSOCIATIONS]:\n" + "\n".join(g_lines))
         except Exception:
             pass
 
@@ -159,7 +158,7 @@ class SmartMemory:
                 d_lines = []
                 for d in decisions:
                     d_lines.append(f"• Decision: {d['title']} -> Result: {d['outcome']} ({d['lessons']})")
-                context_parts.append("Historical Decision Outcomes:\n" + "\n".join(d_lines))
+                context_parts.append("[HISTORICAL DECISION OUTCOMES]:\n" + "\n".join(d_lines))
         except Exception:
             pass
 
@@ -181,7 +180,7 @@ class SmartMemory:
         if not context_parts:
             return ""
 
-        return "\n\n[SOVEREIGN LONG-TERM MEMORY & WORLDVIEW CONTEXT]\n" + "\n\n".join(context_parts)
+        return "\n\n[ARCHIVED LONG-TERM MEMORY & HISTORICAL CONTEXT - NOTE: DO NOT CONFUSE ARCHIVED NOTES WITH ACTIVE RUNTIME OPERATIONS]\n" + "\n\n".join(context_parts)
 
     def _find_relevant_entity_links(self, user_input: str, limit: int = 4) -> List[Dict[str, Any]]:
         """Search entity graph for nodes matching words in user prompt."""
@@ -198,9 +197,7 @@ class SmartMemory:
                     if len(all_links) >= limit:
                         return all_links
 
-        if not all_links:
-            # Fallback to most recent entity links
-            all_links = self.vault.get_entity_links(limit=limit)
+        # Only return entities explicitly relevant to current query (no blind dump)
         return all_links
 
     def _get_circadian_emotional_context(self) -> str:
@@ -226,7 +223,7 @@ class SmartMemory:
 
     def extract_implicit_profile_and_entities(self, user_input: str, ai_response: str = "", router: Optional[Any] = None) -> Dict[str, Any]:
         """
-        Silently extract Operator's preferences, operational boundaries, active targets,
+        Silently extract operator preferences, operational boundaries, active targets,
         entity relationships, and decision outcomes from dialogue turns.
         """
         extracted_facts = []
@@ -259,26 +256,27 @@ class SmartMemory:
             extracted_facts.append({"key": "communication_tone", "value": "Direct & Concise"})
 
         # 2. Deterministic Target & CVE Entity Extraction
-        op_name = self.vault.get_operator_name() or "Operator"
         cves = re.findall(r'CVE-\d{4}-\d{4,7}', user_input, re.IGNORECASE)
         for cve in cves:
             cve_upper = cve.upper()
             link_id = f"link_{int(time.time())}_{cve_upper}"
-            self.vault.store_entity_link(link_id, op_name, "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
-            extracted_links.append({"source": op_name, "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
+            self.vault.store_entity_link(link_id, "Operator", "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
+            extracted_links.append({"source": "Operator", "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
 
-        # Software / Target Names
-        for target_kw in ['sharepoint', 'wordpress', 'confluence', 'gitlab', 'jenkins', 'aws', 'cloudflare', 'nginx', 'apache', 'scaling-lamp']:
-            if target_kw in lower_input:
-                target_name = target_kw.capitalize()
-                link_id = f"link_target_{target_kw}_{int(time.time())}"
-                self.vault.store_entity_link(link_id, op_name, "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
-                extracted_links.append({"source": op_name, "relation": "WORKING_ON_TARGET", "target": target_name})
+        # Software / Target Names (only when accompanied by explicit operational intent)
+        has_target_intent = any(kw in lower_input for kw in ['target', 'scan', 'audit', 'pentest', 'scope', 'recon', 'hunting', 'probe', 'cve'])
+        if has_target_intent:
+            for target_kw in ['sharepoint', 'wordpress', 'confluence', 'gitlab', 'jenkins', 'aws', 'cloudflare', 'nginx', 'apache', 'scaling-lamp']:
+                if target_kw in lower_input:
+                    target_name = target_kw.capitalize()
+                    link_id = f"link_target_{target_kw}_{int(time.time())}"
+                    self.vault.store_entity_link(link_id, "Operator", "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
+                    extracted_links.append({"source": "Operator", "relation": "WORKING_ON_TARGET", "target": target_name})
 
         # 3. Decision Outcome Feedback
         if any(kw in lower_input for kw in ["that worked", "exploit succeeded", "payload worked", "bounty accepted", "finding verified"]):
             dec_id = f"dec_succ_{int(time.time())}"
-            self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "SUCCESS", f"Executed and confirmed effective by {op_name}.")
+            self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "SUCCESS", "Executed and confirmed effective by operator.")
         elif any(kw in lower_input for kw in ["that failed", "payload blocked", "exploit failed", "was patched", "didn't work", "did not work"]):
             dec_id = f"dec_fail_{int(time.time())}"
             self.vault.store_decision_outcome(dec_id, "Recent Tactical Action", user_input[:100], "FAILURE", "Defensive obstruction or failed execution. Adapt vector.")
@@ -329,7 +327,7 @@ class SmartMemory:
         """
         Retroactive Cold-Start Learning:
         Scans all past historical conversations in cipher_vault.db to extract baseline
-        Operator profile facts, entity relationships, and emotional baselines.
+        operator profile facts, entity relationships, and emotional baselines.
         """
         convos = self.vault.get_all_historical_conversations(limit=limit)
         if not convos:

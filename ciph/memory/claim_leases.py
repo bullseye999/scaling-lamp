@@ -21,25 +21,14 @@ class ClaimLeaseManager:
         self.db_path = db_path
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self, calling_holder_id: Optional[str] = None) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA busy_timeout = 5000;")
         conn.row_factory = sqlite3.Row
 
-        # Global exclusive maintenance lease check
-        try:
-            now = time.time()
-            cursor = conn.execute("SELECT holder_id FROM ciph_maintenance_leases WHERE expires_at > ? LIMIT 1;", (now,))
-            lease_row = cursor.fetchone()
-            if lease_row:
-                conn.close()
-                raise sqlite3.OperationalError(f"Database locked: Active exclusive maintenance lease held by '{lease_row[0]}'.")
-        except sqlite3.OperationalError as ex:
-            if "no such table" not in str(ex):
-                raise ex
-
-        return conn
+        from ciph.maintenance.exclusion import ExcludedConnection
+        return ExcludedConnection(conn, calling_holder_id=calling_holder_id, db_path=self.db_path)
 
     def _init_db(self):
         with sqlite3.connect(self.db_path, timeout=5.0) as conn:
@@ -58,10 +47,10 @@ class ClaimLeaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_leases_expires ON ciph_claim_leases(expires_at);")
             conn.commit()
 
-    def cleanup_expired_leases(self) -> int:
+    def cleanup_expired_leases(self, calling_holder_id: Optional[str] = None) -> int:
         """Purge leases whose TTL has lapsed."""
         now = time.time()
-        with self._get_connection() as conn:
+        with self._get_connection(calling_holder_id=calling_holder_id) as conn:
             cursor = conn.execute("DELETE FROM ciph_claim_leases WHERE expires_at < ?;", (now,))
             conn.commit()
             return cursor.rowcount

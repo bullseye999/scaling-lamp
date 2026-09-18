@@ -20,26 +20,15 @@ class EventStore:
         self.db_path = db_path
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self, calling_holder_id: Optional[str] = None) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA busy_timeout = 5000;")
         conn.row_factory = sqlite3.Row
 
-        # Global exclusive maintenance lease check
-        try:
-            now = time.time()
-            cursor = conn.execute("SELECT holder_id FROM ciph_maintenance_leases WHERE expires_at > ? LIMIT 1;", (now,))
-            lease_row = cursor.fetchone()
-            if lease_row:
-                conn.close()
-                raise sqlite3.OperationalError(f"Database locked: Active exclusive maintenance lease held by '{lease_row[0]}'.")
-        except sqlite3.OperationalError as ex:
-            if "no such table" not in str(ex):
-                raise ex
-
-        return conn
+        from ciph.maintenance.exclusion import ExcludedConnection
+        return ExcludedConnection(conn, calling_holder_id=calling_holder_id, db_path=self.db_path)
 
     def _init_db(self):
         with sqlite3.connect(self.db_path, timeout=5.0) as conn:
@@ -63,15 +52,16 @@ class EventStore:
         row = cursor.fetchone()
         return row['event_hash'] if row else "GENESIS_BLOCK_CIPH_4.0"
 
-    def append_event(self, event_type: str, aggregate_id: str, payload: Dict[str, Any]) -> int:
+    def append_event(self, event_type: str, aggregate_id: str, payload: Dict[str, Any], calling_holder_id: Optional[str] = None) -> int:
         """
         Append an immutable event to the event store with SHA-256 hash chaining.
         Returns the new event_id.
         """
-        now = time.time()
         payload_str = json.dumps(payload, sort_keys=True, default=str)
         
-        with self._get_connection() as conn:
+        with self._get_connection(calling_holder_id=calling_holder_id) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            now = time.time()
             prev_hash = self._get_latest_hash(conn)
             
             # Compute hash = SHA256(prev_hash + event_type + aggregate_id + payload_str + str(now))
@@ -90,7 +80,8 @@ class EventStore:
         self,
         aggregate_id: Optional[str] = None,
         event_type: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        order_desc: bool = False
     ) -> List[Dict[str, Any]]:
         """Retrieve events matching filter criteria."""
         query = "SELECT * FROM ciph_event_store WHERE 1=1"
@@ -103,7 +94,8 @@ class EventStore:
             query += " AND event_type = ?"
             params.append(event_type)
             
-        query += " ORDER BY event_id ASC LIMIT ?"
+        order_dir = "DESC" if order_desc else "ASC"
+        query += f" ORDER BY event_id {order_dir} LIMIT ?"
         params.append(limit)
         
         with self._get_connection() as conn:
@@ -128,10 +120,9 @@ class EventStore:
         """
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT * FROM ciph_event_store ORDER BY event_id ASC;")
-            rows = cursor.fetchall()
             
             prev_hash = "GENESIS_BLOCK_CIPH_4.0"
-            for row in rows:
+            for row in cursor:
                 if row['previous_hash'] != prev_hash:
                     return False, row['event_id']
                 
