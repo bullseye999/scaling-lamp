@@ -6,7 +6,7 @@ import traceback
 import json
 
 # Ensure the repository root is importable without exposing a local username/path.
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
 from ciph_core import CiphCore

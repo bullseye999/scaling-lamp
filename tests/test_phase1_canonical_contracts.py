@@ -1454,7 +1454,7 @@ class TestFinding4CrossProcessHashDeterminism(unittest.TestCase):
     def test_set_parameters_cross_process_determinism(self):
         import subprocess, sys, os
 
-        repo_root = os.path.abspath(os.path.dirname(__file__))
+        repo_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
         script = """
 import sys, os
 sys.path.insert(0, REPO_ROOT)

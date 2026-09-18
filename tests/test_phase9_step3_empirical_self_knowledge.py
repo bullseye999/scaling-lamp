@@ -237,7 +237,7 @@ class TestPhase9Step3EmpiricalSelfKnowledge(unittest.TestCase):
             self.assertNotIn(phrase.lower(), all_pins_text, f"Forbidden capability laundry string '{phrase}' found in memory pins!")
 
         # Source code audit of ciph_core.py directly
-        ciph_core_path = os.path.join(os.path.dirname(__file__), "ciph_core.py")
+        ciph_core_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ciph_core.py")
         with open(ciph_core_path, "r", encoding="utf-8") as f:
             ciph_core_src = f.read().lower()
         for phrase in forbidden_phrases:
