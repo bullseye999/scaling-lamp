@@ -4,6 +4,10 @@ import os
 import sys
 import time
 import json
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+
 from ciph_core import CiphCore
 
 def run_suite():

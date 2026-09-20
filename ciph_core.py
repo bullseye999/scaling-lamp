@@ -769,7 +769,7 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         
         banner = f"""
 ╔{'═' * (self.max_width-2)}╗
-║ {'CIPH v1.0 - AUTONOMOUS AGENT ORCHESTRATION':^{self.max_width-4}} ║
+║ {'CIPH 4.0 - OPERATOR-GOVERNED RUNTIME & COGNITIVE AUTOMATION':^{self.max_width-4}} ║
 ║ {'Encrypted • Sovereign • Adaptive' + ai_indicator + security_indicator + project_indicator + memory_indicator + osint_indicator + pentest_indicator + trading_indicator + bounty_indicator + orchestrator_indicator + scheduler_indicator + notification_indicator + personality_indicator:^{self.max_width-4}} ║  
 ╚{'═' * (self.max_width-2)}╝
         """
