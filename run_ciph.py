@@ -22,7 +22,7 @@ def check_dependencies():
         return False, f"Missing dependency: {e}"
 
 def main():
-    print("🕶️ CIPH 3.0 - Sovereign Autonomous Intelligence")
+    print("🕶️ CIPH 4.0 - Sovereign Autonomous Intelligence")
     print("🔒 Checking system compatibility...")
     
     # Check dependencies

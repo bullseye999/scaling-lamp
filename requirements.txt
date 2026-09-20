@@ -7,7 +7,7 @@ requests>=2.31.0
 feedparser>=6.0.10        # RSS parsing for OSINT & sports news
 schedule>=1.2.0           # task_scheduler
 stem>=1.8.2               # tor control (for new identity)
-socks>=1.0.0              # PySocks for Tor proxy
+PySocks>=1.7.1            # PySocks for Tor proxy
 
 # Optional post‑quantum (not required for basic operation)
 # pqcrypto>=0.2.0          # uncomment if you want quantum‑ready encryption

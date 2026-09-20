@@ -175,9 +175,11 @@ class SecurityLayer:
         print("🔍 Running integrity check...")
         checks = {}
         
+        # Key material: PBKDF2 salt (ciph.salt) or legacy key (ciph.key)
+        key_material_file = "ciph.salt" if os.path.exists("ciph.salt") else "ciph.key"
         critical_files = {
             "ciph_vault.db": "Database file",
-            "ciph.key": "Encryption key", 
+            key_material_file: "Encryption key material", 
             "cipher_vault.py": "Core module",
             "ciph_core.py": "Main brain"
         }

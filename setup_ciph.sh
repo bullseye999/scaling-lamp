@@ -12,7 +12,7 @@ source ciph_env/bin/activate
 # Install dependencies
 echo "📥 Installing dependencies..."
 pip install --upgrade pip
-pip install cryptography feedparser pyyaml requests
+pip install -r requirements.txt
 
 # Fix file permissions
 echo "🔒 Setting permissions..."
@@ -32,4 +32,4 @@ print('✅ System ready for deployment')
 echo ""
 echo "🎯 SETUP COMPLETE!"
 echo "💡 Always run: source ciph_env/bin/activate"
-echo "💡 Then run: python3 ciph_core.py"
+echo "💡 Then run: python3 run_ciph.py"
