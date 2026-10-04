@@ -70,11 +70,25 @@ class CiphRouter:
         model_deepseek: Optional[str] = None,
     ):
         # DeepSeek API Configuration
-        self.api_key = (
+        raw_key = (
             api_key 
             or os.environ.get("DEEPSEEK_API_KEY", "") 
             or os.environ.get("RUNPOD_API_KEY", "")
         ).strip()
+        # Treat common template placeholders as unconfigured
+        if raw_key.lower() in (
+            "your_deepseek_api_key_here",
+            "your_api_key_here",
+            "your_key_here",
+            "none",
+            "null",
+            "placeholder",
+            "sk-...",
+            "...",
+        ) or raw_key.startswith("your_"):
+            self.api_key = ""
+        else:
+            self.api_key = raw_key
         
         raw_base = base_url or os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
         self.base_url = raw_base.rstrip("/")

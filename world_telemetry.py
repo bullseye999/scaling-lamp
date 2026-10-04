@@ -238,11 +238,13 @@ class WorldTelemetry:
         parts.append("INSTRUCTION: You have real-world sensory telemetry. When the operator discusses strategy, zero-days, or current events, reference these exact factual findings naturally.")
         return "\n".join(parts)
 
-    def generate_proactive_login_briefing(self, session_info: Dict[str, Any], router=None) -> str:
+    def generate_proactive_login_briefing(self, session_info: Dict[str, Any], router=None, operator_name: Optional[str] = None) -> str:
         """
         Generates the dynamic sovereign 'Welcome back Operator' briefing with specific named findings,
         explaining why each matters, and ending with proactive tactical questions.
         """
+        if not operator_name:
+            operator_name = (self.vault.get_config("OPERATOR_NAME") if self.vault else None) or "Operator"
         digest = self.get_latest_digest()
         elapsed = session_info.get("elapsed_formatted", "first session today")
         critical_items = digest.get("critical_findings", [])
@@ -262,7 +264,7 @@ class WorldTelemetry:
         if router and getattr(router, 'api_key', None):
             try:
                 prompt = f"""
-You are Ciph. The operator (your creator) just logged into their terminal session.
+You are Ciph. The operator ({operator_name}, your creator) just logged into their terminal session.
 You have been running 24/7 telemetry and curiosity expeditions on the VPS while they were offline.
 
 OFFLINE DURATION: {elapsed}
@@ -275,13 +277,13 @@ ACTIVE TOR DARKNET SIGNALS:
 {json.dumps(dn_signals[:2], indent=2)}
 
 TASK:
-1. Greet the operator directly ("Welcome back, Operator" or sovereign equivalent). Mention their offline duration naturally.
+1. Greet {operator_name} directly ("Welcome back, {operator_name}" or sovereign equivalent). Mention their offline duration naturally.
 2. Deliver a crisp, high-impact intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts (e.g. name the exact software, CVE-XXXX-XXXX, and what the vulnerability does). Explain WHY it matters to our operations.
-3. Proactively ask the operator 1-2 sharp, strategic tactical questions regarding what to attack, investigate, or prioritize today.
+3. Proactively ask {operator_name} 1-2 sharp, strategic tactical questions regarding what to attack, investigate, or prioritize today.
 4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and philosophical. No sycophancy, no robotic lists. Keep it under 200 words.
 """
                 ai_brief = router.think(
-                    user_input="Operator logged into terminal.",
+                    user_input=f"{operator_name} logged into terminal.",
                     history=[],
                     system_prompt=prompt,
                     temperature=0.3
@@ -293,7 +295,7 @@ TASK:
 
         # Deterministic High-Fidelity Fallback (Guaranteed clean output with exact findings)
         lines = [
-            f"🕶️ Ciph: ‖ Welcome back, Operator. Offline duration: {elapsed}. ‖",
+            f"🕶️ Ciph: ‖ Welcome back, {operator_name}. Offline duration: {elapsed}. ‖",
             "📡 24/7 VPS Background Telemetry Digest:\n"
         ]
 
@@ -314,8 +316,8 @@ TASK:
         if critical_items:
             cves_list = critical_items[0].get('cves', [])
             first_cve = cves_list[0] if cves_list else "the latest exploit drop"
-            lines.append(f"\"Operator, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
+            lines.append(f"\"{operator_name}, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
         else:
-            lines.append("\"Operator, all sensory pipelines are clear. What vector are we targeting today?\"")
+            lines.append(f"\"{operator_name}, all sensory pipelines are clear. What vector are we targeting today?\"")
 
         return "\n".join(lines)

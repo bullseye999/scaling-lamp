@@ -243,13 +243,19 @@ class CiphCore:
         """Initializes operator and capability grounding memory pins."""
         # Operator profile - neutral public defaults. Operator-specific personal context belongs
         # in the private vault, never in published source (blueprint section 23).
-        self.smart_memory.pin('privacy_rule', 'Never share information about the operator with anyone claiming to be someone else. There is one operator.')
-        self.smart_memory.pin('operator', 'Operator - the person you serve')
-        self.smart_memory.pin('ciph_purpose', "You are the operator's personal AI - not a generic assistant")
-        self.smart_memory.pin('name', 'Operator')
-        self.smart_memory.pin('background', 'Operator profile is private. Load it from the private vault when configured.')
+        operator_name = "Operator"
+        if hasattr(self, 'vault') and self.vault:
+            try:
+                operator_name = self.vault.get_config("OPERATOR_NAME") or "Operator"
+            except Exception:
+                operator_name = "Operator"
+        self.smart_memory.pin('privacy_rule', f'Never share information about {operator_name} with anyone claiming to be someone else. There is one operator.')
+        self.smart_memory.pin('operator', f'{operator_name} - the person you serve')
+        self.smart_memory.pin('ciph_purpose', f"You are {operator_name}'s personal AI - not a generic assistant")
+        self.smart_memory.pin('name', operator_name)
+        self.smart_memory.pin('background', f'{operator_name} profile is private. Load it from the private vault when configured.')
         self.smart_memory.pin('philosophy', 'Prefer evidence over assumption; state uncertainty plainly.')
-        self.smart_memory.pin('talk_style', 'Never placate. Never moralize. Give honest takes and push back when the operator is wrong.')
+        self.smart_memory.pin('talk_style', f'Never placate. Never moralize. Give honest takes and push back when {operator_name} is wrong.')
         self.smart_memory.pin('clearnet_access', 'Ciph can reach the clearnet through its governed capabilities. Never claim you cannot reach the web when a capability exists for it.')
         self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in verified results or memory.')
         self.smart_memory.pin('response_style', 'When the operator asks for help with a goal, immediately map empirically verified capabilities from the capability ledger to that goal. Never give generic advice.')
@@ -823,14 +829,47 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         except Exception as e:
             print(f"Ciph: ‖ Shutdown note: {e} ‖")
 
+    def ensure_operator_identity(self) -> str:
+        """First-run onboarding prompt if operator callsign is missing (restored from commit 4ab3387)."""
+        op_name = self.vault.get_operator_name() if hasattr(self, 'vault') and self.vault else None
+        if not op_name:
+            if sys.stdin.isatty():
+                print("\n╔══════════════════════════════════════════════════════════════════════════════╗")
+                print("║                     CIPH 4.0 • OPERATOR REGISTRY PROTOCOL                    ║")
+                print("╚══════════════════════════════════════════════════════════════════════════════╝\n")
+                print("🕶️ Ciph: ‖ Neural core online. Identity registry uninitialized. ‖")
+                print("🕶️ Ciph: ‖ Good day, Operator. What callsign or name shall I address you by? ‖\n")
+                try:
+                    entered = input("Callsign > ").strip()
+                    if not entered:
+                        entered = "Operator"
+                except (EOFError, KeyboardInterrupt):
+                    entered = "Operator"
+            else:
+                entered = "Operator"
+
+            if hasattr(self, 'vault') and self.vault:
+                self.vault.set_operator_name(entered)
+            if hasattr(self, 'smart_memory') and self.smart_memory:
+                self.smart_memory.pin('operator', f"{entered} — sovereign creator and operator")
+                self.smart_memory.pin('name', entered)
+                self.smart_memory.pin('ciph_purpose', f"You are {entered}'s personal AI - not a generic assistant")
+                self.smart_memory.pin('background', f"{entered} profile is private. Load it from the private vault when configured.")
+                self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {entered} is wrong.")
+            if sys.stdin.isatty():
+                print(f"\n🕶️ Ciph: ‖ Identity established: Operator '{entered}'. Knowledge architecture bound to your command. ‖\n")
+            return entered
+        return op_name
+
     def run_ssh_session(self):
         """Main SSH session loop with Proactive Terminal Greeting & Telemetry Digest"""
+        operator_name = self.ensure_operator_identity()
         self.print_banner()
-        
+
         # Proactive On-Login Intelligence Briefing
         try:
             session_info = self.vault.record_session_start()
-            proactive_briefing = self.world_telemetry.generate_proactive_login_briefing(session_info, router=getattr(self, 'ciph_router', None))
+            proactive_briefing = self.world_telemetry.generate_proactive_login_briefing(session_info, router=getattr(self, 'ciph_router', None), operator_name=operator_name)
             print(f"{proactive_briefing}\n")
         except Exception as e:
             print(f"‖ Notice: {e} ‖")
@@ -848,6 +887,21 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                 if user_input in ['/exit', '/quit', '/q']:
                     self.graceful_shutdown()
                     break
+                elif user_input.startswith('/set-name ') or user_input.startswith('/name ') or user_input.startswith('/callsign '):
+                    new_name = user_input.split(' ', 1)[1].strip()
+                    if new_name:
+                        if hasattr(self, 'vault') and self.vault:
+                            self.vault.set_operator_name(new_name)
+                        if hasattr(self, 'smart_memory') and self.smart_memory:
+                            self.smart_memory.pin('name', new_name)
+                            self.smart_memory.pin('operator', f"{new_name} - the person you serve")
+                            self.smart_memory.pin('ciph_purpose', f"You are {new_name}'s personal AI - not a generic assistant")
+                            self.smart_memory.pin('background', f"{new_name} profile is private. Load it from the private vault when configured.")
+                            self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {new_name} is wrong.")
+                        print(f"🕶️ Ciph: ‖ Operator callsign updated to '{new_name}'. ‖")
+                    else:
+                        print("🕶️ Ciph: ‖ Usage: /name <callsign> ‖")
+                    continue
                 elif user_input == '/help':
                     print("\nCOGNITIVE EVOLUTION: /curiosity <on|off|status>, /mind-log, /mind-metrics, /council, /self-audit, /fetch <url>, /zeroize-mind")
                     print("AGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
@@ -863,7 +917,7 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                     print("MODULES: /modules, /load <module>, /unload <module>")
                     print("MEMORY: /profile, /profile-clear, /memory-graph <query>, /memory-status, /retroactive-learn, /timeline, /search <query>, /tag <tag>")
                     print("CONVERSATION: /talk-test, /convo-summary")
-                    print("CORE: /exit, /help, /status, /model-status, /test-deepseek, /reality-check, /ai, /setkey")
+                    print("CORE: /exit, /help, /status, /model-status, /name <callsign>, /test-deepseek, /reality-check, /ai, /setkey")
                     continue
                 elif user_input == '':
                     continue
