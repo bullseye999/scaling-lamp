@@ -518,6 +518,27 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         line = user_input.strip()
         if not line.startswith('/'):
             return None
+
+        # Operator callsign configuration
+        if line.startswith('/set-name ') or line.startswith('/name ') or line.startswith('/callsign '):
+            parts = line.split(' ', 1)
+            new_name = parts[1].strip() if len(parts) > 1 else ""
+            if new_name:
+                if hasattr(self, 'vault') and self.vault:
+                    self.vault.set_operator_name(new_name)
+                if hasattr(self, 'smart_memory') and self.smart_memory:
+                    self.smart_memory.pin('operator', f"{new_name} — sovereign creator and operator")
+                    self.smart_memory.pin('name', new_name)
+                    self.smart_memory.pin('ciph_purpose', f"You are {new_name}'s personal AI - not a generic assistant")
+                    self.smart_memory.pin('background', f"{new_name} profile is private. Load it from the private vault when configured.")
+                    self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {new_name} is wrong.")
+                return f"🕶️ Ciph: ‖ Operator callsign updated to '{new_name}'. ‖"
+            else:
+                return "🕶️ Ciph: ‖ Usage: /name <callsign> ‖"
+        elif line in ('/name', '/callsign'):
+            curr = (self.vault.get_operator_name() if hasattr(self, 'vault') and self.vault else None) or "Operator"
+            return f"🕶️ Ciph: ‖ Current operator callsign is '{curr}'. Use /name <new_name> to change. ‖"
+
         self.last_command_result = None
         runtime = getattr(self, 'runtime', None)
         if runtime is None:
