@@ -45,6 +45,22 @@ from ciph.workers.daemon import DurableWorkerDaemon
 
 
 class TestGateZeroAdversarialRemediation(unittest.TestCase):
+    def governed_job(self, *, capability, params, execution_token=None, idempotency_key=None,
+                     plan_id="PLAN_STANDALONE", step_id="STEP_STANDALONE"):
+        """Enqueue through the canonical permit pipeline.
+
+        A token-replay specimen needs a governed job: a permitless row is refused before the token is
+        examined, so the replay defence would never be the thing under test.
+        """
+        from permit_test_support import enqueue_permit_bearing_job
+        target = (params or {}).get("target")
+        return enqueue_permit_bearing_job(
+            self.runtime, capability=capability, params=params,
+            scope_targets=[target] if target else None,
+            execution_token=execution_token, idempotency_key=idempotency_key,
+            plan_id=plan_id, step_id=step_id, max_retries=1,
+        ).job_id
+
     def setUp(self):
         self.db_path = f"/tmp/ciph_adv_test_{uuid.uuid4().hex[:8]}.db"
         self.runtime = CiphRuntime(db_path=self.db_path)
@@ -146,7 +162,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
             kernel_key_id=self.runtime.kernel_key_id
         ).sign(kernel_key)
 
-        job_id = self.runtime.queue.enqueue_job(cap_name, params, plan_id="p", step_id="s", execution_token=unverified_token)
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(cap_name, params, plan_id="p", step_id="s", execution_token=unverified_token)
         leased = self.runtime.queue.lease_next_job("worker_test")
         receipt = self.runtime.worker_daemon._execute_leased_job(leased, "worker_test")
         self.assertEqual(receipt.exit_code, 1)
@@ -187,7 +203,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
             return ExecutionToken(**base).sign(kernel_key)
 
         def run_test_token(tok, expected_err_substr):
-            job_id = self.runtime.queue.enqueue_job(cap_name, params, plan_id="plan1", step_id="step1", execution_token=tok)
+            job_id = self.runtime.queue.enqueue_legacy_job_for_test(cap_name, params, plan_id="plan1", step_id="step1", execution_token=tok)
             leased = self.runtime.queue.lease_next_job("worker_test")
             self.assertIsNotNone(leased)
             rcpt = self.runtime.worker_daemon._execute_leased_job(leased, "worker_test")
@@ -218,7 +234,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
 
         # 8. Expired token (rejected at ingress)
         with self.assertRaises(ValueError) as ctx:
-            self.runtime.queue.enqueue_job(cap_name, params, plan_id="plan1", step_id="step1", execution_token=build_token(expires_at=now - 50.0))
+            self.runtime.queue.enqueue_legacy_job_for_test(cap_name, params, plan_id="plan1", step_id="step1", execution_token=build_token(expires_at=now - 50.0))
         self.assertIn("TOKEN_EXPIRED", str(ctx.exception))
 
         # 9. Wrong execution lane
@@ -244,7 +260,8 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         )
 
         # 1. Execute job with token in first daemon instance -> SUCCEEDS
-        job_id_1 = self.runtime.queue.enqueue_job(cap_name, params, plan_id="p_replay", step_id="s_replay", execution_token=token)
+        job_id_1 = self.governed_job(capability=cap_name, params=params, plan_id="p_replay",
+                                     step_id="s_replay", execution_token=token)
         leased_1 = self.runtime.queue.lease_next_job("worker_1")
         rcpt_1 = self.runtime.worker_daemon._execute_leased_job(leased_1, "worker_1")
         self.assertEqual(rcpt_1.exit_code, 0)
@@ -264,7 +281,8 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         daemon_restarted._executed_token_ids.clear()
 
         # 3. Attempt to re-execute with identical token after restart -> MUST BE BLOCKED
-        job_id_2 = self.runtime.queue.enqueue_job(cap_name, params, plan_id="p_replay", step_id="s_replay", execution_token=token)
+        job_id_2 = self.governed_job(capability=cap_name, params=params, plan_id="p_replay",
+                                     step_id="s_replay", execution_token=token)
         leased_2 = self.runtime.queue.lease_next_job("worker_2")
         rcpt_2 = daemon_restarted._execute_leased_job(leased_2, "worker_2")
         self.assertEqual(rcpt_2.exit_code, 1)
@@ -276,7 +294,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         cap_name = "pentest.cvss_calculate"
         params = {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}
         token = self.runtime.mint_execution_token(cap_name, params)
-        job_id = self.runtime.queue.enqueue_job(cap_name, params, execution_token=token)
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(cap_name, params, execution_token=token)
         leased = self.runtime.queue.lease_next_job("worker_test")
 
         cap = self.runtime.registry.get(cap_name)
@@ -316,7 +334,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         cap_name = "pentest.cvss_calculate"
         params = {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}
         token = self.runtime.mint_execution_token(cap_name, params)
-        job_id = self.runtime.queue.enqueue_job(cap_name, params, execution_token=token)
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(cap_name, params, execution_token=token)
         leased = self.runtime.queue.lease_next_job("worker_test")
 
         cap = self.runtime.registry.get(cap_name)
@@ -357,8 +375,10 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         params = {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}
         token = self.runtime.mint_execution_token(cap_name, params)
 
-        job_id_1 = self.runtime.queue.enqueue_job(cap_name, params, execution_token=token, idempotency_key="idemp_c1")
-        job_id_2 = self.runtime.queue.enqueue_job(cap_name, params, execution_token=token, idempotency_key="idemp_c2")
+        job_id_1 = self.governed_job(capability=cap_name, params=params,
+                                     execution_token=token, idempotency_key="idemp_c1")
+        job_id_2 = self.governed_job(capability=cap_name, params=params,
+                                     execution_token=token, idempotency_key="idemp_c2")
 
         leased_1 = self.runtime.queue.lease_next_job("worker_1")
         leased_2 = self.runtime.queue.lease_next_job("worker_2")
@@ -410,10 +430,13 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         self.assertEqual(rcpt_probe1.outcome, OutcomeCategory.POLICY_BLOCKED)
         self.assertIn("GATE_ZERO_VIOLATION", rcpt_probe1.error_message)
 
-        # Probe 2: registry.dispatch(name, params) without worker context
+        # Probe 2: registry.dispatch(name, params) without worker context.
+        # The refusal reason changed at the registry provenance cutover (execution is now
+        # governed by construction and missing authority fails closed), but the property this
+        # probe asserts is unchanged: it refuses, and does not execute.
         with self.assertRaises(PermissionError) as ctx:
             self.runtime.registry.dispatch("pentest.cvss_calculate", params)
-        self.assertIn("GATE_ZERO_VIOLATION", str(ctx.exception))
+        self.assertIn("AUTHORITY_REQUIRED", str(ctx.exception))
 
         # Probe 3: cap.execute(..., worker_id="self-asserted")
         rcpt_probe3 = cap.execute(params, context={"worker_id": "self-asserted"})
@@ -439,7 +462,7 @@ class TestGateZeroAdversarialRemediation(unittest.TestCase):
         """complete_job() and fail_job() reject invalid signatures and unauthorized callers."""
         q = self.runtime.queue
         token = self.runtime.mint_execution_token("math.multiply", {"a": 2, "b": 3})
-        job_id = q.enqueue_job("math.multiply", {"a": 2, "b": 3}, execution_token=token)
+        job_id = q.enqueue_legacy_job_for_test("math.multiply", {"a": 2, "b": 3}, execution_token=token)
         leased = q.lease_next_job("worker_1")
         self.assertEqual(leased["job_id"], job_id)
         q.mark_executing(job_id, "worker_1")
