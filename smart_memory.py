@@ -128,7 +128,7 @@ class SmartMemory:
         except Exception:
             pass
 
-        # 2. Operator's Strategic Profile (Implicit Long-Term Facts)
+        # 2. operator's Strategic Profile (Implicit Long-Term Facts)
         try:
             profile_facts = self.vault.get_profile_facts()
             if profile_facts:
@@ -223,7 +223,7 @@ class SmartMemory:
 
     def extract_implicit_profile_and_entities(self, user_input: str, ai_response: str = "", router: Optional[Any] = None) -> Dict[str, Any]:
         """
-        Silently extract operator preferences, operational boundaries, active targets,
+        Silently extract operator's preferences, operational boundaries, active targets,
         entity relationships, and decision outcomes from dialogue turns.
         """
         extracted_facts = []
@@ -260,8 +260,8 @@ class SmartMemory:
         for cve in cves:
             cve_upper = cve.upper()
             link_id = f"link_{int(time.time())}_{cve_upper}"
-            self.vault.store_entity_link(link_id, "Operator", "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
-            extracted_links.append({"source": "Operator", "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
+            self.vault.store_entity_link(link_id, "operator", "TARGETING_VULNERABILITY", cve_upper, f"Active vulnerability investigated on {datetime.now().strftime('%Y-%m-%d')}")
+            extracted_links.append({"source": "operator", "relation": "TARGETING_VULNERABILITY", "target": cve_upper})
 
         # Software / Target Names (only when accompanied by explicit operational intent)
         has_target_intent = any(kw in lower_input for kw in ['target', 'scan', 'audit', 'pentest', 'scope', 'recon', 'hunting', 'probe', 'cve'])
@@ -270,8 +270,8 @@ class SmartMemory:
                 if target_kw in lower_input:
                     target_name = target_kw.capitalize()
                     link_id = f"link_target_{target_kw}_{int(time.time())}"
-                    self.vault.store_entity_link(link_id, "Operator", "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
-                    extracted_links.append({"source": "Operator", "relation": "WORKING_ON_TARGET", "target": target_name})
+                    self.vault.store_entity_link(link_id, "operator", "WORKING_ON_TARGET", target_name, f"Target or project discussed on {datetime.now().strftime('%Y-%m-%d')}")
+                    extracted_links.append({"source": "operator", "relation": "WORKING_ON_TARGET", "target": target_name})
 
         # 3. Decision Outcome Feedback
         if any(kw in lower_input for kw in ["that worked", "exploit succeeded", "payload worked", "bounty accepted", "finding verified"]):
