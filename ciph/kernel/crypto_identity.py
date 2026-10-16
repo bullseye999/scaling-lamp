@@ -32,6 +32,9 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 class KeyRole(str, Enum):
     OPERATOR = "OPERATOR"
     KERNEL = "KERNEL"
+    # Signs SignedExecutionPermit. Distinct from KERNEL so permit signing has its own
+    # lineage and epoch, and distinct from WORKER so a worker never holds it.
+    EXECUTION_AUTHORITY = "EXECUTION_AUTHORITY"
     WORKER = "WORKER"
 
 
@@ -200,16 +203,25 @@ class TrustRegistry:
         return durable_pin
 
     def _get_vault_kek(self) -> bytes:
-        """Derive key encryption key for the local vault."""
-        salt = b"CIPH_VAULT_KEK_V1_SALT_KEYPAIR_PROTECTION"
-        machine_seed = b"CIPH_LOCAL_KEY_VAULT"
-        try:
-            if os.path.exists("/etc/machine-id"):
-                with open("/etc/machine-id", "rb") as f:
-                    machine_seed = f.read().strip()
-        except Exception:
-            pass
-        return hashlib.sha256(machine_seed + self.db_path.encode('utf-8') + salt).digest()
+        """
+        The key that protects this vault's private rows, decided by the VAULT'S IDENTITY.
+
+        `ciph.kernel.vault_identity.derive_kek` owns that decision:
+
+            no identity header -> the legacy path-derived KEK (a pre-migration vault keeps working)
+            VAULT_ID_V1        -> the vault-id-derived KEK, and a failure there is FINAL
+
+        The result is memoised per registry instance. Migration is an OFFLINE operation (it begins by
+        stopping the resident daemon), so a running process never needs to observe the flip; a process
+        that did would have to be restarted anyway, because the version it read is part of its identity.
+        """
+        cached = getattr(self, "_vault_kek_cache", None)
+        if cached is not None:
+            return cached
+        from ciph.kernel.vault_identity import derive_kek
+        kek = derive_kek(self.db_path)
+        self._vault_kek_cache = kek
+        return kek
 
     def _encrypt_private_key(self, private_key_bytes: bytes, key_id: str) -> str:
         """Encrypt private key bytes using AES-GCM before storing in ciph_key_vault."""
