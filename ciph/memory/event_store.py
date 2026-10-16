@@ -5,9 +5,53 @@ Guarantees memory immutability, auditability, and SHA-256 tamper-evident hash ch
 
 import time
 import json
+from dataclasses import dataclass
+from enum import Enum
+from typing import Tuple
 import sqlite3
 import hashlib
 from typing import Dict, Any, List, Optional, Tuple
+
+
+def governed_authorization_block(event) -> Dict[str, Any]:
+    """
+    The ONE reader for an event's governed-authorization block.
+
+    A governed block has two legitimate homes depending on the event's shape:
+
+      * a synthetic evidence event carries it at the payload root;
+      * a signed `ExecutionReceipt` carries it inside `provenance`, because the receipt schema is
+        frozen and the block rides in the already-signed provenance dict.
+
+    Both are the same block. Reading only one shape is what let a real daemon attempt look like
+    NO_ATTRIBUTABLE_EVIDENCE while its signed receipt sat in the store.
+    """
+    payload = (event or {}).get("payload") or {}
+    if not isinstance(payload, dict):
+        return {}
+    block = payload.get("governed_authorization")
+    if isinstance(block, dict):
+        return block
+    provenance = payload.get("provenance")
+    if isinstance(provenance, dict):
+        block = provenance.get("governed_authorization")
+        if isinstance(block, dict):
+            return block
+    return {}
+
+
+class AttemptEvidenceOutcome(str, Enum):
+    """The three answers an exact-attempt read may give. Deliberately no "best match"."""
+
+    ATTRIBUTABLE = "ATTRIBUTABLE"
+    NO_ATTRIBUTABLE_EVIDENCE = "NO_ATTRIBUTABLE_EVIDENCE"
+    INTEGRITY_CONFLICT = "INTEGRITY_CONFLICT"
+
+
+@dataclass(frozen=True)
+class AttemptEvidence:
+    outcome: AttemptEvidenceOutcome
+    events: Tuple[Dict[str, Any], ...] = ()
 
 
 class EventStore:
@@ -76,14 +120,78 @@ class EventStore:
             conn.commit()
             return cursor.lastrowid
 
+    def get_attempt_evidence(
+        self,
+        *,
+        execution_attempt_id: str,
+        permit_id: str,
+        permit_digest: str,
+        authorization_generation: int,
+        event_types: Optional[Tuple[str, ...]] = None,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> "AttemptEvidence":
+        """
+        Retry-relevant canonical evidence for ONE exact attempt.
+
+        Every supplied identity must agree. A partial match is not a match: an event that mentions the
+        attempt but disagrees on the permit, the digest or the generation is an integrity conflict,
+        never evidence. Events without claim provenance are not attributable and are never attached by
+        inference from timestamp, capability or target.
+        """
+        wanted = {
+            "execution_attempt_id": str(execution_attempt_id),
+            "execution_permit_id": str(permit_id),
+            "execution_permit_digest": str(permit_digest),
+            "authorization_generation": int(authorization_generation or 0),
+        }
+        events = self.get_events(limit=100000, conn=conn)
+        attributable: list = []
+        mentioned = False
+        for event in events:
+            if event_types is not None and event.get("event_type") not in event_types:
+                continue
+            block = governed_authorization_block(event)
+            if not block:
+                continue
+            same_attempt = str(block.get("execution_attempt_id")) == wanted["execution_attempt_id"]
+            same_permit = str(block.get("execution_permit_id")) == wanted["execution_permit_id"]
+            if not (same_attempt or same_permit):
+                continue
+            mentioned = True
+            agrees = (
+                same_attempt
+                and same_permit
+                and str(block.get("execution_permit_digest")) == wanted["execution_permit_digest"]
+                and int(block.get("authorization_generation") or 0) == wanted["authorization_generation"]
+            )
+            if agrees:
+                attributable.append(event)
+            else:
+                return AttemptEvidence(AttemptEvidenceOutcome.INTEGRITY_CONFLICT, (event,))
+
+        if attributable:
+            return AttemptEvidence(AttemptEvidenceOutcome.ATTRIBUTABLE, tuple(attributable))
+        if mentioned:
+            return AttemptEvidence(AttemptEvidenceOutcome.INTEGRITY_CONFLICT)
+        return AttemptEvidence(AttemptEvidenceOutcome.NO_ATTRIBUTABLE_EVIDENCE)
+
+
     def get_events(
         self,
         aggregate_id: Optional[str] = None,
         event_type: Optional[str] = None,
         limit: int = 100,
-        order_desc: bool = False
+        order_desc: bool = False,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> List[Dict[str, Any]]:
-        """Retrieve events matching filter criteria."""
+        """
+        Retrieve events matching filter criteria.
+
+        With `conn` supplied the read runs inside the CALLER's transaction, so canonical events and
+        the caller's other reads share one snapshot. This is what lets a retry decision read the
+        exact attempt's evidence in the same authoritative view as the job and permit rows. The
+        caller owns the transaction; this method never begins, commits or rolls back.
+        """
         query = "SELECT * FROM ciph_event_store WHERE 1=1"
         params: List[Any] = []
         
@@ -98,20 +206,25 @@ class EventStore:
         query += f" ORDER BY event_id {order_dir} LIMIT ?"
         params.append(limit)
         
-        with self._get_connection() as conn:
-            cursor = conn.execute(query, params)
-            results = []
-            for row in cursor.fetchall():
-                results.append({
-                    "event_id": row['event_id'],
-                    "event_type": row['event_type'],
-                    "aggregate_id": row['aggregate_id'],
-                    "payload": json.loads(row['payload']),
-                    "timestamp": row['timestamp'],
-                    "previous_hash": row['previous_hash'],
-                    "event_hash": row['event_hash'],
-                })
-            return results
+        def _rows_of(active):
+            rows = active.execute(query, params).fetchall()
+            return [
+                {
+                    "event_id": row["event_id"],
+                    "event_type": row["event_type"],
+                    "aggregate_id": row["aggregate_id"],
+                    "payload": json.loads(row["payload"]),
+                    "timestamp": row["timestamp"],
+                    "previous_hash": row["previous_hash"],
+                    "event_hash": row["event_hash"],
+                }
+                for row in rows
+            ]
+
+        if conn is not None:
+            return _rows_of(conn)
+        with self._get_connection() as owned:
+            return _rows_of(owned)
 
     def verify_integrity(self) -> Tuple[bool, Optional[int]]:
         """
