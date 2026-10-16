@@ -50,6 +50,11 @@ class JobAttempt:
     execution_token_hash: Optional[str] = None
     plan_id: Optional[str] = None
     step_id: Optional[str] = None
+    # S3: a governed attempt carries execution AUTHORITY, not only transport. `None` means the
+    # attempt is not governed at all - the legacy/test-only lane - so a missing permit is an honest
+    # description rather than an optional field kept for constructor compatibility.
+    execution_permit: Optional[Dict[str, Any]] = None
+    authorization_generation: Optional[int] = None
     schema_version: str = "1.0"
 
     def __post_init__(self):
@@ -73,6 +78,9 @@ class JobAttempt:
             "execution_token_hash": self.execution_token_hash,
             "plan_id": self.plan_id,
             "step_id": self.step_id,
+            # Two attempts on the same lease carrying different authority are not the same attempt.
+            "execution_permit": self.execution_permit,
+            "authorization_generation": self.authorization_generation,
         }
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
@@ -90,6 +98,8 @@ class JobAttempt:
             "execution_token_hash": self.execution_token_hash,
             "plan_id": self.plan_id,
             "step_id": self.step_id,
+            "execution_permit": self.execution_permit,
+            "authorization_generation": self.authorization_generation,
         }
 
     @classmethod
@@ -108,6 +118,8 @@ class JobAttempt:
             lease_expires_at=d["lease_expires_at"],
             idempotency_key=d["idempotency_key"],
             execution_token_hash=d.get("execution_token_hash"),
+            execution_permit=d.get("execution_permit"),
+            authorization_generation=d.get("authorization_generation"),
             plan_id=d.get("plan_id"),
             step_id=d.get("step_id"),
             schema_version=ver
