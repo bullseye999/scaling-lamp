@@ -62,9 +62,17 @@ class LocalTorPeer:
                 except Exception as exc: self.errors.append(type(exc).__name__)
 
 
+_SCOPE_CACHE = {}
+
+
 def scope(target='example.com'):
-    return ScopeGrant(scope_id='phase7-test-scope',scope_type=ScopeType.TARGET_DOMAIN,
-                      allowed_targets=[target],valid_until=time.time()+60)
+    # One canonical authority object per target. Re-creating an "equivalent" grant reuses the same
+    # scope_id with a different created_at, which is a different canonical body - the store
+    # correctly refuses that, so the fixture reuses the object it established.
+    if target not in _SCOPE_CACHE:
+        _SCOPE_CACHE[target] = ScopeGrant(scope_id='phase7-test-scope',scope_type=ScopeType.TARGET_DOMAIN,
+                                          allowed_targets=[target],valid_until=time.time()+60)
+    return _SCOPE_CACHE[target]
 
 
 class TestPhase7KernelBoundaries(unittest.TestCase):
