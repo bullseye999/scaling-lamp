@@ -154,7 +154,7 @@ class TestReview4Evidence(unittest.TestCase):
     def test_missing_signing_authority_rolls_back_consumption(self):
         r, token = self.token()
         with patch('time.time', return_value=r.started_at):
-            self.t.queue.enqueue_job(r.capability, {'x':1}, job_id=r.job_id, execution_token=token)
+            self.t.queue.enqueue_legacy_job_for_test(r.capability, {'x':1}, job_id=r.job_id, execution_token=token)
             self.t.queue.lease_next_job(r.worker_id, target_job_id=r.job_id)
             with patch.object(self.t.trust_registry, 'get_keypair', return_value=None):
                 ok, _ = self.t.queue.mark_executing_and_consume_token(r.job_id, r.worker_id, token.token_id, token.nonce, token.expires_at)
@@ -177,12 +177,25 @@ class TestReview4RealRetries(unittest.TestCase):
         return p[self.t.cap.manifest.name], c
 
     def execute_retry(self, crash=False):
-        t = self.t; t.cap.should_fail = True
+        """One failed attempt, one canonical retry, one success - all through the governed lane.
+
+        The retry is authorized by the capability's DECLARED replay semantics; the worker states
+        nothing. The failure disposition runs inside the first `execute`, so the job is already
+        carrying generation 1 by the time this method looks at it.
+        """
+        t = self.t
+        t.cap = t.idempotent_cap(should_fail=True, name='review.compute_retry4')
         job, _ = t.enqueue(attempts=3)
         first = t.execute(job); self.assertNotEqual(first.exit_code, 0)
+        self.assertEqual(t.queue.get_job(job)['status'], 'RETRYING')
+        permit1 = t.carried_permit(job)
+        self.assertEqual(int(permit1.payload.authorization_generation or 0), 1)
         if crash:
             t.queue.lease_next_job('dead', .01, target_job_id=job)
             time.sleep(.03); t.queue.reclaim_expired_leases()
+            # The crashed delivery never claimed, so the retry authority is untouched.
+            self.assertEqual(t.queue.get_job(job)['status'], 'RETRYING')
+            self.assertEqual(t.carried_permit(job).payload.permit_id, permit1.payload.permit_id)
         t.cap.should_fail = False
         second = t.execute(job); self.assertEqual(second.exit_code, 0)
         self.assertNotEqual(first.provenance['execution_token_hash'], second.provenance['execution_token_hash'])
@@ -211,11 +224,21 @@ class TestReview4RealRetries(unittest.TestCase):
         p, _ = self.scan()
         self.assertEqual((p.current_version_attempts, p.current_version_clean_successes), (2, 1))
 
-    def test_missing_retry_lineage_removes_retry_credit(self):
+    def test_a_governed_retry_does_not_depend_on_the_retry_token_lineage(self):
+        """`ciph_retry_tokens` is the LEGACY lane's artifact, not a governed-authority fact.
+
+        The governed lane's retry lineage is the permit generation plus the renewed transport token
+        the job carries, and the renewed token is authenticated by its own activation evidence.
+        Removing the legacy table therefore changes no governed credit - which is the precise test
+        of whether it is still load-bearing here: it is not.
+        """
         self.execute_retry()
-        with sqlite3.connect(self.t.db) as conn: conn.execute('DELETE FROM ciph_retry_tokens')
+        with sqlite3.connect(self.t.db) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM ciph_retry_tokens').fetchone()[0], 0,
+                             "a governed retry writes no retry-token lineage")
+            conn.execute('DELETE FROM ciph_retry_tokens')
         p, _ = self.scan()
-        self.assertEqual((p.current_version_attempts, p.current_version_clean_successes), (1, 0))
+        self.assertEqual((p.current_version_attempts, p.current_version_clean_successes), (2, 1))
 
 class TestReview5DelayedStartup(unittest.TestCase):
     """Review 5 regressions: startup latency must not discard authenticated evidence."""
@@ -278,8 +301,8 @@ class TestReview5DelayedStartup(unittest.TestCase):
 
     def test_retry_after_delayed_parent_failure_credits_both_attempts(self):
         """A retry whose failed parent had startup delay must credit both attempts."""
-        self.t.cap.should_fail = True
         from ciph.capabilities.base import WorkerExecutionContext
+        self.t.cap = self.t.idempotent_cap(should_fail=True, name='review.compute_retry5')
         job, _ = self.t.enqueue(attempts=3)
         # First attempt: delayed failure
         original = WorkerExecutionContext.create
@@ -289,6 +312,8 @@ class TestReview5DelayedStartup(unittest.TestCase):
         with patch.object(WorkerExecutionContext, 'create', side_effect=delayed):
             first = self.t.execute(job)
         self.assertNotEqual(first.exit_code, 0)
+        # The central disposition already installed generation 1 during that failure.
+        self.assertEqual(self.t.queue.get_job(job)['status'], 'RETRYING')
         # Second attempt: immediate success (retry)
         self.t.cap.should_fail = False
         second = self.t.execute(job)
@@ -331,7 +356,7 @@ class TestReview6SandboxAndEvolutionExecution(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"x": 1}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-                job = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=1, execution_token=token,
+                job = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=1, execution_token=token,
                                            idempotency_key="sbx-succ-idemp")
                 receipt = rt.worker_daemon.drain_once(worker_id="worker_sbx", target_job_id=job)
                 self.assertIsNotNone(receipt)
@@ -379,7 +404,7 @@ class TestReview6SandboxAndEvolutionExecution(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"x": 1}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-                job = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=1, execution_token=token,
+                job = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=1, execution_token=token,
                                            idempotency_key="sbx-fail-idemp")
                 receipt = rt.worker_daemon.drain_once(worker_id="worker_sbx", target_job_id=job)
                 self.assertIsNotNone(receipt)
@@ -411,6 +436,7 @@ class TestReview6SandboxAndEvolutionExecution(unittest.TestCase):
         try:
             service = EvolutionCoordinator(t.runtime, t.staging)
             grant = t.deployment()
+            t.adopt_and_promote()   # R7: activation needs a canonical promotion
             ok, message, cid = service.deploy(grant)
             self.assertTrue(ok, message)
             self.assertEqual(service.run_canary(cid, {"x": 2, "y": 3})["status"], "ACTIVE")
@@ -467,7 +493,7 @@ class TestReview6SandboxAndEvolutionExecution(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"val": 10}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=3)
-                job_id = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=3, execution_token=token,
+                job_id = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=3, execution_token=token,
                                               idempotency_key="sbx-retry-idemp")
                 # Attempt 1 -> fails with exit 42
                 r1 = rt.worker_daemon.drain_once(worker_id="worker_sbx", target_job_id=job_id)
@@ -525,7 +551,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"x": 1}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-                job = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=1, execution_token=token)
+                job = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=1, execution_token=token)
                 receipt = rt.worker_daemon.drain_once(worker_id="worker_sbx", target_job_id=job)
                 self.assertIsNotNone(receipt)
                 self.assertIsNone(receipt.idempotency_key)
@@ -575,7 +601,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"x": 1}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=2)
-                job = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=2, execution_token=token)
+                job = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=2, execution_token=token)
                 r1 = rt.worker_daemon.drain_once(worker_id="worker_sbx", target_job_id=job)
                 self.assertIsNotNone(r1)
                 self.assertIsNone(r1.idempotency_key)
@@ -609,6 +635,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
         try:
             service = EvolutionCoordinator(t.runtime, t.staging)
             grant = t.deployment()
+            t.adopt_and_promote()   # R7: activation needs a canonical promotion
             ok, message, cid = service.deploy(grant)
             self.assertTrue(ok, message)
             self.assertEqual(service.run_canary(cid, {"x": 2, "y": 3})["status"], "ACTIVE")
@@ -616,7 +643,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
 
             params = {"x": 10, "y": 20}
             token = t.runtime.mint_execution_token("math.compute", params, max_attempts=1)
-            job = t.runtime.queue.enqueue_job("math.compute", params, execution_token=token)
+            job = t.runtime.queue.enqueue_legacy_job_for_test("math.compute", params, execution_token=token)
             receipt = t.runtime.worker_daemon.drain_once(worker_id="worker_evo", target_job_id=job)
             self.assertIsNotNone(receipt)
             self.assertIsNone(receipt.idempotency_key)
@@ -662,8 +689,10 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
                 cap = MismatchCap()
                 rt.register_capability(cap)
                 params = {"x": 1}
-                token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-                job = rt.queue.enqueue_job(cap.manifest.name, params, execution_token=token, idempotency_key="expected-idemp")
+                job = worker_fixtures.enqueue_permit_bearing_job(
+                    rt, capability=cap.manifest.name, params=params,
+                    idempotency_key="expected-idemp", max_retries=1,
+                ).job_id
                 receipt = rt.worker_daemon.drain_once(worker_id="worker_local", target_job_id=job)
                 self.assertIsNotNone(receipt)
                 self.assertEqual(receipt.idempotency_key, "mismatched-key")
@@ -701,7 +730,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
                 rt.register_capability(cap)
                 params = {"x": 1}
                 token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-                job_id = rt.queue.enqueue_job(cap.manifest.name, params, execution_token=token, idempotency_key=None)
+                job_id = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, execution_token=token, idempotency_key=None)
 
                 worker_id = "worker_local"
                 leased = rt.queue.lease_next_job(worker_id=worker_id, target_job_id=job_id)
@@ -786,7 +815,7 @@ class TestReview7IdempotencyKeyConsistency(unittest.TestCase):
             rt = CiphRuntime(db_path=str(Path(td) / "jobs.db"))
             try:
                 # Enqueue a job for an unregistered capability with idempotency_key=None
-                job_id = rt.queue.enqueue_job(
+                job_id = rt.queue.enqueue_legacy_job_for_test(
                     capability="unregistered.test.capability",
                     params={"a": 1},
                     idempotency_key=None
