@@ -242,6 +242,15 @@ class TestCiphDAGCompensation(unittest.TestCase):
             expires_at=time.time() + 120
         ).sign(self.auth_key)
 
+        # The referenced scope must exist canonically before the durable reference is written.
+        self.runtime.scope_grant_store().persist(
+            ScopeGrant(
+                scope_id="scope_cloud",
+                scope_type=ScopeType.LOCAL_SYSTEM,
+                allowed_targets=["allowed_target_host"],
+            )
+        )
+
         res_auth = self.runtime.execute_dag_plan(
             dag_crit,
             auth_grants={"S2_CRIT": valid_grant}
