@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from ciph.kernel.policy_engine import CapabilityManifest
 from ciph.kernel.network_sandbox import enforce_network_policy, NetworkPolicyViolation
-from ciph.workers.receipts import ExecutionReceipt, OutcomeCategory
+from ciph.workers.receipts import ExecutionReceipt, OutcomeCategory, EffectCertainty
 
 
 CANONICAL_CAPABILITIES = {
@@ -145,7 +145,7 @@ class BaseCapability(ABC):
 
         if not is_valid_ctx and not is_mock_test:
             err_msg = f"GATE_ZERO_VIOLATION: Direct capability execution forbidden for '{self.manifest.name}'. Authenticated WorkerExecutionContext required."
-            return ExecutionReceipt(
+            return ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                 receipt_id=f"rcpt_noworker_{uuid.uuid4().hex[:12]}",
                 job_id=context.get("job_id", "NO_JOB"),
                 capability=self.manifest.name,
@@ -182,7 +182,7 @@ class BaseCapability(ABC):
             outcome = OutcomeCategory.SUCCESS if exit_code == 0 else OutcomeCategory.EXECUTION_ERROR
             error_msg = raw_results.get("error") if exit_code != 0 else None
             
-            return ExecutionReceipt(
+            return ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                 receipt_id=f"rcpt_{uuid.uuid4().hex[:12]}",
                 job_id=job_id,
                 capability=self.manifest.name,
@@ -208,7 +208,7 @@ class BaseCapability(ABC):
             error_msg = str(e)
             output_hash = ExecutionReceipt.hash_payload({"error": error_msg})
             
-            return ExecutionReceipt(
+            return ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                 receipt_id=f"rcpt_{uuid.uuid4().hex[:12]}",
                 job_id=job_id,
                 capability=self.manifest.name,
@@ -236,7 +236,7 @@ class BaseCapability(ABC):
             output_hash = ExecutionReceipt.hash_payload({"error": error_msg})
             tb_str = traceback.format_exc()
             
-            return ExecutionReceipt(
+            return ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                 receipt_id=f"rcpt_{uuid.uuid4().hex[:12]}",
                 job_id=job_id,
                 capability=self.manifest.name,
