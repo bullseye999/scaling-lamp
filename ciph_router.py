@@ -70,25 +70,11 @@ class CiphRouter:
         model_deepseek: Optional[str] = None,
     ):
         # DeepSeek API Configuration
-        raw_key = (
+        self.api_key = (
             api_key 
             or os.environ.get("DEEPSEEK_API_KEY", "") 
             or os.environ.get("RUNPOD_API_KEY", "")
         ).strip()
-        # Treat common template placeholders as unconfigured
-        if raw_key.lower() in (
-            "your_deepseek_api_key_here",
-            "your_api_key_here",
-            "your_key_here",
-            "none",
-            "null",
-            "placeholder",
-            "sk-...",
-            "...",
-        ) or raw_key.startswith("your_"):
-            self.api_key = ""
-        else:
-            self.api_key = raw_key
         
         raw_base = base_url or os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
         self.base_url = raw_base.rstrip("/")
@@ -105,6 +91,8 @@ class CiphRouter:
 
         # Primary Client (DeepSeek V4 Pro)
         self.client_deepseek: Optional[OpenAI] = None
+        self.last_finish_reason: Optional[str] = None
+        self.last_usage: Optional[dict] = None
         self._init_clients()
 
         # [DEPRECATED RUNPOD HEAVY TASK PATTERNS - KEPT FOR REFERENCE]
@@ -169,6 +157,18 @@ class CiphRouter:
             temperature=temperature,
             max_tokens=max_tokens
         )
+        # SAFE diagnostics only: finish reason + usage counts + whether reasoning was present.
+        # The reasoning CONTENT itself is never read, logged or returned.
+        choice = response.choices[0] if getattr(response, "choices", None) else None
+        message = getattr(choice, "message", None) if choice is not None else None
+        usage = getattr(response, "usage", None)
+        self.last_finish_reason = getattr(choice, "finish_reason", None) if choice is not None else None
+        self.last_usage = {
+            "prompt_tokens": getattr(usage, "prompt_tokens", None) if usage is not None else None,
+            "completion_tokens": getattr(usage, "completion_tokens", None) if usage is not None else None,
+            "total_tokens": getattr(usage, "total_tokens", None) if usage is not None else None,
+            "reasoning_content_present": bool(getattr(message, "reasoning_content", None)),
+        }
         if response.choices and len(response.choices) > 0:
             content = response.choices[0].message.content
             return content.strip() if content else ""
