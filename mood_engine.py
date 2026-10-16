@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple
 
 class MoodEngine:
     """
-    Ciph reads Operator's energy from every message.
+    Ciph reads operator's energy from every message.
     Adjusts tone, pacing, and response depth accordingly.
     No forced positivity. Just real calibration.
     """
@@ -149,7 +149,7 @@ class MoodEngine:
         style = self.RESPONSE_STYLE.get(mood, self.RESPONSE_STYLE['neutral'])
 
         return (
-            f"\nOPERATOR'S CURRENT MOOD: {mood.upper()}\n"
+            f"\noperator'S CURRENT MOOD: {mood.upper()}\n"
             f"Adjust your response: {style['tone']}.\n"
             f"Response length: {style['length']}.\n"
             f"If you add an opener, something like: \"{style['opener_hint']}\"\n"
