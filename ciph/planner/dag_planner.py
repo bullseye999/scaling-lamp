@@ -14,6 +14,7 @@ from collections import deque
 from ciph.planner.schemas import PlanStep, ExecutionDAG, ReversibilityClass, PlanValidationResult, AuthorizationTier
 from ciph.planner.predicates import evaluate_success_condition
 from ciph.capabilities.registry import CapabilityRegistry
+from ciph.kernel.job_timing import job_claim_deadline
 from ciph.workers.receipts import ExecutionReceipt, OutcomeCategory
 
 
@@ -32,7 +33,9 @@ class DAGExecutor:
         event_store: Optional[Any] = None,
         queue: Optional[Any] = None,
         worker_daemon: Optional[Any] = None,
-        trust_registry: Optional[Any] = None
+        trust_registry: Optional[Any] = None,
+        durable_permit_provider: Optional[Any] = None,
+        scope_grant_provider: Optional[Any] = None,
     ):
         self.registry = registry
         self.backups_dir = Path(backups_dir)
@@ -42,6 +45,12 @@ class DAGExecutor:
         self.trust_registry = trust_registry
         self.queue = queue
         self.worker_daemon = worker_daemon
+        # Injected from the runtime composition boundary. The planner is a permit CLIENT: it never
+        # builds an authority, gateway or store of its own.
+        self.durable_permit_provider = durable_permit_provider
+        # Narrow scope seam. The planner never creates or reconstructs a ScopeGrant; it only
+        # proves that a durable reference it is about to write actually resolves.
+        self.scope_grant_provider = scope_grant_provider
         if self.queue is None or self.worker_daemon is None:
             from ciph.workers.ipc_queue import IPCJobQueue
             from ciph.workers.daemon import DurableWorkerDaemon
@@ -71,6 +80,17 @@ class DAGExecutor:
             except Exception:
                 pass
 
+        # Mirror the existing self-construction pattern (queue, daemon, trust registry) for a
+        # standalone executor. The composition helper resolves the SAME canonical scope and permit
+        # universe for this database namespace, so this is not a second authority.
+        if self.scope_grant_provider is None:
+            from ciph.kernel.scope_grant_store import ScopeGrantStore
+            _scope_store = ScopeGrantStore(self.queue.db_path)
+            self.scope_grant_provider = lambda: _scope_store
+        if self.durable_permit_provider is None:
+            from ciph.kernel.permit_composition import build_durable_permit_dependencies
+            _permit_deps = build_durable_permit_dependencies(self.queue.db_path)
+            self.durable_permit_provider = lambda: _permit_deps
     def validate_plan(self, dag: ExecutionDAG) -> PlanValidationResult:
         """
         Statically validates DAG topology, capability availability, and authorization tier requirements.
@@ -185,6 +205,55 @@ class DAGExecutor:
                 elif p.is_dir():
                     shutil.rmtree(p)
 
+    def _carriage_for_job(self, *, capability, params, scope_reference, job_id,
+                          timeout_seconds=None, route="dag.step"):
+        """
+        Acquire the canonical permit for one planner-produced durable job.
+
+        The planner is a permit CLIENT: it resolves the canonical scope it references and asks the
+        injected provider to mint. It never creates, reconstructs or canonicalizes authority itself,
+        and a refusal raises rather than downgrading to a token-only enqueue.
+        """
+        from ciph.kernel.execution_gateway import ExecutionRequest
+        from ciph.kernel.permit_composition import acquire_durable_permit
+
+        resolved_scope = None
+        if scope_reference and scope_reference != "NONE":
+            resolver = self.scope_grant_provider() if self.scope_grant_provider is not None else None
+            if resolver is None:
+                raise PermissionError(
+                    f"SCOPE_REFERENCE_REQUIRES_RESOLVER: {scope_reference}"
+                )
+            resolved = resolver.resolve(scope_reference)
+            if not resolved.resolvable:
+                raise PermissionError(
+                    f"SCOPE_REFERENCE_UNRESOLVED: {scope_reference} ({resolved.outcome.value})"
+                )
+            resolved_scope = resolved.grant
+
+        from ciph.kernel.policy_engine import replay_policy_digest
+
+        request = ExecutionRequest(
+            capability=capability,
+            params=dict(params or {}),
+            target=(params or {}).get("target"),
+            scope_grant=resolved_scope,
+            logical_action_id=job_id,
+            route=route,
+            replay_policy_digest=replay_policy_digest(
+                getattr(self.registry.get(capability) if self.registry else None, "manifest", None)
+            ),
+        )
+        deadline = job_claim_deadline(
+            now=None, timeout_seconds=timeout_seconds, scope_grant=resolved_scope
+        )
+        carriage = acquire_durable_permit(
+            self.durable_permit_provider, request, job_id, claim_deadline=deadline
+        )
+        if not carriage.accepted:
+            raise PermissionError(f"PERMIT_ACQUISITION_REFUSED: {carriage.reason}")
+        return carriage
+
     def execute_dag(
         self,
         dag: ExecutionDAG,
@@ -270,7 +339,7 @@ class DAGExecutor:
                             execution_lane=cap.manifest.derive_execution_lane().value,
                             authorized_worker_class="ALL",
                             issued_at=now,
-                            expires_at=now + cap.manifest.timeout_seconds + 300.0,
+                            expires_at=job_claim_deadline(now=now, timeout_seconds=cap.manifest.timeout_seconds),
                             max_attempts=1,
                             kernel_key_id="kernel_primary"
                         ).sign(k_priv)
@@ -278,6 +347,27 @@ class DAGExecutor:
                         if auth_grants and step.step_id in auth_grants:
                             grant_obj = auth_grants[step.step_id]
                             if hasattr(grant_obj, 'grant_id'):
+                                # SCOPE.4b: a durable scope reference must resolve canonically.
+                                # NOT_FOUND / UNVERIFIABLE are AUTHORITY failures that block this
+                                # write - not diagnostics that accompany it.
+                                scope_reference = grant_obj.scope_grant_id or "NONE"
+                                if scope_reference != "NONE":
+                                    resolver = (
+                                        self.scope_grant_provider()
+                                        if self.scope_grant_provider is not None else None
+                                    )
+                                    if resolver is None:
+                                        raise PermissionError(
+                                            "SCOPE_REFERENCE_REQUIRES_RESOLVER: refusing durable "
+                                            f"scope reference '{scope_reference}' without a "
+                                            "canonical scope resolver."
+                                        )
+                                    resolved_scope = resolver.resolve(scope_reference)
+                                    if not resolved_scope.resolvable:
+                                        raise PermissionError(
+                                            "SCOPE_REFERENCE_UNRESOLVED: "
+                                            f"{scope_reference} ({resolved_scope.outcome.value})"
+                                        )
                                 try:
                                     with self.queue._get_connection() as conn:
                                         conn.execute("""
@@ -297,14 +387,28 @@ class DAGExecutor:
                                         conn.commit()
                                 except Exception:
                                     pass
-                step_job_id = self.queue.enqueue_job(
+                step_job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
+                carriage = self._carriage_for_job(
                     capability=step.capability,
                     params=resolved_params,
-                    plan_id=dag.plan_id,
-                    step_id=step.step_id,
-                    idempotency_key=step.idempotency_key or f"idemp_{dag.plan_id}_{step.step_id}",
-                    execution_token=token
+                    scope_reference=step.scope_grant_id,
+                    job_id=step_job_id,
+                    timeout_seconds=getattr(cap.manifest, "timeout_seconds", None),
+                    route="dag.step",
                 )
+                if carriage.adopt_job_id:
+                    step_job_id = carriage.adopt_job_id
+                else:
+                    self.queue.enqueue_job(
+                        capability=step.capability,
+                        params=resolved_params,
+                        plan_id=dag.plan_id,
+                        step_id=step.step_id,
+                        idempotency_key=step.idempotency_key or f"idemp_{dag.plan_id}_{step.step_id}",
+                        execution_token=token,
+                        job_id=step_job_id,
+                        execution_permit=carriage.permit,
+                    )
                 receipt = self.worker_daemon.drain_once(worker_id=f"dag_worker_{step.step_id}", target_job_id=step_job_id)
                 if not isinstance(receipt, ExecutionReceipt):
                     overall_success = False
@@ -406,18 +510,32 @@ class DAGExecutor:
                                 execution_lane=cap.manifest.derive_execution_lane().value,
                                 authorized_worker_class="ALL",
                                 issued_at=now,
-                                expires_at=now + cap.manifest.timeout_seconds + 300.0,
+                                expires_at=job_claim_deadline(now=now, timeout_seconds=cap.manifest.timeout_seconds),
                                 max_attempts=1,
                                 kernel_key_id="kernel_primary"
                             ).sign(k_priv)
-                    comp_job_id = self.queue.enqueue_job(
+                    comp_job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
+                    comp_carriage = self._carriage_for_job(
                         capability=comp_action,
                         params=comp_params,
-                        plan_id="COMPENSATION_PLAN",
-                        step_id=f"comp_{comp_action}",
-                        idempotency_key=f"idemp_comp_{uuid.uuid4().hex[:8]}",
-                        execution_token=token
+                        scope_reference="NONE",
+                        job_id=comp_job_id,
+                        timeout_seconds=getattr(cap.manifest, "timeout_seconds", None),
+                        route="dag.compensation",
                     )
+                    if comp_carriage.adopt_job_id:
+                        comp_job_id = comp_carriage.adopt_job_id
+                    else:
+                        self.queue.enqueue_job(
+                            capability=comp_action,
+                            params=comp_params,
+                            plan_id="COMPENSATION_PLAN",
+                            step_id=f"comp_{comp_action}",
+                            idempotency_key=f"idemp_comp_{uuid.uuid4().hex[:8]}",
+                            execution_token=token,
+                            job_id=comp_job_id,
+                            execution_permit=comp_carriage.permit,
+                        )
                     raw_rcpt = self.worker_daemon.drain_once(worker_id=f"comp_worker_{uuid.uuid4().hex[:6]}", target_job_id=comp_job_id)
                     if raw_rcpt:
                         comp_receipts.append(raw_rcpt)
