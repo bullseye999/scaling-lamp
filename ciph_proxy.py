@@ -29,7 +29,7 @@ except ImportError:
 
 app = Flask(__name__)
 
-ENDPOINT_ID = os.environ.get("RUNPOD_8B_ENDPOINT_ID") or os.environ.get("RUNPOD_ENDPOINT_ID", "your_endpoint_id")
+ENDPOINT_ID = os.environ.get("RUNPOD_8B_ENDPOINT_ID") or os.environ.get("RUNPOD_ENDPOINT_ID", "")
 RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY", "").strip()
 
 
