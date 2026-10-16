@@ -1,5 +1,5 @@
 """
-test_ciph_stage9_byzantine_swarm.py - Verification for Stage 9 Byzantine Swarm Consensus & Operator's Council.
+test_ciph_stage9_byzantine_swarm.py - Verification for Stage 9 Byzantine Swarm Consensus & operator's Council.
 """
 
 import unittest
