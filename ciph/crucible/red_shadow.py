@@ -1,7 +1,14 @@
 """
-ciph.crucible.red_shadow - The Iron Crucible: Autonomous Adversarial Falsification (Stage 6).
-Executes proactive penetration sweeps against registered capabilities to stress-test
-boundaries, detect latent vulnerabilities, and enforce automatic quarantine.
+ciph.crucible.red_shadow - autonomous adversarial falsification (Stage 6).
+
+Executes proactive penetration sweeps against registered capabilities to stress-test boundaries,
+detect latent vulnerabilities, and enforce automatic quarantine.
+
+NAMING, because one word must not mean two architectures. Since 4.5, "Crucible" has a precise
+constitutional meaning: the courtroom that decides whether a candidate is actually better. This module
+is an adversarial FUZZ HARNESS and nothing more - it evaluates no candidate and promotes nothing. The
+preferred name is `RedShadowHarness`; `RedShadowCrucible` is kept as a legacy alias and should not be
+used by new code.
 """
 
 import time
@@ -36,10 +43,12 @@ class AdversarialAuditReport:
     resilience_score: float = 1.0
 
 
-class RedShadowCrucible:
+class RedShadowHarness:
     """
-    Stage 6 Continuous Adversarial Engine.
-    Employs synthetic fuzzing vectors to challenge system invariants.
+    Stage 6 continuous adversarial engine: synthetic fuzzing vectors against system invariants.
+
+    It is a harness, not the Crucible. It performs no evaluation, holds no candidate identity and
+    cannot promote anything.
     """
 
     ADVERSARIAL_PAYLOADS = [
@@ -114,3 +123,8 @@ class RedShadowCrucible:
         )
         self.audit_history.append(report)
         return report
+
+
+# Legacy alias. New code should use `RedShadowHarness`; this name predates the constitutional
+# meaning of "Crucible" and is retained only so existing imports keep working.
+RedShadowCrucible = RedShadowHarness
