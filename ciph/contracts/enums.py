@@ -22,6 +22,19 @@ class ReversibilityClass(str, Enum):
     READ_ONLY     = "READ_ONLY"        # Zero side-effects / state mutation
 
 
+class ReplaySemantics(str, Enum):
+    """
+    Whether repeating the SAME logical action can produce an uncontrolled duplicate effect.
+
+    This is a CAPABILITY's declaration about its own effect identity, not a claim about any
+    particular attempt. `UNSAFE` is the default and the fail-closed value: a capability that says
+    nothing is never retried on an uncertain effect.
+    """
+
+    UNSAFE = "UNSAFE"          # no guarantee; an uncertain effect must reconcile
+    IDEMPOTENT = "IDEMPOTENT"  # the effect is identified by the action, so a repeat cannot duplicate
+
+
 class RiskTier(str, Enum):
     NONE     = "NONE"
     LOW      = "LOW"
@@ -122,6 +135,33 @@ class ReliabilityClass(str, Enum):
     THIRD_PARTY_FEED    = "THIRD_PARTY_FEED"     # RSS, CVE, NVD, AlienVault feeds
     PASSIVE_RECON       = "PASSIVE_RECON"        # Wayback, crt.sh, search engine caches
     UNVERIFIED_INCOMING = "UNVERIFIED_INCOMING"  # Incoming external messages / whispers
+
+
+EFFECT_CERTAINTY_CUTOVER_SCHEMA = "4.2"
+
+
+class EffectCertainty(str, Enum):
+    """What happened to reality, distinct from whether the machinery succeeded."""
+
+    EFFECT_CONFIRMED = "EFFECT_CONFIRMED"
+    EFFECT_UNKNOWN = "EFFECT_UNKNOWN"
+
+
+def parse_schema_version(value):
+    """Parse a dotted numeric schema version, or None when it is not parseable."""
+    try:
+        return tuple(int(part) for part in str(value).split("."))
+    except (TypeError, ValueError):
+        return None
+
+
+def schema_at_least(value, boundary) -> bool:
+    """Version-aware comparison. String ordering would place "4.10" below "4.2"."""
+    parsed = parse_schema_version(value)
+    floor = parse_schema_version(boundary)
+    if parsed is None or floor is None:
+        return False
+    return parsed >= floor
 
 
 class EpistemicState(str, Enum):
