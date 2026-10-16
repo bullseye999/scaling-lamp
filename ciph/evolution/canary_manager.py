@@ -340,6 +340,63 @@ class CanaryDeploymentManager:
         fields['status']=CanaryState(fields['status'])
         return CanaryRecord(**fields)
 
+    def check_constitutional_promotion(self, source):
+        """R7: no production activation without a canonical Crucible promotion for THIS candidate.
+
+        `source` may be a deployment grant or a canary state dict; both carry the three fields that
+        matter. The check is unconditional: a legacy grant, however well signed, is not authority to
+        install anything on its own.
+        """
+        from ciph.kernel.crucible_candidates import get_candidate
+        from ciph.kernel.crucible_promotion import active_candidate
+        from ciph.kernel.evolution_adapters import legacy_binding_for
+        from ciph.kernel.evolution_deployment import activation_role
+        def get(key):
+            # A canary STATE keeps the deployment identity inside its grant block, so a top-level miss
+            # has to fall through to the grant rather than reporting an incomplete identity.
+            if isinstance(source, dict):
+                if source.get(key) is not None:
+                    return source.get(key)
+                grant = source.get('grant')
+                return grant.get(key) if isinstance(grant, dict) else None
+            return getattr(source, key, None)
+        candidate_hash,base_file_hash,target_capability=get('candidate_hash'),get('base_file_hash'),get('target_capability')
+        if not candidate_hash or not base_file_hash or not target_capability:
+            return False,'NO_PROMOTION_RECORD:deployment identity is incomplete'
+        db=self.trust_registry.db_path
+        binding=legacy_binding_for(db,candidate_hash=str(candidate_hash),base_file_hash=str(base_file_hash))
+        if binding is None:
+            return False,'NO_PROMOTION_RECORD:candidate was never adopted into the Crucible'
+        role=activation_role(str(target_capability))
+        if active_candidate(db,role)!=binding.candidate_id:
+            return False,'NO_PROMOTION_RECORD:active '+role+' is not '+binding.candidate_id
+        if get_candidate(db,binding.candidate_id).artifact_digest!=str(candidate_hash):
+            return False,'CANDIDATE_IDENTITY_MISMATCH'
+        return True,binding.candidate_id
+
+    def assert_expected_baseline(self, grant):
+        """The installation target must still be the baseline the promotion was granted against."""
+        from ciph.evolution.file_activation import locked_target, read_at, sha
+        try:
+            with locked_target(grant.target_file_path) as (parent, name):
+                current, _ = read_at(parent, name)
+        except Exception as exc:
+            raise ValueError('ACTIVE_BASELINE_MISMATCH:' + exc.__class__.__name__)
+        if sha(current) != grant.base_file_hash:
+            raise ValueError('ACTIVE_BASELINE_MISMATCH')
+
+    def verify_installed_artifact(self, grant):
+        """What landed must be the authorized candidate; disagreement is a first-class integrity state."""
+        from ciph.evolution.file_activation import locked_target, read_at, sha
+        try:
+            with locked_target(grant.target_file_path) as (parent, name):
+                installed, _ = read_at(parent, name)
+        except Exception as exc:
+            return False, 'DEPLOYMENT_INTEGRITY_CONFLICT:unreadable:' + exc.__class__.__name__
+        if sha(installed) != grant.candidate_hash:
+            return False, 'DEPLOYMENT_INTEGRITY_CONFLICT:installed bytes are not the promoted candidate'
+        return True, 'INSTALLED_ARTIFACT_VERIFIED'
+
     def approve_production(self,canary_id,grant):
         """A second operator signature can authorize production after a canary-only grant."""
         with self._lock():
@@ -352,6 +409,9 @@ class CanaryDeploymentManager:
                 for field in ('candidate_hash','base_file_hash','gap_id','target_capability','target_file_path','verification_evidence_hashes','canary_criteria'):
                     if getattr(grant,field)!=getattr(previous,field):raise ValueError('PRODUCTION_APPROVAL_BINDING_MISMATCH')
                 if 'PRODUCTION' not in grant.permitted_stages:raise ValueError('PRODUCTION_STAGE_NOT_AUTHORIZED')
+                allowed,detail=self.check_constitutional_promotion(grant)
+                if not allowed:raise ValueError(detail)
+                self.assert_expected_baseline(grant)
                 approval=self.store.record('CANARY_ACCEPTED',{'grant_hash':hashlib.sha256(grant.compute_canonical_payload()).hexdigest(),
                     'candidate_hash':grant.candidate_hash,'canary_id':canary_id,'observations':state['observations'],'shadow_evidence':state['shadow_evidence']})
                 with self._get_connection() as conn:
@@ -360,6 +420,11 @@ class CanaryDeploymentManager:
                 state['grant']=data;state['grant_id']=grant.grant_id
                 state['status']='RECONCILIATION_REQUIRED';self._save(state)
                 ok,message=self.staging_manager.apply(state['staging_identifier'],grant,self.trust_registry)
+                if ok:
+                    verified,detail=self.verify_installed_artifact(grant)
+                    if not verified:
+                        state['status']='RECONCILIATION_REQUIRED';self._save(state)
+                        return {'success':False,'status':'DEPLOYMENT_INTEGRITY_CONFLICT','reason':detail}
                 state['status']='PROMOTED' if ok else 'RECONCILIATION_REQUIRED'
                 if ok:state['stage']='PRODUCTION'
                 state['receipt_id']=self.store.record('EVOLUTION_OUTCOME',{'canary_id':canary_id,'outcome':state['status'],'reason':message})
