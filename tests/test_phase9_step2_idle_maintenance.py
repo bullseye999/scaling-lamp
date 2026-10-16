@@ -242,7 +242,7 @@ class TestPhase9Step2IdleMaintenance(unittest.TestCase):
     def test_probe5_idle_to_acquire_cas_race(self):
         """Concurrently enqueued jobs or active work detected inside the BEGIN IMMEDIATE transaction reject lease."""
         ipc = IPCJobQueue(self.db_path, trust_registry=self.trust_registry)
-        ipc.enqueue_job("TEST_CAP", {"arg": 1})
+        ipc.enqueue_legacy_job_for_test("TEST_CAP", {"arg": 1})
 
         # Lease acquisition must detect active job inside transaction and rollback
         acquired, reason, _ = self.coordinator.acquire_lease(
@@ -302,7 +302,7 @@ class TestPhase9Step2IdleMaintenance(unittest.TestCase):
         # 2f. IPC enqueue fails closed with MaintenanceInProgressError
         ipc = IPCJobQueue(self.db_path, trust_registry=self.trust_registry)
         with self.assertRaises(MaintenanceInProgressError):
-            ipc.enqueue_job("TEST_CAP", {"arg": 2})
+            ipc.enqueue_legacy_job_for_test("TEST_CAP", {"arg": 2})
 
         # 2g. Cross-process write attempt fails closed
         ext_script = f"""
@@ -371,13 +371,13 @@ except Exception:
         ipc = IPCJobQueue(self.db_path, trust_registry=self.trust_registry)
         # Immediately blocked
         with self.assertRaises(MaintenanceInProgressError):
-            ipc.enqueue_job("CAP_1", {"x": 1})
+            ipc.enqueue_legacy_job_for_test("CAP_1", {"x": 1})
 
         # Wait for TTL to elapse (simulating process crash without explicit release)
         time.sleep(1.2)
 
         # Enqueue must now succeed cleanly
-        jid = ipc.enqueue_job("CAP_1", {"x": 1})
+        jid = ipc.enqueue_legacy_job_for_test("CAP_1", {"x": 1})
         self.assertIsNotNone(jid)
         self.assertTrue(jid.startswith("JOB-"))
 
@@ -402,7 +402,7 @@ except Exception:
 
         # 3. Setup expired IPC job lease
         ipc = IPCJobQueue(self.db_path, trust_registry=self.trust_registry)
-        jid = ipc.enqueue_job("TASK_TEST", {"p": 1})
+        jid = ipc.enqueue_legacy_job_for_test("TASK_TEST", {"p": 1})
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("UPDATE ciph_ipc_jobs SET status='LEASED', leased_to='w1', lease_expires_at=100.0 WHERE job_id=?;", (jid,))
             conn.commit()
@@ -645,7 +645,7 @@ except Exception:
             rt.register_capability(cap)
             params = {"test": 1}
             token = rt.mint_execution_token(cap.manifest.name, params, max_attempts=1)
-            job = rt.queue.enqueue_job(cap.manifest.name, params, max_retries=1, execution_token=token, idempotency_key="rt-maint-idemp-1")
+            job = rt.queue.enqueue_legacy_job_for_test(cap.manifest.name, params, max_retries=1, execution_token=token, idempotency_key="rt-maint-idemp-1")
             receipt = rt.worker_daemon.drain_once(worker_id="worker_maint", target_job_id=job)
             self.assertIsNotNone(receipt)
             self.assertEqual(receipt.exit_code, 0)
