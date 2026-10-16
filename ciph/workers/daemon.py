@@ -9,7 +9,8 @@ import hmac
 from typing import Optional, Dict, Any, List
 from ciph.workers.ipc_queue import IPCJobQueue
 from ciph.capabilities.registry import CapabilityRegistry
-from ciph.workers.receipts import JobState, ExecutionReceipt, OutcomeCategory
+from ciph.workers.receipts import JobState, ExecutionReceipt, OutcomeCategory, EffectCertainty
+from ciph.kernel.execution_gateway import GovernedPreExecutionRefusal
 from ciph.kernel.policy_engine import NetworkPolicy, AuthorizationTier, RiskTier, ExecutionLane
 from ciph.kernel.crypto_identity import ExecutionToken
 from ciph.memory.event_store import EventStore
@@ -39,6 +40,7 @@ class DurableWorkerDaemon:
         supervised: bool = False,
         heartbeat_interval: float = 10.0,
         heartbeat_lease_extension: int = 30,
+        retry_disposition: Optional[Any] = None,
     ):
         self.db_path = db_path
         self.trust_registry = trust_registry
@@ -94,6 +96,8 @@ class DurableWorkerDaemon:
         self.supervised = supervised
         self.heartbeat_interval = heartbeat_interval
         self.heartbeat_lease_extension = heartbeat_lease_extension
+        # The ONE disposition engine for post-failure governed jobs, injected by the composition boundary.
+        self.retry_disposition = retry_disposition
         self._watchdog_thread: Optional[threading.Thread] = None
         self._watchdog_stop: Optional[threading.Event] = None
         self._supervisor_thread: Optional[threading.Thread] = None
@@ -265,6 +269,189 @@ class DurableWorkerDaemon:
             worker_signature=None,
         ).sign(self.worker_secret_key, worker_key_id=self.worker_key_id)
 
+    def _resolve_job_canonical_scope(self, job):
+        """
+        Resolve the canonical ScopeGrant for this job EXACTLY ONCE (S3.4).
+
+        The reference is the one the governed request/permit path binds - never the token's embedded
+        copy and never descriptive queue metadata. Every execution-affecting decision consumes the
+        returned object: sandbox requirement, runner selection, broker access and the execution
+        request. Returns None when the job references no scope at all; raises a governed refusal when
+        a referenced scope cannot be resolved, because guessing is not an option.
+        """
+        import json as _json
+
+        from ciph.kernel.scope_grant_store import ScopeGrantStore
+
+        raw = job["execution_permit"] if "execution_permit" in job.keys() else None
+        if not raw:
+            return None
+        try:
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            from ciph.kernel.execution_authority import SignedExecutionPermit
+            permit = SignedExecutionPermit.from_dict(data)
+        except Exception:
+            return None
+        reference = permit.payload.scope_grant_id
+        if not reference or reference == "NONE":
+            return None
+        resolved = ScopeGrantStore(self.queue.db_path).resolve(reference)
+        if not resolved.resolvable:
+            raise GovernedPreExecutionRefusal(
+                f"SCOPE_REFERENCE_UNRESOLVED:{reference}:{resolved.outcome.value}"
+            )
+        return resolved.grant
+
+    def _dispose_post_claim_failure(self, *, job_id, permit_id, attempt_number):
+        """
+        Hand a post-claim failure to the ONE disposition engine.
+
+        The worker reports facts; the central transaction re-reads canonical queue state, permit
+        state and exact-attempt evidence, and DERIVES both retry safety and the remaining
+        execution-retry budget. Nothing here signs, bumps a generation, requeues, states an opinion
+        about whether a retry is safe, or reports a budget - the worker has neither to give.
+        """
+        if self.retry_disposition is None:
+            return None
+        try:
+            return self.retry_disposition(job_id=job_id, expected_permit_id=permit_id)
+        except Exception:
+            return None
+
+    def _post_claim_provenance(self, slot):
+        """
+        The canonical provenance block for a post-claim handler, plus its integrity condition.
+
+        Returns `(block, integrity_reason)`. It NEVER raises: a provenance corroboration failure
+        happens while the daemon is already handling the execution condition that brought it here, and
+        letting it propagate would replace "the body raised OriginalError" with "the handler raised
+        ClaimProvenanceConflict" - losing the primary fact. Callers record both: the primary condition
+        and, when present, the integrity reason, and fail closed into reconciliation.
+
+        A missing binding is not an error: it means execution never reached the claim, and this
+        post-claim machinery does not apply.
+        """
+        from ciph.kernel.permit_composition import build_durable_permit_consumer_dependencies
+        from ciph.kernel.retry_authority import (
+            ClaimProvenanceConflict,
+            ClaimProvenanceUnavailable,
+            canonical_claim_provenance,
+        )
+
+        if slot is None or getattr(slot, "binding", None) is None:
+            return None, None
+        try:
+            store = build_durable_permit_consumer_dependencies(
+                self.queue.db_path, trust_registry=self.trust_registry
+            ).permit_store
+            return canonical_claim_provenance(slot, store), None
+        except (ClaimProvenanceConflict, ClaimProvenanceUnavailable) as error:
+            return None, type(error).__name__
+
+    def _record_attempt_evidence(self, receipt):
+        """
+        Record a signed receipt as canonical attempt evidence, exactly once.
+
+        Evidence, not authority: a signed receipt is immutable and is the exact-attempt fact the
+        retry transition classifies. It MUST exist before the disposition reads it - recording it
+        afterwards made every governed failure look like NO_ATTRIBUTABLE_EVIDENCE, so a claimed
+        attempt could never be proven retry-safe. The receipt id guards against the double write that
+        a fallback reconciliation path would otherwise produce.
+        """
+        try:
+            if self.event_store is None or receipt is None:
+                return
+            receipt_id = getattr(receipt, "receipt_id", None)
+            if not receipt_id:
+                return
+            if self.event_store.get_events(aggregate_id=receipt_id, limit=1):
+                return
+            self.event_store.append_event(
+                "ExecutionReceiptStoredEvent", receipt_id, receipt.to_dict()
+            )
+        except Exception:
+            pass
+
+    def _execute_under_canonical_permit(self, *, cap, params, job, worker_id, exec_context):
+        """
+        Run the capability through the canonical guarded path.
+
+        The daemon deserializes the exact permit the durable job carries; it does not interpret the
+        token for authority. A missing or unreadable permit is a governed pre-execution refusal:
+        execution never began, so no PermitClaim, no execution_attempt_id and no provenance are
+        fabricated. Everything else - signature, expiry, revocation, consumption, capability
+        mismatch - is decided by the canonical authorizer and the permit store inside
+        `GuardedExecutor`, which owns the single claim transition.
+        """
+        import json as _json
+
+        from ciph.kernel.execution_authority import SignedExecutionPermit
+        from ciph.kernel.execution_gateway import ExecutionRequest, GuardedExecutor
+        from ciph.kernel.permit_composition import build_durable_permit_consumer_dependencies
+        from ciph.kernel.scope_grant_store import ScopeGrantStore
+
+        raw = job["execution_permit"] if "execution_permit" in job.keys() else None
+        if not raw:
+            raise GovernedPreExecutionRefusal("PERMIT_REQUIRED")
+        try:
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            permit = SignedExecutionPermit.from_dict(data)
+        except Exception as error:
+            raise GovernedPreExecutionRefusal(f"PERMIT_MALFORMED:{type(error).__name__}")
+
+        dependencies = build_durable_permit_consumer_dependencies(
+            self.queue.db_path, trust_registry=self.trust_registry
+        )
+
+        scope = None
+        reference = permit.payload.scope_grant_id
+        if reference and reference != "NONE":
+            resolved = ScopeGrantStore(self.queue.db_path).resolve(reference)
+            if not resolved.resolvable:
+                raise GovernedPreExecutionRefusal(
+                    f"SCOPE_REFERENCE_UNRESOLVED:{reference}:{resolved.outcome.value}"
+                )
+            scope = resolved.grant
+
+        request = ExecutionRequest(
+            capability=cap.manifest.name,
+            params=dict(params or {}),
+            target=(params or {}).get("target"),
+            scope_grant=scope,
+            logical_action_id=permit.payload.logical_action_id,
+            route="daemon.worker",
+        )
+        # The claim transition happens INSIDE GuardedExecutor: the attempt identity is born in the
+        # authoritative transaction and nowhere else.
+        # CLAIM-BOUND PROVENANCE. The builder runs only after the claim exists, so it can state
+        # WHICH attempt produced this evidence - permit id, digest, authorization generation and the
+        # real PermitClaim's execution_attempt_id. It reuses the existing governed-provenance block
+        # rather than growing the signed receipt schema, and it merges the trajectory the daemon
+        # already carries so nothing previously signed is dropped.
+        def _bind_claim_to_provenance(claim):
+            block = {
+                "authorization_provenance": "PROVENANCE_PERMIT_V1",
+                "execution_permit_id": permit.payload.permit_id,
+                "execution_permit_digest": permit.permit_digest(),
+                "execution_attempt_id": claim.execution_attempt_id,
+                "authorization_generation": int(permit.payload.authorization_generation or 0),
+                "logical_action_id": permit.payload.logical_action_id,
+            }
+            merged = dict(exec_context.get("provenance") or {})
+            merged["governed_authorization"] = block
+            # COPIED, not chosen: the binding the permit was signed over at issuance. The retry
+            # decision requires the evidence to attest this exact value, so a worker cannot widen a
+            # policy after the fact and a policy edit cannot reach backwards.
+            merged["replay_policy_digest"] = permit.payload.replay_policy_digest
+            return merged
+
+        executor = GuardedExecutor(dependencies.authorizer, permit_store=dependencies.permit_store)
+        result, _claim = executor.execute(
+            request, cap, exec_context, permit=permit, claimant=worker_id,
+            provenance_builder=_bind_claim_to_provenance,
+        )
+        return result
+
     def _execute_leased_job(self, job: Dict[str, Any], worker_id: str) -> Optional[ExecutionReceipt]:
         """Execute a leased job with heartbeat, HMAC signing, queue completion, and EventStore logging."""
         job_id = job['job_id']
@@ -284,12 +471,17 @@ class DurableWorkerDaemon:
         receipt = None
         execution_started = False
         stop_heartbeat = None
+        # EXECUTION-LOCAL slot. It must never be daemon-instance state: this daemon runs several
+        # worker threads, so a shared pointer would let job A's failure handler read job B's slot.
+        # A frame-local variable is per-invocation by construction.
+        from ciph.kernel.execution_gateway import ClaimBindingSlot
+        claim_binding_slot = ClaimBindingSlot()
         try:
             cap = self.registry.get(capability_name)
             if not cap:
                 err_msg = f"Capability '{capability_name}' not registered in worker."
                 err_results = {"error": err_msg}
-                err_receipt = ExecutionReceipt(
+                err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                     receipt_id=f"rcpt_fail_{uuid.uuid4().hex[:8]}",
                     job_id=job_id,
                     capability=capability_name,
@@ -343,7 +535,7 @@ class DurableWorkerDaemon:
 
             if token_required and not token_obj:
                 err_msg = f"AUTHORITY_VERIFICATION_FAILED: Capability '{capability_name}' ({manifest.authorization.value}) requires valid signed ExecutionToken. None provided."
-                err_receipt = ExecutionReceipt(
+                err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                     receipt_id=f"rcpt_auth_denied_{uuid.uuid4().hex[:8]}",
                     job_id=job_id,
                     capability=capability_name,
@@ -374,7 +566,7 @@ class DurableWorkerDaemon:
                 # Field 1: Expiration
                 if token_obj.expires_at > 0 and now > token_obj.expires_at:
                     err_msg = f"EXECUTION_TOKEN_EXPIRED: Token expired at {token_obj.expires_at}, current time {now}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_exp_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -400,7 +592,7 @@ class DurableWorkerDaemon:
                 # Field 2: Issued at (reject future timestamps)
                 if token_obj.issued_at > now + 5.0:
                     err_msg = f"EXECUTION_TOKEN_FUTURE_ISSUED: Token issued_at={token_obj.issued_at} > current time {now}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_future_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -433,7 +625,7 @@ class DurableWorkerDaemon:
                     )
                     if not is_valid_sig:
                         err_msg = f"EXECUTION_TOKEN_SIGNATURE_INVALID: {sig_err}."
-                        err_receipt = ExecutionReceipt(
+                        err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                             receipt_id=f"rcpt_tok_sig_err_{uuid.uuid4().hex[:8]}",
                             job_id=job_id,
                             capability=capability_name,
@@ -465,7 +657,7 @@ class DurableWorkerDaemon:
                             is_replayed = True
                 except Exception as dbe:
                     err_msg = f"STORAGE_UNAVAILABLE: Failed to query persistent token replay status from database: {dbe}"
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_storage_qry_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -493,7 +685,7 @@ class DurableWorkerDaemon:
 
                 if is_replayed:
                     err_msg = f"EXECUTION_TOKEN_REPLAYED: Token ID '{token_obj.token_id}' or nonce was already executed."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_replay_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -519,7 +711,7 @@ class DurableWorkerDaemon:
                 # Field 5: Capability match
                 if token_obj.capability != capability_name:
                     err_msg = f"EXECUTION_TOKEN_MISMATCH: Token capability '{token_obj.capability}' != requested '{capability_name}'."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_mismatch_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -545,7 +737,7 @@ class DurableWorkerDaemon:
                 # Field 4: Parameters hash
                 if token_obj.parameters_hash != computed_p_hash:
                     err_msg = f"EXECUTION_TOKEN_PARAMS_HASH_MISMATCH: expected {token_obj.parameters_hash}, got {computed_p_hash}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_param_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -572,7 +764,7 @@ class DurableWorkerDaemon:
                 expected_lane = manifest.derive_execution_lane().value
                 if token_obj.execution_lane != expected_lane:
                     err_msg = f"EXECUTION_TOKEN_LANE_MISMATCH: expected {expected_lane}, got {token_obj.execution_lane}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_lane_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -599,7 +791,7 @@ class DurableWorkerDaemon:
                 expected_step_id = job.get('step_id') or getattr(token_obj, 'step_id', None)
                 if expected_step_id and token_obj.step_id != expected_step_id:
                     err_msg = f"EXECUTION_TOKEN_STEP_ID_MISMATCH: expected {expected_step_id}, got {token_obj.step_id}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_step_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -633,7 +825,7 @@ class DurableWorkerDaemon:
                 )
                 if not is_valid_p_hash:
                     err_msg = f"EXECUTION_TOKEN_PLAN_HASH_MISMATCH: expected {expected_plan_hash}, got {token_obj.plan_hash}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_plan_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -660,7 +852,7 @@ class DurableWorkerDaemon:
                 expected_m_hash = manifest.compute_manifest_hash()
                 if token_obj.manifest_hash != expected_m_hash:
                     err_msg = f"EXECUTION_TOKEN_MANIFEST_HASH_MISMATCH: expected {expected_m_hash}, got {token_obj.manifest_hash}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_mhash_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -686,7 +878,7 @@ class DurableWorkerDaemon:
                 # Field 9: Manifest version
                 if token_obj.manifest_version != manifest.version:
                     err_msg = f"EXECUTION_TOKEN_MANIFEST_VERSION_MISMATCH: expected {manifest.version}, got {token_obj.manifest_version}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_mver_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -713,7 +905,7 @@ class DurableWorkerDaemon:
                 worker_cls = getattr(self, "worker_class", "DEFAULT")
                 if token_obj.authorized_worker_class not in ("ALL", worker_cls, worker_id):
                     err_msg = f"EXECUTION_TOKEN_WORKER_CLASS_UNAUTHORIZED: Token authorized for '{token_obj.authorized_worker_class}', worker is '{worker_cls}'."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_wcls_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -739,7 +931,7 @@ class DurableWorkerDaemon:
                 # Field 11: Max attempts
                 if token_obj.max_attempts <= 0:
                     err_msg = f"EXECUTION_TOKEN_MAX_ATTEMPTS_INVALID: max_attempts={token_obj.max_attempts} <= 0."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_attempts_inv_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -765,7 +957,7 @@ class DurableWorkerDaemon:
                 attempt_num = attempt_number
                 if attempt_num > token_obj.max_attempts:
                     err_msg = f"EXECUTION_TOKEN_ATTEMPTS_EXCEEDED: attempt {attempt_num} exceeds max_attempts {token_obj.max_attempts}."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_attempts_exc_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -792,7 +984,7 @@ class DurableWorkerDaemon:
                 if manifest.authorization == AuthorizationTier.MANDATORY_INTERRUPT:
                     if not token_obj.authorization_grant_id or token_obj.authorization_grant_id in ("NONE", ""):
                         err_msg = f"EXECUTION_TOKEN_MISSING_GRANT: Capability '{capability_name}' requires AuthorizationGrant bound in token."
-                        err_receipt = ExecutionReceipt(
+                        err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                             receipt_id=f"rcpt_tok_no_grant_{uuid.uuid4().hex[:8]}",
                             job_id=job_id,
                             capability=capability_name,
@@ -833,7 +1025,7 @@ class DurableWorkerDaemon:
 
                     if not grant_verified:
                         err_msg = f"EXECUTION_TOKEN_GRANT_UNVERIFIED: Authorization grant '{token_obj.authorization_grant_id}' is invalid, unverified, expired, or mismatched."
-                        err_receipt = ExecutionReceipt(
+                        err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                             receipt_id=f"rcpt_tok_bad_grant_{uuid.uuid4().hex[:8]}",
                             job_id=job_id,
                             capability=capability_name,
@@ -877,7 +1069,7 @@ class DurableWorkerDaemon:
                 if err_reason == "TOKEN_EXPIRED":
                     now_ts = time.time()
                     err_msg = f"EXECUTION_TOKEN_EXPIRED: Token expired at {tok_exp}, current time {now_ts} immediately prior to consumption."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_exp_race_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -904,7 +1096,7 @@ class DurableWorkerDaemon:
                     return err_receipt
                 elif err_reason == "TOKEN_REPLAYED":
                     err_msg = f"EXECUTION_TOKEN_REPLAYED: Token ID '{token_id}' or nonce was already consumed (uniqueness constraint violated)."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_replay_race_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -931,7 +1123,7 @@ class DurableWorkerDaemon:
                     return err_receipt
                 elif err_reason and str(err_reason).startswith("STORAGE_FAILURE"):
                     err_msg = f"STORAGE_UNAVAILABLE: Failed to atomically consume execution token: {err_reason}"
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_tok_storage_err_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -958,7 +1150,7 @@ class DurableWorkerDaemon:
                     return err_receipt
                 else:
                     err_msg = f"LEASE_LOST_BEFORE_EXECUTION: Worker '{worker_id}' failed to transition job '{job_id}' to EXECUTING (lease lost or expired)."
-                    err_receipt = ExecutionReceipt(
+                    err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                         receipt_id=f"rcpt_lease_lost_{uuid.uuid4().hex[:8]}",
                         job_id=job_id,
                         capability=capability_name,
@@ -999,18 +1191,15 @@ class DurableWorkerDaemon:
             from ciph.kernel.policy_engine import is_sandboxed_execution_required
             from ciph.contracts.enums import ScopeType
 
-            scope_obj = None
-            if token_obj and token_obj.scope_payload_json:
-                from ciph.contracts.grants import ScopeGrant
-                scope_obj = ScopeGrant.from_dict(json.loads(token_obj.scope_payload_json))
-                if scope_obj.scope_id != token_obj.scope_grant_id or scope_obj.is_expired():
-                    raise PermissionError("SIGNED_SCOPE_BINDING_INVALID")
+            # S3.4: ONE canonical resolution. The token's embedded scope copy is no longer
+            # consulted for any execution-affecting decision.
+            canonical_scope = self._resolve_job_canonical_scope(job)
 
             is_sandboxed = is_sandboxed_execution_required(
                 capability_name=capability_name,
                 manifest=manifest,
                 cap_instance=cap,
-                scope_grant=scope_obj if 'scope_obj' in locals() else None,
+                scope_grant=canonical_scope,
                 execution_token=token_obj,
                 code_origin=self.registry.code_origin(capability_name)
             )
@@ -1037,7 +1226,7 @@ class DurableWorkerDaemon:
                     return {"status":"RECONCILIATION_REQUIRED","job_id":job_id}
                 end_t=time.time()
                 result=sbx_res.data if sbx_res.data is not None else {"error":sbx_res.stderr}
-                raw_receipt=ExecutionReceipt(receipt_id='rcpt_evolution_'+uuid.uuid4().hex,job_id=job_id,
+                raw_receipt=ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, receipt_id='rcpt_evolution_'+uuid.uuid4().hex,job_id=job_id,
                     capability=capability_name,target=params.get('target'),started_at=exec_start_t,completed_at=end_t,
                     input_hash=ExecutionReceipt.hash_payload(params),output_hash=ExecutionReceipt.hash_payload(result),
                     exit_code=sbx_res.exit_code if sbx_res.exit_code is not None else 1,
@@ -1115,7 +1304,7 @@ class DurableWorkerDaemon:
                     max_wall_time_seconds=float(manifest.timeout_seconds),
                 )
                 from ciph.kernel.sandbox.runner import RootlessContainerRunner
-                container_required = scope_obj and scope_obj.scope_type == ScopeType.CONTAINER_SANDBOX
+                container_required = canonical_scope and canonical_scope.scope_type == ScopeType.CONTAINER_SANDBOX
                 runner = RootlessContainerRunner() if container_required else (self.sandbox_runner or OfflineSandboxRunner())
                 diag = runner.probe_containment(sbx_policy)
                 if diag.overall == "UNAVAILABLE":
@@ -1173,7 +1362,7 @@ class DurableWorkerDaemon:
                         if not token_obj or token_obj.source_policy_hash != expected_source_hash:
                             raise PermissionError("EXTERNAL_SOURCE_CHANGED_AFTER_AUTHORIZATION")
                         broker = getattr(self, "evidence_broker", None) or TorEvidenceBroker()
-                        observation = broker.fetch(external_source, target=params.get("target"), scope=scope_obj)
+                        observation = broker.fetch(external_source, target=params.get("target"), scope=canonical_scope)
                         child_payload = {"success": True, "observation": observation}
                         broker_transport = "TOR_SOCKS5_REMOTE_DNS_PINNED"
                     except Exception as exc:
@@ -1251,7 +1440,7 @@ class DurableWorkerDaemon:
                     outcome_cat = OutcomeCategory.TIMEOUT
 
                 token_hash = token_obj.token_hash() if token_obj else ""
-                raw_receipt = ExecutionReceipt(
+                raw_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                     receipt_id=f"rcpt_sbx_{uuid.uuid4().hex[:12]}",
                     job_id=job_id,
                     capability=capability_name,
@@ -1294,7 +1483,9 @@ class DurableWorkerDaemon:
                     worker_secret_key=self.worker_secret_key
                 )
                 execution_started = True
+                # The frame-local slot created above; single-assignment, validated before authorize.
                 exec_context = {
+                    "claim_binding_slot": claim_binding_slot,
                     "job_id": job_id,
                     "worker_id": worker_id,
                     "worker_context": worker_ctx,
@@ -1317,7 +1508,10 @@ class DurableWorkerDaemon:
                         "reversibility": manifest.reversibility.value
                     } if token_obj else {"reversibility": manifest.reversibility.value}
                 }
-                raw_receipt = cap.execute(params, context=exec_context)
+                raw_receipt = self._execute_under_canonical_permit(
+                    cap=cap, params=params, job=job, worker_id=worker_id,
+                    exec_context=exec_context,
+                )
                 end_t = time.time()
 
             # Ensure receipt worker_id and attempt_number match the executing lease holder
@@ -1357,17 +1551,43 @@ class DurableWorkerDaemon:
             # Atomic Single-Transaction Commit to Queue and EventStore
             if receipt.exit_code == 0:
                 try:
+                    # ONE ATOMIC COMPLETION. The terminal receipt, the job's terminal state and the
+                    # permit's consumption are one proposition: a resolved attempt must not stay
+                    # CLAIMED, because `CLAIMED` means "authority spent, outcome NOT yet resolved".
+                    _binding = getattr(claim_binding_slot, "binding", None)
+                    _consumer = None
+                    if _binding is not None:
+                        try:
+                            from ciph.kernel.permit_composition import (
+                                build_durable_permit_consumer_dependencies,
+                            )
+                            _consumer = build_durable_permit_consumer_dependencies(
+                                self.queue.db_path, trust_registry=self.trust_registry
+                            ).permit_store
+                        except Exception:
+                            # The execution SUCCEEDED and its receipt is authoritative; failing the
+                            # completion because the consumer could not be built would turn a real
+                            # effect into a reconciliation. Leave the permit CLAIMED and let Gate
+                            # Zero report the outstanding completion instead.
+                            _consumer = None
+
+                    def _consume_resolved_attempt(conn):
+                        if _consumer is None:
+                            return
+                        _consumer.consume(_binding.permit_id, worker_id, conn=conn)
+
                     commit_rowid = self.queue.complete_job_and_append_receipt_event(
                         job_id=job_id,
                         worker_id=worker_id,
-                        receipt_dict=receipt.to_dict()
+                        receipt_dict=receipt.to_dict(),
+                        within_transaction=_consume_resolved_attempt,
                     )
                     if commit_rowid:
                         with self._worker_lock:
                             self._total_processed += 1
                     if not commit_rowid:
                         err_msg = f"COMMIT_FAILED_LEASE_LOST: Atomic completion commit failed for job '{job_id}' on worker '{worker_id}' (lease lost, reclaimed, or expired during execution)."
-                        receipt = ExecutionReceipt(
+                        receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                             receipt_id=f"rcpt_commit_lost_{uuid.uuid4().hex[:8]}",
                             job_id=job_id,
                             capability=capability_name,
@@ -1404,6 +1624,35 @@ class DurableWorkerDaemon:
             else:
                 with self._worker_lock:
                     self._total_failed += 1
+                # ONE DISPOSITION ENGINE, non-exception path. A claimed failure is handed to the
+                # canonical transition, which decides retry / reconcile / terminal. Without this the
+                # legacy path refuses (correctly) and the row would sit in EXECUTING.
+                # EVIDENCE BEFORE DISPOSITION. The failure receipt IS the canonical evidence the
+                # retry transition classifies, so it must exist before the transition reads it.
+                self._record_attempt_evidence(receipt)
+                _binding = getattr(claim_binding_slot, "binding", None)
+                _governed = bool(job.get("execution_permit"))
+                _disposition = self._dispose_post_claim_failure(
+                    job_id=job_id,
+                    permit_id=(_binding.permit_id if _binding is not None else None),
+                    attempt_number=attempt_number,
+                )
+                if _governed:
+                    # A governed job's post-failure lifecycle belongs to the central transition
+                    # ALONE. `applied` means it settled the row (retry / redeliver / reconcile /
+                    # terminal); a refusal means the row already moved and this report is stale.
+                    # Either way this path mutates nothing.
+                    if _disposition is None:
+                        # No disposition engine is wired. Fail closed into uncertainty instead of
+                        # leaving a claimed job runnable - the worker may not choose a disposition.
+                        try:
+                            self.queue.mark_reconciliation_required(
+                                job_id, worker_id, "RETRY_DISPOSITION_NOT_CONFIGURED", receipt.to_dict()
+                            )
+                        except Exception:
+                            pass
+                        return self._uncommitted_receipt(receipt, "RETRY_DISPOSITION_NOT_CONFIGURED")
+                    return receipt
                 if (receipt.side_effects or manifest.reversibility.value != "READ_ONLY"):
                     try:
                         self.queue.mark_reconciliation_required(job_id, worker_id, "EXECUTION_EFFECTS_UNCERTAIN", receipt.to_dict())
@@ -1419,7 +1668,7 @@ class DurableWorkerDaemon:
                     )
                     if not fail_rowid:
                         err_msg = f"COMMIT_FAILED_LEASE_LOST: Atomic failure commit failed for job '{job_id}' on worker '{worker_id}' (lease lost, reclaimed, or expired during execution)."
-                        receipt = ExecutionReceipt(
+                        receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                             receipt_id=f"rcpt_commit_fail_lost_{uuid.uuid4().hex[:8]}",
                             job_id=job_id,
                             capability=capability_name,
@@ -1464,12 +1713,48 @@ class DurableWorkerDaemon:
                 except Exception:
                     pass
 
+        except GovernedPreExecutionRefusal as refusal:
+            # A known governance refusal is a REFUSED TRANSITION, not a failed execution.
+            #
+            # The claim transition - not activation and not lease acquisition - is the point after
+            # which execution uncertainty becomes possible. Here no PermitClaim was created, no
+            # execution_attempt_id exists and nothing ran, so there is nothing to reconcile.
+            reason = getattr(refusal, "reason", type(refusal).__name__)
+            err_msg = f"GOVERNED_REFUSAL: {reason}"
+            refusal_receipt = ExecutionReceipt.issue(
+                effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value,
+                receipt_id=f"rcpt_refused_{uuid.uuid4().hex[:8]}",
+                job_id=job_id,
+                capability=capability_name,
+                target=params.get("target") if isinstance(params, dict) else None,
+                started_at=start_t,
+                completed_at=time.time(),
+                input_hash=ExecutionReceipt.hash_payload(params),
+                output_hash=ExecutionReceipt.hash_payload({"error": err_msg}),
+                exit_code=1,
+                outcome=OutcomeCategory.POLICY_BLOCKED,
+                results={"error": err_msg, "reason": reason},
+                side_effects=[],
+                idempotency_key=idemp_key,
+                attempt_number=attempt_number,
+                requested_network_policy=NetworkPolicy.OFFLINE_ONLY,
+                actual_transport_used="NONE_GOVERNANCE_REFUSED",
+                worker_id=worker_id,
+                error_message=err_msg,
+            ).sign(self.worker_secret_key, worker_key_id=self.worker_key_id)
+            try:
+                self.queue.fail_job_and_append_receipt_event(
+                    job_id, worker_id, err_msg, refusal_receipt.to_dict()
+                )
+            except Exception:
+                pass
+            return refusal_receipt
         except Exception as ex:
             import traceback
             tb_str = traceback.format_exc()
             with self._worker_lock:
                 self._total_failed += 1
-            err_receipt = ExecutionReceipt(
+            err_receipt = ExecutionReceipt.issue(effect_certainty=EffectCertainty.EFFECT_UNKNOWN.value, 
                 receipt_id=f"rcpt_fail_{uuid.uuid4().hex[:8]}",
                 job_id=job_id,
                 capability=capability_name,
@@ -1493,10 +1778,39 @@ class DurableWorkerDaemon:
             ).sign(self.worker_secret_key, worker_key_id=self.worker_key_id)
             receipt = err_receipt
             if execution_started:
+                # POST-CLAIM failure. Record the primary condition AND the claim attribution, using
+                # the one canonical helper. If corroboration itself fails, the integrity reason is
+                # attached alongside - never instead of - the execution condition, and the outcome is
+                # reconciliation: execution uncertainty exists even when attribution cannot be
+                # verified. Never POLICY_BLOCKED, never a retry generation.
+                block, integrity_reason = self._post_claim_provenance(claim_binding_slot)
+                extra = {"primary_condition": f"{type(ex).__name__}: {ex}"}
+                if block is not None:
+                    extra["governed_authorization"] = block
+                if integrity_reason is not None:
+                    extra["claim_provenance_integrity"] = integrity_reason
                 try:
-                    self.queue.mark_reconciliation_required(job_id, worker_id, str(ex), err_receipt.to_dict())
+                    err_d = err_receipt.to_dict()
+                    err_d["results"] = {**(err_d.get("results") or {}), **extra}
+                    err_receipt = ExecutionReceipt.from_dict(err_d)
                 except Exception:
                     pass
+                # ONE DISPOSITION ENGINE. Hand the post-claim failure to the central transition,
+                # which re-reads canonical state and decides. The worker only reports facts.
+                # EVIDENCE BEFORE DISPOSITION (see the non-exception path): the signed failure
+                # receipt is this exact attempt's canonical evidence and must exist before the
+                # transition that classifies it runs.
+                self._record_attempt_evidence(err_receipt)
+                disposition = self._dispose_post_claim_failure(
+                    job_id=job_id,
+                    permit_id=(block or {}).get("execution_permit_id"),
+                    attempt_number=attempt_number,
+                )
+                if not (disposition is not None and disposition.applied):
+                    try:
+                        self.queue.mark_reconciliation_required(job_id, worker_id, str(ex), err_receipt.to_dict())
+                    except Exception:
+                        pass
                 return self._uncommitted_receipt(err_receipt, f"WORKER_EXCEPTION_AFTER_ACTIVATION: {ex}")
             try:
                 self.queue.fail_job_and_append_receipt_event(job_id, worker_id, str(ex), err_receipt.to_dict())
