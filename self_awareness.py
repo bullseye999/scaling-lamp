@@ -19,8 +19,8 @@ class SelfAwareness:
     - Identifies real problems from usage patterns
     - Proposes meaningful upgrades
     - Writes the upgrade code itself via unified CiphRouter
-    - Creates proposal files for the operator to review with empirical benchmarks
-    - Nothing touches existing files without operator approval
+    - Creates proposal files for operator to review with empirical benchmarks
+    - Nothing touches existing files without operator's approval
     """
 
     CIPH_MODULES = [
@@ -300,7 +300,7 @@ class SelfAwareness:
             return ""
 
         try:
-            res = self.router.think(prompt, history=[], dynamic_prompt=system_msg, temperature=0.2)
+            res = self.router.think(prompt, history=[], system_prompt=system_msg, temperature=0.2)
             code = res.replace("```python", "").replace("```", "").strip()
             return code
         except Exception as e:
@@ -459,7 +459,7 @@ class SelfAwareness:
                 "Current triggers include darknet, exploit, vulnerability etc. "
                 "Write 10 additional trigger phrases I should add to OLLAMA_TOPICS list "
                 "as a Python list called ADDITIONAL_TRIGGERS. "
-                "Focus on: OPSEC topics, personal/emotional topics the operator might discuss, "
+                "Focus on: OPSEC topics, personal/emotional topics operator might discuss, "
                 "security testing topics. Keep it as a simple Python list assignment."
             )
             if code:
@@ -486,7 +486,7 @@ class SelfAwareness:
             return code
         return None
     # ─────────────────────────────────────────────
-    # PROPOSAL FILES — What the operator reviews
+    # PROPOSAL FILES — What operator reviews
     # ─────────────────────────────────────────────
 
     def _save_proposal_file(self, proposal_id: str, filename: str, content: str,
@@ -494,7 +494,7 @@ class SelfAwareness:
                              module: str, is_new_file: bool = True):
         """
         Save a proposal as a readable file in ciph_proposals/.
-        This is what the operator sees and reviews before approving.
+        This is what operator sees and reviews before approving.
         """
         # Legacy keyword/LLM proposal writers have no evidence or evaluation grant.
         # Approved candidates are staged by runtime.evolution.evaluate(), which
@@ -570,7 +570,7 @@ class SelfAwareness:
 
     def apply_upgrade(self, proposal_id: str) -> str:
         """
-        Operator approved. Apply the upgrade using CodeStagingManager's safe pipeline:
+        operator approved. Apply the upgrade using CodeStagingManager's safe pipeline:
         - Creates safety backup in ciph_backups/
         - Verifies AST syntax
         - Atomically writes file
