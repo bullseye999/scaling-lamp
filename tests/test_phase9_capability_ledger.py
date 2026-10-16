@@ -200,7 +200,7 @@ class TestPhase9CapabilityLedger(unittest.TestCase):
     def _activate(self, receipt, token):
         """Exercise the actual atomic queue boundary for positive evidence fixtures."""
         with patch("time.time", return_value=receipt.started_at):
-            self.queue.enqueue_job(receipt.capability, {"x": 1}, max_retries=token.max_attempts,
+            self.queue.enqueue_legacy_job_for_test(receipt.capability, {"x": 1}, max_retries=token.max_attempts,
                                    job_id=receipt.job_id, idempotency_key=receipt.idempotency_key,
                                    execution_token=token)
             self.assertIsNotNone(self.queue.lease_next_job(receipt.worker_id, target_job_id=receipt.job_id))
