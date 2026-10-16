@@ -15,6 +15,7 @@ class TestCompleteEvolution(Phase8Case):
         proposal=service.operator_proposal(report.verification_evidence_hash,str(self.target))
         self.assertIn('diff',proposal);self.assertIn('hypothesis',proposal)
         grant=self.deployment(evidence=report.verification_evidence_hash)
+        self.adopt_and_promote()   # R7: activation needs a canonical promotion
         ok,message,cid=service.deploy(grant);self.assertTrue(ok,message)
         self.assertEqual(self.target.read_text(),BASE)
         self.assertEqual(service.run_canary(cid,{'x':2,'y':3})['status'],'ACTIVE')
@@ -59,11 +60,13 @@ class TestCompleteEvolution(Phase8Case):
         grant=self.deployment(permitted_stages=('SHADOW','CANARY'),allow_auto_promotion=False)
         _,cid,_=self.activate(grant=grant);self.assertEqual(self.finish(cid)['status'],'AWAITING_OPERATOR')
         production=replace(grant,grant_id='PROD-'+uuid.uuid4().hex,permitted_stages=('PRODUCTION',)).sign(self.op_priv)
+        self.adopt_and_promote()   # R7: activation needs a canonical promotion
         result=self.coordinator().approve_production(cid,production)
         self.assertEqual(result['status'],'PROMOTED',result);self.assertEqual(self.target.read_text(),CANDIDATE)
     def test_live_regression_restores_baseline(self):
         code=CANDIDATE.replace('params.get("x",0)+params.get("y",0)','(999 if params.get("x")==100 else params.get("x",0)+params.get("y",0))')
         service=self.coordinator();grant=self.deployment(code)
+        self.adopt_and_promote(code)   # R7: activation needs a canonical promotion
         ok,message,cid=service.deploy(grant);self.assertTrue(ok,message)
         service.run_canary(cid,{'x':2,'y':3});service.run_canary(cid,{'x':2,'y':3})
         result=self.runtime.route_and_execute('math.compute',{'x':100,'y':3})
@@ -71,7 +74,9 @@ class TestCompleteEvolution(Phase8Case):
         self.assertEqual(self.target.read_text(),BASE)
         self.assertEqual(service.canaries.get_canary(cid).status.value,'ROLLED_BACK')
     def test_restart_recovers_production_routing(self):
-        service=self.coordinator();grant=self.deployment();ok,message,cid=service.deploy(grant);self.assertTrue(ok,message)
+        service=self.coordinator();grant=self.deployment()
+        self.adopt_and_promote()   # R7: activation needs a canonical promotion
+        ok,message,cid=service.deploy(grant);self.assertTrue(ok,message)
         service.run_canary(cid,{'x':2,'y':3});service.run_canary(cid,{'x':2,'y':3})
         from ciph.runtime import CiphRuntime
         restarted=CiphRuntime(db_path=self.trust.db_path)
