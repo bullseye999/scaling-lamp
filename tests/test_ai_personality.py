@@ -30,7 +30,10 @@ from cipher_vault import CipherVault
 # Create minimal CiphCore for testing
 class TestCiph:
     def __init__(self):
-        self.vault = CipherVault()
+        # Throwaway vault: the default path is the operator's live vault.
+        import tempfile as _tempfile
+        root = _tempfile.mkdtemp(prefix="ciph_personality_test_")
+        self.vault = CipherVault(f"{root}/vault.db", f"{root}/key", f"{root}/salt")
         from enhanced_conversation import CiphConversation
         self.conversation = CiphConversation(self.vault)
         self.ai_enabled = True
