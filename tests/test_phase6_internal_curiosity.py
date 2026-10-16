@@ -15,6 +15,7 @@ from phase5_test_support import EpistemicTestCase, memory_claim, claim, Evidence
 from ciph.contracts.base import ContractValidationError
 from ciph.contracts.enums import NetworkPolicy
 from ciph.kernel.network_sandbox import NetworkPolicyViolation, enforce_network_policy
+from ciph.kernel.policy_engine import ScopeGrant, ScopeType
 from ciph.perception.curiosity_question import CuriosityQuestion, CuriosityQuestionDAG, QuestionStatus
 from ciph.perception.curiosity_daemon import CuriosityDaemon
 from ciph.planner.schemas import IntentProposal
@@ -56,7 +57,7 @@ class TestPhase6InternalCuriosity(EpistemicTestCase):
         params = {'target': 'local_memory', 'key': 'phase6-record'}
         from ciph.kernel.policy_engine import ScopeGrant, ScopeType
         proof = self.runtime.route_and_execute('memory.retrieve', params, context={'scope_grant': ScopeGrant(
-            scope_id='scope_curiosity_ro', scope_type=ScopeType.LOCAL_SYSTEM,
+            scope_id=f'scope_curiosity_ro-{time.time_ns()}', scope_type=ScopeType.LOCAL_SYSTEM,
             allowed_targets=['local_memory'], valid_until=time.time()+60)})
         self.assertEqual(proof.exit_code, 0)
         for i in range(101):
@@ -295,8 +296,17 @@ class TestPhase6InternalCuriosity(EpistemicTestCase):
     def test_crash_after_receipt_commit_recovers_reserved_question(self):
         q = self.question()
         attempt = self.runtime.question_dag.store.reserve(q.question_id, 12, 12)
-        self.runtime.execute_reference_loop(IntentProposal(proposal_id=attempt['proposal_id'],
-            objective=q.question_text, proposed_capability=q.capability, provided_parameters=q.parameters))
+        # The reference loop is target-bearing, so it must present the authority to touch that
+        # target. The fixture establishes the same read-only scope the curiosity daemon uses.
+        self.runtime.execute_reference_loop(
+            IntentProposal(proposal_id=attempt['proposal_id'], objective=q.question_text,
+                           proposed_capability=q.capability, provided_parameters=q.parameters),
+            scope_grant=ScopeGrant(
+                scope_id=f"scope_crash_recovery:{q.question_id}",
+                scope_type=ScopeType.LOCAL_SYSTEM,
+                allowed_targets=[q.target_subject],
+            ),
+        )
         self.runtime.question_dag.store.replay()
         with patch.object(self.runtime, 'execute_reference_loop') as execute:
             results = self.runtime.run_curiosity_cycle()
