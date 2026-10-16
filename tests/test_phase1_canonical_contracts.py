@@ -1454,10 +1454,9 @@ class TestFinding4CrossProcessHashDeterminism(unittest.TestCase):
     def test_set_parameters_cross_process_determinism(self):
         import subprocess, sys, os
 
-        repo_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
         script = """
 import sys, os
-sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.environ.get("CIPH_TEST_ROOT", os.getcwd()))
 from ciph.contracts import PlanStep
 from ciph.workers.receipts import ExecutionReceipt
 
@@ -1466,11 +1465,12 @@ step = PlanStep(step_id="step_test", capability="test.cap", parameters=params)
 p_hash = step.compute_params_hash()
 r_hash = ExecutionReceipt.hash_payload(params)
 print(f"{p_hash}:{r_hash}")
-""".replace("REPO_ROOT", repr(repo_root))
+"""
         seeds = ["1", "42", "1337", "99999", "54321"]
         outputs = []
         for s in seeds:
-            env = dict(os.environ, PYTHONHASHSEED=s)
+            env = dict(os.environ, PYTHONHASHSEED=s,
+                           CIPH_TEST_ROOT=os.path.abspath(os.path.dirname(__file__)))
             out = subprocess.check_output([sys.executable, "-c", script], env=env).decode().strip()
             outputs.append(out)
 
