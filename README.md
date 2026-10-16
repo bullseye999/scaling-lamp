@@ -243,6 +243,30 @@ A successful process exit is evidence that a job ran; it is not automatically pr
 
 ---
 
+## Governed Agent Capabilities (the `ciph/` layer)
+
+Beyond the domain engines, `ciph/` implements the governed-agent architecture. Each line is an owning
+module that other modules *reference*; the censuses check the tree, not the docs.
+
+**Governed execution & memory (4.x)**
+- Typed capability manifests, five execution lanes, deterministic receipts, durable SQLite workers with leases/heartbeats/recovery, and a restricted-AST DAG planner with compensation and rollback.
+- Continuity (4.1), the epistemic ledger and belief revision (4.2), world + self model with the capability ladder (4.3), governed curiosity (4.4), the improvement crucible (4.5), and meta-evolution (4.7).
+- SHA-256 hash-chained event store, materialised worldview, claim leases and supersession.
+
+**Governed autonomy (5.x)**
+- Operator-registered schedules, a pure eligibility function (mode → authority → risk → budget → conflict), resource ceilings (invocation-count and token), operator quiescence/emergency stop, idempotent work identity, and constitutional idleness.
+
+**Swarm (6.x) · Federation (7.x) · Recovery (8.x) · CiphOS (9.x)**
+- Worker registrations, generations and delegations (6.x); federation nodes, keys and partition handling, **loopback only** (7.x); the recovery engine and fencing (8.x); system-scope boot/isolation primitives (9.x, **HOLD — needs a privileged host**).
+
+**Cognitive layer (10.x)**
+- Referential & conversational continuity, a sensory fabric, architectural proprioception, operational awareness, selective attention, governed reflexes, operational homeostasis, independent expeditions, incubation (hypotheses ≠ findings), a personality policy that stores no facts, a single model boundary, an executable 36-boundary integration map, evidence reconciliation, and rule-governed evidence publication.
+
+**The model boundary**
+- One canonical entry for inference (DeepSeek V4 Pro by default). It records the provider, the model actually served, the output and its digest, usage and any refusal. An **empty completion is a failure**, never an answer; `REASONING_BUDGET_EXHAUSTED` is distinguished from `EMPTY_MODEL_OUTPUT`; deterministic reconciliation is never credited as model reasoning.
+
+---
+
 ## Implementation Status
 
 | Area | Current boundary |
