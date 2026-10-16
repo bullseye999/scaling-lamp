@@ -1,0 +1,23 @@
+ai:
+  max_tokens: 1000
+  model: claude-3-sonnet-20240229
+  temperature: 0.7
+environment: development
+modules:
+  memory:
+    auto_cleanup_days: 30
+    enabled: true
+  osint:
+    enabled: true
+    scan_interval_hours: 6
+  scheduler:
+    enabled: true
+    start_on_launch: true
+  security:
+    auto_backup_hours: 12
+    enabled: true
+security:
+  auto_wipe_timeout_hours: 24
+  backup_retention_days: 7
+  max_session_hours: 8
+version: '0.7'
