@@ -25,6 +25,8 @@ import unittest
 from typing import Dict, Any, Optional
 
 from ciph.workers.ipc_queue import IPCJobQueue
+from permit_test_support import enqueue_permit_bearing_queue_job
+from permit_test_support import central_retry_disposition
 from ciph.workers.daemon import DurableWorkerDaemon
 from ciph.workers.receipts import JobState, OutcomeCategory, ExecutionReceipt, compute_idempotency_key
 from ciph.capabilities.registry import CapabilityRegistry
@@ -112,12 +114,20 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             num_workers=4,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
         job_ids = []
         for i in range(12):
-            jid = self.queue.enqueue_job("test.concurrent", {"value": i})
+            jid = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.concurrent", params={"value": i}
+            ).job_id
             job_ids.append(jid)
 
         daemon.start()
@@ -172,7 +182,11 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             supervised=True,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
         daemon.start()
 
@@ -200,7 +214,11 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             self.assertEqual(daemon.active_workers_count(), 3, "Supervisor must maintain exactly 3 live worker threads")
 
             # Verify queue processing works on the respawned worker threads
-            jid = self.queue.enqueue_job("test.supervisor", {"value": 42})
+            jid = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.supervisor", params={"value": 42}
+            ).job_id
             completed = False
             for _ in range(30):
                 j = self.queue.get_job(jid)
@@ -231,10 +249,18 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             watchdog_interval=0.1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
-        job_id = self.queue.enqueue_job("test.watchdog", {"value": 10}, max_retries=2)
+        job_id = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.watchdog", params={"value": 10}, max_retries=2
+            ).job_id
 
         # Worker A leases with very short TTL (0.05s) and dies before mark_executing
         leased = self.queue.lease_next_job("worker_doomed_pre", lease_ttl_seconds=0.05, target_job_id=job_id)
@@ -277,10 +303,18 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             watchdog_interval=0.1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
-        job_id = self.queue.enqueue_job("test.inflight", {"value": 77}, max_retries=3)
+        job_id = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.inflight", params={"value": 77}, max_retries=3
+            ).job_id
 
         # Worker leases and calls mark_executing
         leased = self.queue.lease_next_job("worker_crashed_mid", lease_ttl_seconds=0.05, target_job_id=job_id)
@@ -352,7 +386,11 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             num_workers=2,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
         plan_id = "plan_test_idemp_99"
@@ -366,13 +404,12 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
         lock = threading.Lock()
 
         def do_enqueue():
-            jid = self.queue.enqueue_job(
-                capability="test.idemp",
-                params=params,
-                idempotency_key=idemp_key,
-                plan_id=plan_id,
-                step_id=step_id
-            )
+            jid = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.idemp", params=params,
+                idempotency_key=idemp_key, plan_id=plan_id, step_id=step_id,
+            ).job_id
             with lock:
                 enqueued_ids.append(jid)
 
@@ -426,23 +463,37 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             num_workers=1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
-        job_id = self.queue.enqueue_job("test.failing", {"value": 1}, max_retries=2)
+        job_id = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.test_db,
+                capability="test.failing", params={"value": 1}, max_retries=2
+            ).job_id
         daemon.start()
         try:
             terminal = False
             for _ in range(40):
                 j = self.queue.get_job(job_id)
-                if j and j["status"] == JobState.FAILED.value:
+                if j and j["status"] in (JobState.FAILED.value, "RECONCILIATION_REQUIRED"):
                     terminal = True
-                    self.assertEqual(j["attempt_number"], 2)
                     break
                 time.sleep(0.1)
 
-            self.assertTrue(terminal, "Job must transition to FAILED after max_retries is exhausted")
-            self.assertEqual(cap.execution_count, 2)
+            self.assertTrue(terminal, "the job must reach a terminal disposition")
+            # THE NEW LAW: a claimed failure with no attributable effect evidence is NOT retried.
+            # The old expectation (retry until FAILED) encoded the queue's own counter, which is no
+            # longer the retry authority - the atomic disposition owns it now.
+            self.assertEqual(
+                self.queue.get_job(job_id)["status"], "RECONCILIATION_REQUIRED",
+                "an uncertain claimed attempt reconciles rather than being blindly re-executed",
+            )
+            self.assertEqual(cap.execution_count, 1, "no second execution without canonical evidence")
 
             # Subsequent lease should find no work
             leased = self.queue.lease_next_job("worker_check", lease_ttl_seconds=10)
@@ -467,10 +518,18 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             num_workers=1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
-        job_id = self.queue.enqueue_job("test.slow", {"value": 100})
+        job_id = enqueue_permit_bearing_queue_job(
+            queue=self.queue, trust_registry=self.trust_registry,
+            operator_private_key=self.operator_priv, db_path=self.test_db,
+            capability="test.slow", params={"value": 100},
+        ).job_id
         # Lease with very short TTL
         leased = self.queue.lease_next_job("worker_slow", lease_ttl_seconds=0.05, target_job_id=job_id)
         self.assertIsNotNone(leased)
@@ -527,10 +586,18 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             num_workers=1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
-        job_id = self.queue.enqueue_job("test.crash_exc", {"value": 5}, max_retries=1)
+        job_id = enqueue_permit_bearing_queue_job(
+            queue=self.queue, trust_registry=self.trust_registry,
+            operator_private_key=self.operator_priv, db_path=self.test_db,
+            capability="test.crash_exc", params={"value": 5}, max_retries=1,
+        ).job_id
         receipt = daemon.drain_once(worker_id="worker_exc_01")
 
         self.assertIsNotNone(receipt)
@@ -567,11 +634,19 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             heartbeat_lease_extension=1,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
 
         # Enqueue job
-        job_id = self.queue.enqueue_job("test.long_running", {"value": 7})
+        job_id = enqueue_permit_bearing_queue_job(
+            queue=self.queue, trust_registry=self.trust_registry,
+            operator_private_key=self.operator_priv, db_path=self.test_db,
+            capability="test.long_running", params={"value": 7},
+        ).job_id
 
         # Lease with 0.2s TTL (shorter than task duration 0.4s)
         leased = self.queue.lease_next_job("worker_hb_test", lease_ttl_seconds=0.2, target_job_id=job_id)
@@ -623,7 +698,11 @@ class TestPhase3WorkerDaemonsAndCrashRecovery(unittest.TestCase):
             supervised=True,
             worker_secret_key=self.worker_priv,
             trust_registry=self.trust_registry,
-            strict_tokens=False
+            strict_tokens=False,
+            retry_disposition=central_retry_disposition(
+                db_path=self.test_db, queue=self.queue, event_store=self.event_store,
+                trust_registry=self.trust_registry, operator_private_key=self.operator_priv,
+            ),
         )
         daemon.start()
         try:
