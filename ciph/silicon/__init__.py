@@ -1,7 +1,10 @@
 """
-ciph.silicon - The Silicon Sovereign: Hardware Root of Trust & Post-Quantum Boundary (Stage 10).
-Hardware Security Module (HSM) enclave key isolation, physical human presence confirmation,
-and NIST ML-DSA lattice-based post-quantum signature verification.
+ciph.silicon - PLACEHOLDER / NOT ENABLED (Stage 10 scaffold).
+
+NOT IMPLEMENTED. There is no HSM, no enclave, no physical presence confirmation and no
+post-quantum signature scheme here. The module imports `hmac` and performs symmetric
+operations. It must not be described as hardware-rooted or post-quantum until those exist
+and are verified. Register item 0.10; decisions D3/D7.
 """
 
 from .hardware_root import (
