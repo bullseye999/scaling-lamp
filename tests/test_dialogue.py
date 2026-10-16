@@ -5,7 +5,11 @@ from enhanced_conversation import CiphConversation
 from cipher_vault import CipherVault
 
 def test_conversation():
-    vault = CipherVault()
+    # Throwaway vault: the default path is the operator's live vault, and this module runs at
+    # discovery time in whatever directory the suite was started from.
+    import tempfile
+    root = tempfile.mkdtemp(prefix="ciph_dialogue_test_")
+    vault = CipherVault(f"{root}/vault.db", f"{root}/key", f"{root}/salt")
     ciph = CiphConversation(vault)
     
     test_inputs = [
