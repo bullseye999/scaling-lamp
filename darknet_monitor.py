@@ -87,7 +87,7 @@ class DarknetMonitor:
         }
 
         # ── CREDENTIAL LEAK PATTERNS ──
-        # Only checks for the operator's own identifiers — never used to look up others
+        # Only checks for operator's own identifiers — never used to look up others
         self.monitored_identifiers: List[str] = []  # Add with add_identifier()
 
     # ─────────────────────────────────────────────
@@ -472,10 +472,50 @@ class DarknetMonitor:
                 'time': datetime.now().isoformat()
             })
 
+        # ── 10.0 REFERENTIAL CONTINUITY ─────────────────────────────────────────────
+        # The scan that produced these alerts COMMITS A DURABLE RESULT SET, so the findings have identities
+        # that outlive this process. Without it, "show me the twenty alerts" has nothing durable to point
+        # at, and the only way to answer would be to run the scan again - the substitution 10.0 forbids.
+        # Identity lives in the referential owner; each finding still only REFERENCES a 4.2 observation.
+        results['result_set'] = self._commit_scan_alerts(self.alerts)
+
         print(f"🌑 SCAN COMPLETE — {results['total_alerts']} total alerts, {results['critical_count']} critical")
         print("=" * 50)
 
         return results
+
+    def _commit_scan_alerts(self, alerts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Give a completed scan DURABLE identity through the 10.0 owner.
+
+        A scan is a genuine NEW observation of the world, so it commits as a new result set: the findings
+        reference real 4.2 observations, and two scans produce two distinct sets rather than one mutating
+        blob. A failure here is REPORTED, never faked - the scan result still stands, but the durable
+        identity is honestly marked unavailable instead of being invented.
+        """
+        db_path = getattr(self.vault, 'db_path', None)
+        if not db_path or not alerts:
+            return None
+        try:
+            from ciph.kernel.epistemic_ledger import record_observation
+            from ciph.kernel.referential_continuity import record_new_scan
+            findings = []
+            for alert in alerts:
+                message = str(alert.get('message', ''))
+                source_ref = str(alert.get('type', 'DARKNET_ALERT'))
+                observation = record_observation(db_path, source_ref=source_ref, raw_text=message)
+                findings.append({'source_ref': source_ref,
+                                 'evidence_ref': observation['observation_id'],
+                                 'observation_ref': observation['observation_id'],
+                                 'summary': message})
+            committed = record_new_scan(
+                db_path,
+                investigation_ref=f"DARKNET-SCAN:{self.last_scan.isoformat() if self.last_scan else ''}",
+                findings=findings)
+            return {'result_set_id': committed['result_set_id'], 'count': committed['count'],
+                    'revision': committed['revision']}
+        except Exception as exc:
+            return {'unavailable': True, 'reason': type(exc).__name__, 'detail': str(exc)[:80]}
 
     def get_scan_summary(self, results: Dict[str, Any]) -> str:
         """Generate a readable summary for Ciph to report back"""
@@ -613,7 +653,7 @@ class DarknetMonitor:
 
     def cluster_threat_signals(self, results: Optional[Dict[str, Any]] = None) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Triage darknet threats into the operator's 3 strategic tiers:
+        Triage darknet threats into operator's 3 strategic tiers:
         - Tier 1: Actionable 0-Days, RCE, Auth Bypass, High Bounties
         - Tier 2: Secondary enterprise framework patches
         - Tier 3: General background noise
