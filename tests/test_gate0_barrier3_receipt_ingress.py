@@ -42,7 +42,7 @@ class TestGate0Barrier3ReceiptIngress(unittest.TestCase):
         """complete_job_and_append_receipt_event rejects unauthenticated receipts without worker signature."""
         params = {"a": 10, "b": 20}
         token = self.runtime.mint_execution_token("math.multiply", params)
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="math.multiply",
             params=params,
             execution_token=token
@@ -85,7 +85,7 @@ class TestGate0Barrier3ReceiptIngress(unittest.TestCase):
         """complete_job_and_append_receipt_event rejects non-empty forged signatures."""
         params = {"a": 10, "b": 20}
         token = self.runtime.mint_execution_token("math.multiply", params)
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="math.multiply",
             params=params,
             execution_token=token
@@ -128,7 +128,7 @@ class TestGate0Barrier3ReceiptIngress(unittest.TestCase):
         """complete_job_and_append_receipt_event rejects receipt whose input_hash does not match token parameters_hash."""
         legit_params = {"a": 10, "b": 20}
         token = self.runtime.mint_execution_token("math.multiply", legit_params)
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="math.multiply",
             params=legit_params,
             execution_token=token
@@ -172,7 +172,7 @@ class TestGate0Barrier3ReceiptIngress(unittest.TestCase):
         """complete_job_and_append_receipt_event accepts valid signed receipt bound to token."""
         params = {"a": 10, "b": 20}
         token = self.runtime.mint_execution_token("math.multiply", params)
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="math.multiply",
             params=params,
             idempotency_key="idemp_test",
@@ -217,7 +217,7 @@ class TestGate0Barrier3ReceiptIngress(unittest.TestCase):
         """A transient storage fault must fail loudly, not be swallowed into a bare 0."""
         params = {"a": 10, "b": 20}
         token = self.runtime.mint_execution_token("math.multiply", params)
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="math.multiply",
             params=params,
             idempotency_key="idemp_storage_fault",
