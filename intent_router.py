@@ -4,6 +4,9 @@
 import re
 from typing import Tuple, Optional
 
+from typing import Any, Dict  # noqa: E402
+
+
 class IntentRouter:
     """
     Lightweight pre-LLM classifier.
@@ -120,6 +123,29 @@ class IntentRouter:
         }
 
         self.learned_mappings = {}
+
+    def classify_referential(self, user_input: str, *, db_path: str,
+                             actor: Optional[str] = None) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        THE retrieval hook, placed where routing actually happens.
+
+        `classify` maps bare phrases like "show me alerts" to a command that RE-RUNS the scan, and anything
+        carrying a qualifier ("the twenty alerts", "number seven") misses that regex and falls through to
+        CONSULT - which is how a follow-up question could produce fresher findings and call them the
+        announced ones. So a retrieval request is recognised BEFORE either path, answered from durable
+        evidence, and never satisfied by running the tool again. When nothing is stored the caller is told
+        there is nothing, because a new scan is a NEW result set, not a retrieval.
+        """
+        from ciph.kernel.referential_continuity import resolve_conversational_reference
+        resolution = resolve_conversational_reference(db_path, user_input, actor=actor)
+        if resolution.get("answered_from_evidence"):
+            return "RETRIEVAL", resolution
+        # A refusal or an ambiguity is SURFACED rather than swallowed: "I cannot retrieve that, and here is
+        # why" is a better answer than silence, and silence is the gap the model used to fill.
+        if (resolution.get("ambiguous") or resolution.get("no_stored_result_set")
+                or resolution.get("reason")):
+            return "CONSULT", resolution
+        return "CONSULT", None
 
     def classify(self, user_input: str) -> Tuple[str, Optional[str]]:
         text = user_input.strip().lower()
