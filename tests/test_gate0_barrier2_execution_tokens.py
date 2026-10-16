@@ -50,6 +50,22 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
             except Exception:
                 pass
 
+    def governed_job(self, *, capability, params, execution_token=None, idempotency_key=None,
+                     plan_id="PLAN_STANDALONE", step_id="STEP_STANDALONE"):
+        """Enqueue through the canonical permit pipeline.
+
+        The transport token under test must ride a governed job: a permitless row is refused before
+        the token is ever examined, so a token-replay specimen on that row would prove nothing.
+        """
+        from permit_test_support import enqueue_permit_bearing_job
+        target = (params or {}).get("target")
+        return enqueue_permit_bearing_job(
+            self.runtime, capability=capability, params=params,
+            scope_targets=[target] if target else None,
+            execution_token=execution_token, idempotency_key=idempotency_key,
+            plan_id=plan_id, step_id=step_id, max_retries=1,
+        ).job_id
+
     def test_direct_enqueue_mandatory_interrupt_without_token_blocked_by_worker(self):
         """
         Assessor Finding 4 Remediation:
@@ -57,7 +73,7 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
         without grant or token MUST NOT reach capability execution.
         """
         # Directly enqueue code.promote_upgrade without token
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="code.promote_upgrade",
             params={"proposal_id": "PROP-UNAUTHORIZED-01"},
             plan_id="p_exploit",
@@ -109,7 +125,7 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
 
         # 1. Queue ingress rejects forged token
         with self.assertRaises(ValueError) as ctx:
-            self.runtime.queue.enqueue_job(
+            self.runtime.queue.enqueue_legacy_job_for_test(
                 capability="pentest.cvss_calculate",
                 params=params,
                 plan_id="p_forged_sig",
@@ -146,7 +162,7 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
 
         # 1. Queue ingress rejects expired token
         with self.assertRaises(ValueError) as ctx:
-            self.runtime.queue.enqueue_job(
+            self.runtime.queue.enqueue_legacy_job_for_test(
                 capability="pentest.cvss_calculate",
                 params=params,
                 plan_id="p_expired",
@@ -177,7 +193,7 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
 
         # Enqueue with TAMPERED parameters (attacker altered vector)
         tampered_params = {"vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:R/S:C/C:L/I:L/A:N", "target": "audit"}
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="pentest.cvss_calculate",
             params=tampered_params,
             execution_token=token
@@ -199,22 +215,18 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
         )
 
         # 1. First execution: succeeds
-        job_id_1 = self.runtime.queue.enqueue_job(
-            capability="pentest.cvss_calculate",
-            params=params,
-            execution_token=token,
-            idempotency_key="idemp_run_1"
+        job_id_1 = self.governed_job(
+            capability="pentest.cvss_calculate", params=params,
+            execution_token=token, idempotency_key="idemp_run_1",
         )
         leased_1 = self.runtime.queue.lease_next_job(worker_id="worker_sentinel")
         receipt_1 = self.runtime.worker_daemon._execute_leased_job(leased_1, worker_id="worker_sentinel")
         self.assertEqual(receipt_1.exit_code, 0)
 
         # 2. Second execution attempt with identical token_id: rejected as replay
-        job_id_2 = self.runtime.queue.enqueue_job(
-            capability="pentest.cvss_calculate",
-            params=params,
-            execution_token=token,
-            idempotency_key="idemp_run_2"
+        job_id_2 = self.governed_job(
+            capability="pentest.cvss_calculate", params=params,
+            execution_token=token, idempotency_key="idemp_run_2",
         )
         leased_2 = self.runtime.queue.lease_next_job(worker_id="worker_sentinel")
         receipt_2 = self.runtime.worker_daemon._execute_leased_job(leased_2, worker_id="worker_sentinel")
@@ -229,11 +241,9 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
             params=params
         )
 
-        job_id = self.runtime.queue.enqueue_job(
-            capability="pentest.cvss_calculate",
-            params=params,
-            execution_token=token,
-            idempotency_key="idemp_legit_001"
+        job_id = self.governed_job(
+            capability="pentest.cvss_calculate", params=params,
+            execution_token=token, idempotency_key="idemp_legit_001",
         )
         leased = self.runtime.queue.lease_next_job(worker_id="worker_sentinel")
         receipt = self.runtime.worker_daemon._execute_leased_job(leased, worker_id="worker_sentinel")
@@ -252,7 +262,7 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
             capability="pentest.cvss_calculate",
             params=params
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="pentest.cvss_calculate",
             params=params,
             execution_token=token
@@ -297,17 +307,13 @@ class TestGate0Barrier2ExecutionTokens(unittest.TestCase):
             capability="pentest.cvss_calculate",
             params=params
         )
-        job_id_1 = self.runtime.queue.enqueue_job(
-            capability="pentest.cvss_calculate",
-            params=params,
-            execution_token=token,
-            idempotency_key="idemp_conc_1"
+        job_id_1 = self.governed_job(
+            capability="pentest.cvss_calculate", params=params,
+            execution_token=token, idempotency_key="idemp_conc_1",
         )
-        job_id_2 = self.runtime.queue.enqueue_job(
-            capability="pentest.cvss_calculate",
-            params=params,
-            execution_token=token,
-            idempotency_key="idemp_conc_2"
+        job_id_2 = self.governed_job(
+            capability="pentest.cvss_calculate", params=params,
+            execution_token=token, idempotency_key="idemp_conc_2",
         )
 
         leased_1 = self.runtime.queue.lease_next_job(worker_id="worker_sentinel_1")
