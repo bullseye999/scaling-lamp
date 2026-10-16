@@ -32,7 +32,7 @@ class TestGate0CrashReconciliation(unittest.TestCase):
 
     def test_leased_job_unexecuted_reclaims_to_retrying(self):
         """Worker dies before calling mark_executing -> Safely transitions to RETRYING."""
-        job_id = self.queue.enqueue_job(
+        job_id = self.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "k1"},
             plan_id="plan_unexecuted",
@@ -56,7 +56,7 @@ class TestGate0CrashReconciliation(unittest.TestCase):
 
     def test_executing_job_crashed_transitions_to_reconciliation_required(self):
         """Worker crashes mid-flight during EXECUTING -> Transitions to RECONCILIATION_REQUIRED (no blind retry)."""
-        job_id = self.queue.enqueue_job(
+        job_id = self.queue.enqueue_legacy_job_for_test(
             capability="cloud.provision",
             params={"target": "remote_vps_cluster"},
             plan_id="plan_crashed",
@@ -91,7 +91,7 @@ class TestGate0CrashReconciliation(unittest.TestCase):
         import hashlib
         from ciph.kernel.crypto_identity import Ed25519KeyManager
 
-        job_id = self.queue.enqueue_job(
+        job_id = self.queue.enqueue_legacy_job_for_test(
             capability="cloud.provision",
             params={"target": "remote_vps_cluster"},
             plan_id="plan_recon",
