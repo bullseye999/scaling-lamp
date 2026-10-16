@@ -8,6 +8,8 @@ Tests:
 """
 
 import os
+from ciph.kernel.policy_engine import ScopeGrant
+from ciph.contracts.enums import ScopeType
 import time
 import unittest
 from ciph.runtime import CiphRuntime
@@ -52,7 +54,11 @@ class TestGate0Barrier4NoDirectExecute(unittest.TestCase):
         try:
             receipt = self.runtime.route_and_execute(
                 "pentest.cvss_calculate",
-                {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "target": "audit"}
+                {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "target": "audit"},
+                context={"scope_grant": ScopeGrant(
+                    scope_id="scope_barrier4_blocked", scope_type=ScopeType.LOCAL_SYSTEM,
+                    allowed_targets=["audit"],
+                ).sign(self.runtime.kernel_priv_bytes, signing_key_id=self.runtime.kernel_key_id)},
             )
             self.assertIsNotNone(receipt)
             self.assertEqual(receipt.exit_code, 1)
@@ -66,6 +72,15 @@ class TestGate0Barrier4NoDirectExecute(unittest.TestCase):
         original_drain = self.runtime.dag_executor.worker_daemon.drain_once
         self.runtime.dag_executor.worker_daemon.drain_once = lambda worker_id, target_job_id=None: None
 
+        # The step is target-bearing, so the fixture establishes the exact authority it references
+        # before the durable reference is written; the planner only resolves what already exists.
+        self.runtime.scope_grant_store().persist(
+            ScopeGrant(
+                scope_id="scope_barrier4_dag",
+                scope_type=ScopeType.LOCAL_SYSTEM,
+                allowed_targets=["audit"],
+            )
+        )
         dag = ExecutionDAG(
             plan_id="PLAN-NO-FALLBACK-01",
             objective="Test fail closed step",
@@ -73,6 +88,7 @@ class TestGate0Barrier4NoDirectExecute(unittest.TestCase):
                 PlanStep(
                     step_id="S1",
                     capability="pentest.cvss_calculate",
+                    scope_grant_id="scope_barrier4_dag",
                     parameters={"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "target": "audit"}
                 )
             ]
@@ -113,6 +129,10 @@ class TestGate0Barrier4NoDirectExecute(unittest.TestCase):
         governed = self.runtime.route_and_execute(
             "pentest.cvss_calculate",
             {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "target": "audit"},
+            context={"scope_grant": ScopeGrant(
+                scope_id="scope_barrier4_governed", scope_type=ScopeType.LOCAL_SYSTEM,
+                allowed_targets=["audit"],
+            ).sign(self.runtime.kernel_priv_bytes, signing_key_id=self.runtime.kernel_key_id)},
         )
         self.assertEqual(governed.exit_code, 0)
         self.assertEqual(governed.outcome, OutcomeCategory.SUCCESS)
