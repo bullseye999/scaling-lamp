@@ -42,6 +42,9 @@ def generate_environment_fingerprint() -> str:
 
 
 from ciph.contracts.enums import (
+    EFFECT_CERTAINTY_CUTOVER_SCHEMA,
+    EffectCertainty,
+    schema_at_least,
     JobState,
     ProjectionState,
     ExecutionOutcome,
@@ -80,6 +83,59 @@ class ExecutionReceipt:
     error_message: Optional[str] = None      # Structured error detail if failed
     provenance: Dict[str, Any] = field(default_factory=dict)
     schema_version: str = "4.1"
+    # Known schemas only. Version-aware comparison decides cutover semantics *after* a schema
+    # is recognised; it never grants forward compatibility. A future 4.3 may carry an
+    # authority-critical field this parser would silently ignore while applying 4.2 rules.
+    KNOWN_RECEIPT_SCHEMAS = ("4.0", "1.0", "4.1", "4.2")
+    CURRENT_RECEIPT_SCHEMA = "4.2"
+    # Committed to the signature for schema >= 4.2. Absent means the receipt predates the
+    # certainty contract, which is interpretable historically but never newly issuable.
+    effect_certainty: Optional[str] = None
+
+    def __post_init__(self):
+        # 4.1 never carried certainty, so a receipt claiming it did is noncanonical rather than
+        # a richer 4.1. Accepting it would blur two schema contracts into one.
+        if str(self.schema_version) == "4.1" and self.effect_certainty:
+            raise ContractValidationError("EFFECT_CERTAINTY_NOT_IN_SCHEMA_4_1")
+
+        # A schema >= 4.2 receipt cannot be constructed without stating what happened to
+        # reality. Without this, the field would be optional decoration rather than evidence.
+        if schema_at_least(self.schema_version, EFFECT_CERTAINTY_CUTOVER_SCHEMA):
+            if not self.effect_certainty:
+                raise ContractValidationError(
+                    "EFFECT_CERTAINTY_REQUIRED_AT_OR_AFTER_CUTOVER"
+                )
+            try:
+                EffectCertainty(str(self.effect_certainty))
+            except ValueError as error:
+                raise ContractValidationError(
+                    f"UNKNOWN_EFFECT_CERTAINTY: {self.effect_certainty}"
+                ) from error
+
+    @classmethod
+    def issue(cls, effect_certainty, **fields):
+        """
+        The issuance path for new receipts: current schema only, certainty stated explicitly.
+
+        Certainty must come from independent evidence that the declared effect occurred - not
+        from the outcome. Deriving `EFFECT_CONFIRMED` from `SUCCESS` would recreate, one layer
+        up, the exact bug the strict metric exists to prevent.
+
+        There is deliberately no way to request an older schema here. Allowing a new execution
+        to emit 4.1 would reopen the legacy downgrade path through schema selection rather than
+        field omission, and the executor's conservative conclusion may legitimately be
+        `EFFECT_UNKNOWN` - but it must be an explicit conclusion, never a constructor default.
+        """
+        if "schema_version" in fields:
+            raise ContractValidationError("SCHEMA_VERSION_NOT_CALLER_SELECTABLE")
+        if not effect_certainty:
+            raise ContractValidationError("EFFECT_CERTAINTY_REQUIRED_FOR_ISSUANCE")
+        fields["schema_version"] = cls.CURRENT_RECEIPT_SCHEMA
+        # Accept either an EffectCertainty member or its string value. `str(member)` yields
+        # "EffectCertainty.EFFECT_UNKNOWN" under enum semantics, so normalising here keeps the
+        # issuance path honest for callers that pass the enum directly.
+        fields["effect_certainty"] = str(getattr(effect_certainty, "value", effect_certainty))
+        return cls(**fields)
 
     @staticmethod
     def hash_payload(data: Any) -> str:
@@ -127,7 +183,120 @@ class ExecutionReceipt:
             "started_at": float(self.started_at),
             "completed_at": float(self.completed_at),
         }
+        # Included only when present, so pre-cutover payloads keep byte-identical signatures.
+        if self.effect_certainty:
+            payload_data["effect_certainty"] = str(self.effect_certainty)
         return canonical_json(payload_data)
+
+    # Governed provenance rides inside the existing `provenance` dict, which is already part of
+    # the signature payload. A bare class attribute (no annotation) is not a dataclass field.
+    GOVERNED_PROVENANCE_KEY = "governed_authorization"
+
+    def has_governed_provenance(self) -> bool:
+        """True when this receipt carries an explicit authorization lineage."""
+        return bool((self.provenance or {}).get(self.GOVERNED_PROVENANCE_KEY))
+
+    def governed_claims(self):
+        """
+        The authorization lineage this receipt claims, or None.
+
+        None means *legacy*, explicitly: a receipt that predates permits. It never means
+        "governed but the fields went missing", because a governed receipt is signed over its
+        provenance block and cannot lose it without breaking its own signature.
+        """
+        block = (self.provenance or {}).get(self.GOVERNED_PROVENANCE_KEY)
+        if not block:
+            return None
+        from ciph.kernel.authorization_provenance import GovernedReceiptClaims
+        return GovernedReceiptClaims(
+            authorization_provenance=block.get("authorization_provenance", ""),
+            execution_permit_id=block.get("execution_permit_id", ""),
+            execution_permit_digest=block.get("execution_permit_digest", ""),
+            execution_attempt_id=block.get("execution_attempt_id", ""),
+            authorization_epoch=block.get("authorization_epoch"),
+        )
+
+    # Observational metadata deliberately excluded from terminal identity. It stays in the
+    # signed payload as authenticated evidence about where execution happened - it just must not
+    # decide whether two receipts describe the same terminal execution, or recovery on a
+    # different machine would raise false integrity incidents by design.
+    TERMINAL_IDENTITY_EXCLUDED = (
+        "environment_fingerprint",
+        "receipt_id",
+        "worker_id",
+        "backtrace",
+        "artifact_ref",
+    )
+
+    def terminal_identity_digest(self) -> str:
+        """
+        Do these receipts represent the same terminal execution fact?
+
+        A different question from receipt integrity, which asks whether the exact signed bytes
+        are authentic. Integrity stays byte-strict and immutable; terminal identity binds only
+        the fields that define the fact.
+        """
+        claims = self.governed_claims()
+        outcome_val = (
+            self.outcome.value if hasattr(self.outcome, "value") else str(self.outcome)
+        )
+        return self.hash_payload({
+            # Another hash with semantic meaning, so it gets its own namespace. Changing what
+            # constitutes "the same terminal fact" must produce V2, never silently redefine V1.
+            "_domain": "CIPH_TERMINAL_RECEIPT_IDENTITY_V1",
+            "execution_attempt_id": claims.execution_attempt_id if claims else "",
+            "execution_permit_id": claims.execution_permit_id if claims else "",
+            "execution_permit_digest": claims.execution_permit_digest if claims else "",
+            "capability": str(self.capability),
+            "target": str(self.target or ""),
+            "outcome": outcome_val,
+            "exit_code": int(self.exit_code),
+            "output_hash": str(self.output_hash),
+            "results_digest": self.hash_payload(self.results),
+            "error_class": str(self.error_class or ""),
+            "execution_started_at_us": int(round(float(self.started_at) * 1_000_000)),
+            "execution_finished_at_us": int(round(float(self.completed_at) * 1_000_000)),
+        })
+
+    def execution_facts(self):
+        """
+        What this receipt says happened: identity and timing, not authorization and not outcome.
+
+        Timestamps convert from the receipt's float seconds to integer microseconds, which is the
+        only time representation the permit domain uses.
+        """
+        from ciph.kernel.authorization_provenance import ExecutionFacts
+        return ExecutionFacts(
+            capability=self.capability,
+            execution_started_at_us=int(round(float(self.started_at) * 1_000_000)),
+            execution_finished_at_us=int(round(float(self.completed_at) * 1_000_000)),
+            execution_identity=self.worker_id,
+        )
+
+    def attach_governed_claims(self, claims) -> "ExecutionReceipt":
+        """
+        Return a copy carrying explicit governed provenance.
+
+        The claims are validated here, so an impossible combination - a governed lane with no
+        permit reference, or a legacy lane citing one - is refused at construction rather than
+        left for a verifier to notice later.
+        """
+        claims.validate_construction()
+        block = {
+            "authorization_provenance": claims.authorization_provenance,
+            "execution_permit_id": claims.execution_permit_id,
+            "execution_permit_digest": claims.execution_permit_digest,
+            "execution_attempt_id": claims.execution_attempt_id,
+            "authorization_epoch": claims.authorization_epoch,
+        }
+        data = asdict(self)
+        data["provenance"] = {
+            **(self.provenance or {}),
+            self.GOVERNED_PROVENANCE_KEY: block,
+        }
+        data["outcome"] = self.outcome
+        data["requested_network_policy"] = self.requested_network_policy
+        return ExecutionReceipt(**data)
 
     def sign(self, secret_key: bytes, worker_key_id: Optional[str] = None) -> "ExecutionReceipt":
         """Produce an Ed25519-signed or HMAC-signed copy of this ExecutionReceipt."""
@@ -299,7 +468,10 @@ class ExecutionReceipt:
             d["schema_version"] = "4.1"
         elif ver == "4.1":
             d["schema_version"] = "4.1"
+        elif ver == "4.2":
+            d["schema_version"] = ver
         else:
+            # Unknown future versions are refused, not interpreted under current rules.
             raise ContractValidationError(f"Unsupported ExecutionReceipt schema_version: '{ver}'")
 
         if 'outcome' in d and isinstance(d['outcome'], str):
