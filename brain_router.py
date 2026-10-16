@@ -44,8 +44,9 @@ class BrainRouter:
         'monero', 'xmr', 'mixing', 'tumbler', 'laundering',
         'darknet market', 'vendor', 'escrow',
 
-        # Sensitive personal matters (routed to the local model)
-        'personal identity', 'personal history', 'medical', 'legal', 'financial hardship',
+        # operator's story / deep personal
+        "god on earth", "sovereign", "untouchable", "the note",
+        "my story", "what i've been through",
 
         # Added via UP-006
         'operational security',
