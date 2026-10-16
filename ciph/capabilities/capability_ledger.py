@@ -21,11 +21,12 @@ from enum import Enum
 
 from ciph.memory.event_store import EventStore
 from ciph.capabilities.registry import CapabilityRegistry
+from ciph.kernel.manifest_identity import classify_manifest_binding
 from ciph.kernel.policy_engine import CapabilityManifest
 from ciph.kernel.crypto_identity import KeyRole, ExecutionToken
 from ciph.workers.receipts import ExecutionReceipt, generate_environment_fingerprint, JobState
 from ciph.contracts.enums import OutcomeCategory, NetworkPolicy
-from ciph.contracts.base import canonical_json
+from ciph.contracts.base import ContractValidationError, canonical_json
 
 
 # =====================================================================
@@ -346,7 +347,9 @@ class StrictHistoricalReceiptParser:
             return None, {"error": "INVALID_EXIT_CODE", "capability": cap_name}
 
         schema_ver = str(payload.get("schema_version", "4.1"))
-        if schema_ver not in ("4.0", "4.1"):
+        # Recognised schemas only. 4.2 is the current issuance schema, so newly-written receipts
+        # must round-trip here; unknown future versions are still refused, never interpreted.
+        if schema_ver not in ("4.0", "4.1", "4.2"):
             return None, {"error": "UNSUPPORTED_SCHEMA_VERSION", "capability": cap_name}
 
         results = payload.get("results")
@@ -395,34 +398,41 @@ class StrictHistoricalReceiptParser:
         else:
             side_effects = []
 
-        receipt = ExecutionReceipt(
-            receipt_id=receipt_id,
-            job_id=job_id,
-            capability=cap_name,
-            target=payload.get("target"),
-            started_at=started_at,
-            completed_at=completed_at,
-            input_hash=str(payload.get("input_hash", "")),
-            output_hash=output_hash,
-            exit_code=exit_code,
-            outcome=outcome,
-            results=results,
-            side_effects=side_effects,
-            idempotency_key=payload.get("idempotency_key"),
-            attempt_number=attempt_num,
-            requested_network_policy=policy,
-            actual_transport_used=str(payload.get("actual_transport_used", "UNKNOWN")),
-            worker_id=str(payload.get("worker_id", "")),
-            worker_signature=payload.get("worker_signature"),
-            worker_key_id=payload.get("worker_key_id"),
-            artifact_ref=payload.get("artifact_ref"),
-            environment_fingerprint=str(raw_fingerprint) if raw_fingerprint is not None else "",
-            error_class=payload.get("error_class"),
-            backtrace=payload.get("backtrace"),
-            error_message=payload.get("error_message"),
-            provenance=provenance,
-            schema_version=schema_ver
-        )
+        try:
+            receipt = ExecutionReceipt(
+                receipt_id=receipt_id,
+                job_id=job_id,
+                capability=cap_name,
+                target=payload.get("target"),
+                started_at=started_at,
+                completed_at=completed_at,
+                input_hash=str(payload.get("input_hash", "")),
+                output_hash=output_hash,
+                exit_code=exit_code,
+                outcome=outcome,
+                results=results,
+                side_effects=side_effects,
+                idempotency_key=payload.get("idempotency_key"),
+                attempt_number=attempt_num,
+                requested_network_policy=policy,
+                actual_transport_used=str(payload.get("actual_transport_used", "UNKNOWN")),
+                worker_id=str(payload.get("worker_id", "")),
+                worker_signature=payload.get("worker_signature"),
+                worker_key_id=payload.get("worker_key_id"),
+                artifact_ref=payload.get("artifact_ref"),
+                environment_fingerprint=str(raw_fingerprint) if raw_fingerprint is not None else "",
+                error_class=payload.get("error_class"),
+                backtrace=payload.get("backtrace"),
+                error_message=payload.get("error_message"),
+                provenance=provenance,
+                schema_version=schema_ver,
+                effect_certainty=payload.get("effect_certainty"),
+            )
+        except ContractValidationError as error:
+            # The certainty contract is enforced by the receipt itself, so this parser does not
+            # duplicate it. A 4.2 payload with no certainty is unverifiable evidence, not a scan
+            # failure and not a capability conflict.
+            return None, {"error": str(error), "capability": cap_name}
 
         has_complete_provenance = bool(
             provenance.get("execution_token_hash") and
@@ -434,10 +444,21 @@ class StrictHistoricalReceiptParser:
             provenance.get("step_id")
         )
 
+        # Manifest binding is reported, not acted upon. This makes the classification
+        # observable before any ledger behaviour depends on it, so the next step (exact-identity
+        # comparison) can be built against something already visible. CORRUPT deliberately does
+        # not fall through to LEGACY_UNVERSIONED: a malformed identity claim is corruption, and
+        # reinterpreting it as "this merely predates versioning" would launder it into history.
+        manifest_binding = classify_manifest_binding(provenance)
         metadata = {
             "has_explicit_fingerprint": raw_fingerprint is not None and str(raw_fingerprint).strip() != "",
             "raw_fingerprint": raw_fingerprint,
             "has_complete_provenance": has_complete_provenance,
+            "manifest_binding": manifest_binding.binding.value,
+            "manifest_identity": (
+                manifest_binding.identity.to_dict() if manifest_binding.identity else None
+            ),
+            "manifest_binding_reason": manifest_binding.reason,
             "bound_manifest_version": provenance.get("manifest_version"),
             "execution_token_hash": provenance.get("execution_token_hash"),
             "token_id": provenance.get("token_id"),
@@ -474,6 +495,33 @@ class CapabilityLedger:
         self.worker_secret_key = worker_secret_key
         self.trust_registry = trust_registry
         self.db_path = db_path or getattr(event_store, "db_path", "ciph_vault.db")
+
+    def build_static_dependency_evidence_map(self) -> Dict[str, Any]:
+        """
+        Static dependency evidence for every registered capability.
+
+        Register item 0.7: calling `compile_empirical_ledger()` without a dependency map
+        used to mark every capability DEPENDENCY_UNVERIFIED. That value reads like a real
+        verdict but is only the absence of an input. This is the same evidence path the
+        operator briefing and the idle maintenance engine already use, so a defaulted
+        compile now reports a measured dependency result rather than a missing one.
+        """
+        dep_map: Dict[str, Any] = {}
+        try:
+            manifests = self.registry.list_manifests()
+        except Exception:
+            return dep_map
+        checked_at = time.time()
+        environment = generate_environment_fingerprint()
+        for manifest in manifests:
+            declared = getattr(manifest, "declared_modules", ())
+            try:
+                dep_map[manifest.name] = StaticDependencyInspector.check_declared_modules(
+                    manifest.name, declared, environment, checked_at=checked_at
+                )
+            except Exception:
+                continue
+        return dep_map
 
     def compile_empirical_ledger(
         self,
@@ -1446,6 +1494,169 @@ class CapabilityLedger:
         cap = self.registry.get(cap_name)
         return cap.manifest if cap else None
 
+    # ------------------------------------------------------------------
+    # Exact-identity credit (D11). Thin on purpose: resolve, load, adapt, compose.
+    # ------------------------------------------------------------------
+    CREDIT_EVENT_READ_LIMIT = 100000
+
+    def _credit_verifier(self):
+        """
+        The verification oracle for this ledger's trust context.
+
+        Trust policy stays here, never in the adapter: the adapter is handed a verdict, so it never
+        decides which key, retirement window or timestamp rule applies. This delegates to the
+        receipt's own verification rather than restating a second verification law.
+        """
+        from ciph.kernel.storage_adapter import ReceiptVerificationResult
+
+        def verify(receipt):
+            if self.trust_registry is not None:
+                ok, reason = receipt.verify(self.trust_registry, current_time=time.time())
+                if ok:
+                    return ReceiptVerificationResult.verified(reason, trust_snapshot_ref="trust_registry")
+                if str(reason).startswith("KEY_NOT_FOUND"):
+                    return ReceiptVerificationResult.unverifiable(reason, trust_snapshot_ref="trust_registry")
+                return ReceiptVerificationResult.invalid(reason, trust_snapshot_ref="trust_registry")
+            if self.worker_secret_key is not None:
+                if receipt.verify_signature(self.worker_secret_key):
+                    return ReceiptVerificationResult.verified("VALID", trust_snapshot_ref="worker_secret_key")
+                return ReceiptVerificationResult.invalid(
+                    "SIGNATURE_MISMATCH", trust_snapshot_ref="worker_secret_key"
+                )
+            return ReceiptVerificationResult.unverifiable("NO_TRUST_CONTEXT")
+
+        return verify
+
+    def get_current_credit(self, capability_id: str, snapshot_ref: Optional[str] = None):
+        """
+        Authoritative exact-identity credit for one capability.
+
+        Deliberately boring: resolve the manifest, derive the subject, pin the metric, capture a
+        snapshot, load the stored receipts, adapt them, establish retrieval completeness, and
+        compose. It re-decides no law - receipt parsing, certainty semantics, manifest matching and
+        performance mapping all live below this method. If it ever grows a manifest-hash
+        comparison or an ancestor fallback, a second authority law has appeared.
+        """
+        from ciph.kernel.manifest_credit import (
+            CreditQuery,
+            CreditSubject,
+            IncidentScope,
+            assessment_from_complete_partition_scan,
+            compute_subject_credit,
+        )
+        from ciph.kernel.performance_metric import EXECUTION_SUCCESS_V1
+        from ciph.kernel.storage_adapter import StoredReceiptRecord, adapt_stored_receipt
+
+        manifest = self._get_manifest(capability_id)
+        if manifest is None:
+            raise ValueError(f"UNKNOWN_CAPABILITY: {capability_id}")
+        subject = CreditSubject.from_manifest(capability_id, manifest)
+
+        # A bounded exhaustive read is what makes a completeness claim honest: every canonical
+        # receipt event up to the boundary was examined. A truncated read cannot support one, so
+        # it produces no assessment rather than a fabricated VERIFIED_COMPLETE.
+        events = self.event_store.get_events(
+            event_type="ExecutionReceiptStoredEvent", limit=self.CREDIT_EVENT_READ_LIMIT
+        )
+        exhaustive = len(events) < self.CREDIT_EVENT_READ_LIMIT
+        boundary = max((event["event_id"] for event in events), default=0)
+        snapshot = snapshot_ref or f"event_id<={boundary}"
+
+        verify = self._credit_verifier()
+        records = []
+        projection_incidents = []
+        for event in events:
+            adapted = adapt_stored_receipt(
+                StoredReceiptRecord(receipt=event.get("payload") or {}), verify
+            )
+            records.append(adapted.record)
+            projection_incidents.extend(adapted.projection_incidents)
+
+        query = CreditQuery(subject=subject, metric_ref=EXECUTION_SUCCESS_V1, snapshot_ref=snapshot)
+        assessment = None
+        if exhaustive:
+            population_digest = hashlib.sha256(
+                json.dumps(
+                    [[event["event_id"], event.get("event_hash")] for event in events],
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            assessment = assessment_from_complete_partition_scan(
+                subject=subject,
+                metric_ref=EXECUTION_SUCCESS_V1,
+                snapshot_ref=snapshot,
+                source_ref="capability_ledger_event_scan",
+                source_digest=population_digest,
+            )
+
+        # Projection health belongs to the capability it describes. The read above spans the whole
+        # vault, so an unscoped list would surface another capability's mismatches in this result -
+        # the cross-capability leak the credit primitive already refuses at the evidence axis.
+        relevant_projection_incidents = [
+            incident for incident in projection_incidents
+            if incident.scope == IncidentScope.LEDGER_GLOBAL
+            or incident.capability == capability_id
+        ]
+
+        return compute_subject_credit(
+            query,
+            records,
+            retrieval_assessment=assessment,
+            projection_incidents=relevant_projection_incidents,
+        )
+
+    def get_lineage_credit_history(self, capability_id: str):
+        """
+        Diagnostic lineage context. **Non-authoritative by construction.**
+
+        The returned `LineageCreditHistory` carries no credit, no status and no authority flag, so a
+        policy written for `CurrentCreditResult` cannot consume it. Historical observations are
+        surfaced here - never as a current-population exclusion bucket, because a different manifest
+        identity is not a different metric.
+        """
+        from ciph.kernel.manifest_credit import (
+            AncestorEntry,
+            CreditSubject,
+            LineageCreditHistory,
+        )
+        from ciph.kernel.manifest_identity import ManifestBinding
+        from ciph.kernel.storage_adapter import StoredReceiptRecord, adapt_stored_receipt
+
+        manifest = self._get_manifest(capability_id)
+        if manifest is None:
+            raise ValueError(f"UNKNOWN_CAPABILITY: {capability_id}")
+        subject = CreditSubject.from_manifest(capability_id, manifest)
+        verify = self._credit_verifier()
+
+        events = self.event_store.get_events(
+            event_type="ExecutionReceiptStoredEvent", limit=self.CREDIT_EVENT_READ_LIMIT
+        )
+        observations_by_identity = {}
+        for event in events:
+            adapted = adapt_stored_receipt(
+                StoredReceiptRecord(receipt=event.get("payload") or {}), verify
+            )
+            record = adapted.record
+            attribution = record.capability_attribution
+            if attribution is None or attribution.capability_id != capability_id:
+                continue
+            if record.binding.binding != ManifestBinding.VERSIONED:
+                continue
+            identity = record.binding.identity
+            if identity == subject.manifest_identity:
+                continue
+            observations_by_identity[identity] = observations_by_identity.get(identity, 0) + 1
+
+        entries = tuple(
+            AncestorEntry(identity=identity, reason=f"{count}_historical_observations")
+            for identity, count in sorted(
+                observations_by_identity.items(), key=lambda item: item[0].manifest_hash
+            )
+        )
+        return LineageCreditHistory(
+            current_identity=subject.manifest_identity, ancestor_entries=entries
+        )
+
     def _empty_unavailable_profile(self, cap_name: str, reason: str = "SCAN_VERIFICATION_FAILED") -> EmpiricalCapabilityProfile:
         manifest = self._get_manifest(cap_name)
         is_registered = manifest is not None
@@ -1502,7 +1713,15 @@ class CapabilityLedger:
         except Exception:
             pass
 
-        dep_map = dependency_evidence_map or {}
+        # Register item 0.7. A caller-supplied map is authoritative, including an explicitly
+        # empty one. Omitting it entirely now means "measure it statically" rather than
+        # "report unknown for everything".
+        if dependency_evidence_map is None:
+            self.last_dependency_evidence_source = "STATIC_DEFAULT"
+            dep_map = self.build_static_dependency_evidence_map()
+        else:
+            self.last_dependency_evidence_source = "CALLER_SUPPLIED"
+            dep_map = dependency_evidence_map
         profiles: Dict[str, EmpiricalCapabilityProfile] = {}
 
         for cap_name in sorted(all_caps):
