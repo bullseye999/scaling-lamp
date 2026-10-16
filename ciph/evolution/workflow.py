@@ -123,6 +123,11 @@ class EvolutionCoordinator:
         return result
 
     def _install(self,canary_id):
+        # R7: registering a revision is production activation too, so it needs the same promotion.
+        allowed,detail=self.canaries.check_constitutional_promotion(self.canaries._load(canary_id) or {})
+        if not allowed:
+            self.store.record('EVOLUTION_ROUTING_REFUSED',{'canary_id':canary_id,'reason':detail})
+            raise PermissionError('PRODUCTION_ACTIVATION_REFUSED:'+detail)
         from ciph.evolution.production import EvolutionRevisionCapability
         proxy=EvolutionRevisionCapability(self.canaries,canary_id)
         self.runtime.registry.register(proxy,code_origin='external')
