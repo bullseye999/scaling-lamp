@@ -14,7 +14,13 @@ from ghost_transport import GhostTransport
 class TestCiphCore(unittest.TestCase):
 
     def setUp(self):
-        self.vault = CipherVault()
+        # A THROWAWAY vault. `CipherVault()` defaults to `ciph_vault.db` in the current directory -
+        # the operator's live vault - and this suite WRITES config, so running it used to mutate
+        # production state from a test.
+        import tempfile as _tempfile
+        root = _tempfile.mkdtemp(prefix="ciph_auth_test_")
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        self.vault = CipherVault(f"{root}/vault.db", f"{root}/key", f"{root}/salt")
         self.personality = CiphPersonality()
         self.state = StateManager()
         self.query_router = QueryRouter(self.state, self.vault)
@@ -29,7 +35,7 @@ class TestCiphCore(unittest.TestCase):
 
     def test_personality_code_masking(self):
         """Test that code blocks and JSON payloads are untouched by slang filters."""
-        sample_code = '```json\n{\n  "name": "Operator",\n  "system": "CIPH"\n}\n```'
+        sample_code = '```json\n{\n  "name": "operator",\n  "system": "CIPH"\n}\n```'
         input_text = f"Certainly! Here is your code:\n{sample_code}\nLet me know if you need more."
         output = self.personality.inject_personality(input_text)
         self.assertIn(sample_code, output)
