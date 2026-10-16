@@ -1,6 +1,6 @@
 """
 ciph.swarm.byzantine_consensus - Byzantine Swarm Consensus Engine (Stage 9).
-Orchestrates Operator's Council as independent, asynchronous agent nodes executing
+Orchestrates operator's Council as independent, asynchronous agent nodes executing
 Byzantine Fault Tolerant (BFT) threshold voting over critical mutations.
 """
 
@@ -70,7 +70,7 @@ class CouncilVote:
 
 
 class CouncilNode:
-    """Independent agent node in Operator's Swarm Council."""
+    """Independent agent node in operator's Swarm Council."""
 
     def __init__(self, node_id: str, role: str, signing_key: Optional[SigningKey] = None):
         self.node_id = node_id
