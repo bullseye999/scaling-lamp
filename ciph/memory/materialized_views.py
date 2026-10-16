@@ -150,7 +150,7 @@ class MaterializedWorldview:
 
             # 3. Observations Store Table
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS ciph_observations (
+                CREATE TABLE IF NOT EXISTS ciph_mv_observations (
                     observation_id TEXT PRIMARY KEY,
                     source TEXT NOT NULL,
                     subject TEXT NOT NULL,
@@ -169,9 +169,9 @@ class MaterializedWorldview:
                     created_at REAL NOT NULL
                 );
             """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_subj_pred ON ciph_observations(subject, predicate);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_source ON ciph_observations(source);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_content_hash ON ciph_observations(content_hash);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_subj_pred ON ciph_mv_observations(subject, predicate);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_source ON ciph_mv_observations(source);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_content_hash ON ciph_mv_observations(content_hash);")
 
             # 4. Claim Dependencies Table (DAG Edges)
             conn.execute("""
@@ -208,7 +208,7 @@ class MaterializedWorldview:
         additions = {
             'ciph_active_claims': {'canonical_payload': 'TEXT', 'revision_event_id': 'INTEGER',
                 'scope_id': 'TEXT', 'environment_fingerprint': 'TEXT', 'authority_fingerprint': 'TEXT'},
-            'ciph_observations': {'canonical_payload': 'TEXT', 'revision_event_id': 'INTEGER'},
+            'ciph_mv_observations': {'canonical_payload': 'TEXT', 'revision_event_id': 'INTEGER'},
             'ciph_claim_dependencies': {'dependency_type': "TEXT NOT NULL DEFAULT 'REQUIRED_PREMISE'"},
             'ciph_tabu_graveyard': {'reopened_at': 'REAL', 'reopen_reason': 'TEXT',
                 'reopen_evidence': 'TEXT', 'context_hash': 'TEXT'},
@@ -308,7 +308,7 @@ class MaterializedWorldview:
                     self._insert_row(conn, 'ciph_claim_dependencies', {'parent_claim_id':pid, 'child_claim_id':row['claim_id'], 'created_at':row['created_at'], 'dependency_type':'REQUIRED_PREMISE'})
             elif kind == 'observation':
                 row['revision_event_id'] = event_id
-                self._insert_row(conn, 'ciph_observations', row)
+                self._insert_row(conn, 'ciph_mv_observations', row)
             elif kind in ('grave', 'transition', 'checkpoint'):
                 self._insert_row(conn, {'grave':'ciph_tabu_graveyard', 'transition':'ciph_claim_transitions', 'checkpoint':'ciph_cascade_checkpoints'}[kind], row)
             else:
@@ -401,7 +401,7 @@ class MaterializedWorldview:
                    reliability=observation.reliability_class.value, uncertain_source_time=int(observation.uncertain_source_time),
                    created_at=observation.ingested_at, canonical_payload=canonical_json(d))
         with self._transaction() as conn:
-            previous = conn.execute('SELECT * FROM ciph_observations WHERE observation_id=?', (observation.observation_id,)).fetchone()
+            previous = conn.execute('SELECT * FROM ciph_mv_observations WHERE observation_id=?', (observation.observation_id,)).fetchone()
             if previous:
                 if previous['content_hash'] != observation.content_hash:
                     raise EpistemicAdmissionError('OBSERVATION_ID_COLLISION')
@@ -411,7 +411,7 @@ class MaterializedWorldview:
 
     def get_observation(self, observation_id):
         with self._get_connection() as conn:
-            row = conn.execute('SELECT * FROM ciph_observations WHERE observation_id=?', (observation_id,)).fetchone()
+            row = conn.execute('SELECT * FROM ciph_mv_observations WHERE observation_id=?', (observation_id,)).fetchone()
             if not row or not row['canonical_payload'] or not row['revision_event_id']:
                 return None
             event = conn.execute('SELECT * FROM ciph_event_store WHERE event_id=?', (row['revision_event_id'],)).fetchone()
@@ -426,7 +426,7 @@ class MaterializedWorldview:
 
     def query_observations(self, subject=None, predicate=None, source=None, include_expired=False, limit=100):
         with self._get_connection() as conn:
-            ids=[r[0] for r in conn.execute('SELECT observation_id FROM ciph_observations ORDER BY created_at DESC')]
+            ids=[r[0] for r in conn.execute('SELECT observation_id FROM ciph_mv_observations ORDER BY created_at DESC')]
         result=[]
         for oid in ids:
             obs=self.get_observation(oid)
@@ -805,7 +805,7 @@ class MaterializedWorldview:
             events=list(conn.execute("SELECT * FROM ciph_event_store WHERE event_type LIKE 'Epistemic%' ORDER BY event_id"))
             verified=[(event['event_id'],self._verified_event(event)) for event in events]
             conn.execute("DELETE FROM ciph_active_claims WHERE migration_status='CANONICAL'")
-            for table in ('ciph_claim_dependencies','ciph_claim_transitions','ciph_cascade_checkpoints','ciph_observations','ciph_tabu_graveyard'):
+            for table in ('ciph_claim_dependencies','ciph_claim_transitions','ciph_cascade_checkpoints','ciph_mv_observations','ciph_tabu_graveyard'):
                 for row in (conn.execute(f'SELECT rowid AS legacy_row_id, * FROM {table}') if not verified else ()):
                     conn.execute('INSERT OR IGNORE INTO ciph_legacy_projection VALUES (?,?,?)', (table,str(row['legacy_row_id']),canonical_json(dict(row))))
                 conn.execute(f'DELETE FROM {table}')
