@@ -235,7 +235,7 @@ class CognitiveEvolutionEngine:
     """
     Main Autonomous Cognitive Evolution & Polymath Engine.
     Executes background expeditions, synthesizes blueprints, links cross-domain isomorphisms,
-    and curates Operator Council theses.
+    and curates operator Council theses.
     """
     def __init__(
         self,
@@ -364,11 +364,11 @@ Format strictly as JSON with exactly these 4 keys:
   "core_axiom": "1-2 sentences capturing the fundamental physical/historical/psychological law.",
   "mechanics": "1-2 paragraphs detailing the underlying structural mechanics and edge cases.",
   "human_subtext": "1-2 paragraphs on how human psychology and collective behavior manifest under this principle.",
-  "strategic_application": "1-2 paragraphs on how the operator and Ciph apply this principle to gain asymmetric advantage on the board."
+  "strategic_application": "1-2 paragraphs on how operator and Ciph apply this principle to gain asymmetric advantage on the board."
 }}
 """
             try:
-                response_text = self.router.think(prompt, history=[], dynamic_prompt="You are Ciph. Output valid JSON only.", temperature=0.3)
+                response_text = self.router.think(prompt, history=[], system_prompt="You are Ciph. Output valid JSON only.", temperature=0.3)
                 json_match = response_text.strip()
                 if "```json" in json_match:
                     json_match = json_match.split("```json")[1].split("```")[0].strip()
@@ -849,7 +849,7 @@ def candidate_invariant_check():
             topic_str = blueprint['topic']
             title = f"On {topic_str}: Strategic Leverage and Sovereign Autonomy"
             conclusion = "I concluded that in any asymmetric conflict, control of the decision tempo and information asymmetry outweighs raw scale."
-            prompt = f"Operator, I was meditating on how {topic_str} applies to our board. What is your perspective on forcing ambiguity versus direct confrontation?"
+            prompt = f"operator, I was meditating on how {topic_str} applies to our board. What is your perspective on forcing ambiguity versus direct confrontation?"
 
             return self.vault.store_council_thesis(
                 thesis_id=thesis_id,
