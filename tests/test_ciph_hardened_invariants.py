@@ -236,7 +236,7 @@ class TestCiphHardenedInvariants(unittest.TestCase):
 
     def test_foreign_worker_cannot_complete_job_lease(self):
         """Worker B cannot complete or insert receipt events for a job leased to Worker A."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "secret"}
         )
@@ -419,9 +419,13 @@ class SymlinkEscapeCap(BaseCapability):
             queue=self.runtime.queue,
             registry=self.runtime.registry,
             event_store=self.runtime.event_store,
+            # Bound to the lane's own stores. Without this the daemon builds its own TrustRegistry
+            # on the DEFAULT path - `ciph_vault.db`, the operator's live vault.
+            db_path=self.runtime.db_path,
+            trust_registry=self.runtime.trust_registry,
             worker_secret_key=self.worker_key
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="unregistered.ghost_cap",
             params={"target": "ghost"}
         )
