@@ -19,6 +19,12 @@ openai>=1.0.0            # OpenAI client (if using GPT)
 pyyaml>=6.0
 python-dotenv>=1.0.0
 
+# Runtime extras imported by core modules (required for a full clone)
+PyNaCl>=1.5.0             # Ed25519 identity, receipts, vault signing
+Flask>=3.0.0              # ciph_proxy local API
+beautifulsoup4>=4.12.0    # HTML parsing in darknet_monitor
+urllib3>=2.0.0            # retry adapter in ghost_transport
+
 # Sport prediction extra (optional)
 # numpy                     # if you need more advanced math
 
