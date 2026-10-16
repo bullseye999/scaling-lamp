@@ -259,17 +259,32 @@ def audit_capability(cap_name: str, runtime: CiphRuntime) -> Dict[str, Any]:
                 step_id="step_audit",
                 capability=cap_name,
                 params_hash=ExecutionReceipt.hash_payload(params),
-                scope_grant_id="scope_audit",
+                scope_grant_id=scope.scope_id,
                 created_at=now,
                 expires_at=now + 120.0
             ).sign(runtime.auth_secret_key)
 
+        # The probe must ride the SAME governed lane production uses. A permitless row is refused
+        # before activation, so every one of these four gates would report FAIL for a reason that
+        # has nothing to do with the capability being audited.
+        runtime.scope_grant_store().persist_and_verify(scope)
         token = runtime.mint_execution_token(
             capability=cap_name,
             params=params,
             plan_id="audit_plan",
             step_id="step_audit",
-            auth_grant=auth_grant
+            scope_grant=scope,
+            auth_grant=auth_grant,
+        )
+        job_id = f"JOB-AUDIT-{uuid.uuid4().hex[:10].upper()}"
+        carriage = runtime._acquire_permit_for_job(
+            capability=cap_name,
+            params=params,
+            scope_grant=scope,
+            auth_grant=auth_grant,
+            job_id=job_id,
+            logical_action_id=idemp_key,
+            route="audit.matrix",
         )
         job_id = runtime.queue.enqueue_job(
             capability=cap_name,
@@ -277,9 +292,11 @@ def audit_capability(cap_name: str, runtime: CiphRuntime) -> Dict[str, Any]:
             plan_id="audit_plan",
             step_id="step_audit",
             idempotency_key=idemp_key,
-            execution_token=token
+            execution_token=token,
+            job_id=carriage.adopt_job_id or job_id,
+            execution_permit=carriage.permit,
         )
-        leased = runtime.queue.lease_next_job(worker_id="audit_worker", lease_ttl_seconds=30)
+        leased = runtime.queue.lease_next_job(worker_id="audit_worker", lease_ttl_seconds=30, target_job_id=job_id)
         if leased and leased["job_id"] == job_id:
             receipt = runtime.worker_daemon._execute_leased_job(leased, worker_id="audit_worker")
             if receipt:
