@@ -8,7 +8,7 @@ from datetime import datetime
 class ThreatCorrelator:
     """
     Threat Applicability Correlator.
-    Filters raw threat intelligence and CVE signals through Operator's registered world.
+    Filters raw threat intelligence and CVE signals through operator's registered world.
     Classifies applicability into:
       1. DIRECT_MATCH: Authorized target confirmed to expose affected technology.
       2. POTENTIAL_EXPOSURE: Authorized target with unconfirmed version or related surface.
