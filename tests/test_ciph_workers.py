@@ -11,6 +11,8 @@ from ciph.workers.receipts import JobState
 from ciph.capabilities.registry import CapabilityRegistry
 from ciph.capabilities.base import BaseCapability
 from ciph.kernel.policy_engine import CapabilityManifest, RiskTier, NetworkPolicy, ReversibilityClass, AuthorizationTier
+from ciph.kernel.crypto_identity import TrustRegistry, KeyRole
+from permit_test_support import enqueue_permit_bearing_queue_job
 
 
 class TestCiphWorkers(unittest.TestCase):
@@ -21,6 +23,11 @@ class TestCiphWorkers(unittest.TestCase):
             os.remove(self.TEST_DB)
         self.queue = IPCJobQueue(self.TEST_DB)
         self.registry = CapabilityRegistry()
+        # Governed jobs need canonical authority. Queue-level lifecycle tests below stay on the
+        # legacy seam deliberately (they exercise the queue, not the executor); anything that runs
+        # through the daemon is enqueued through the canonical permit pipeline.
+        self.trust_registry = TrustRegistry(self.TEST_DB)
+        self.operator_priv, _ = self.trust_registry.get_or_create_keypair("operator_root", KeyRole.OPERATOR)
 
     def tearDown(self):
         if os.path.exists(self.TEST_DB):
@@ -31,7 +38,7 @@ class TestCiphWorkers(unittest.TestCase):
 
     def test_ipc_queue_lifecycle(self):
         # 1. Enqueue
-        job_id = self.queue.enqueue_job("test.compute", {"n": 5}, max_retries=1)
+        job_id = self.queue.enqueue_legacy_job_for_test("test.compute", {"n": 5}, max_retries=1)
         job = self.queue.get_job(job_id)
         self.assertEqual(job["status"], JobState.QUEUED.value)
 
@@ -78,8 +85,12 @@ class TestCiphWorkers(unittest.TestCase):
         daemon.start()
 
         try:
-            # Enqueue job
-            job_id = self.queue.enqueue_job("math.square", {"n": 9})
+            # Enqueue job through the canonical pipeline the daemon actually executes.
+            job_id = enqueue_permit_bearing_queue_job(
+                queue=self.queue, trust_registry=self.trust_registry,
+                operator_private_key=self.operator_priv, db_path=self.TEST_DB,
+                capability="math.square", params={"n": 9},
+            ).job_id
 
             # Poll for completion (max 3 seconds)
             completed = False
@@ -98,7 +109,7 @@ class TestCiphWorkers(unittest.TestCase):
     def test_crash_recovery_and_at_least_once_delivery(self):
         """Simulate worker process crash and verify watchdog recovers job without corruption."""
         # Enqueue job with 2 retries
-        job_id = self.queue.enqueue_job("test.crash_recovery", {"param": 100}, max_retries=2)
+        job_id = self.queue.enqueue_legacy_job_for_test("test.crash_recovery", {"param": 100}, max_retries=2)
         
         # Worker 1 leases job with 0.05s TTL, then crashes (does not complete or heartbeat)
         leased = self.queue.lease_next_job("crashed-worker-1", lease_ttl_seconds=0.05)
@@ -133,7 +144,7 @@ class TestCiphWorkers(unittest.TestCase):
         idemp_token = "idemp_test_token_abc_123"
 
         # 1. First enqueue
-        job_id_1 = self.queue.enqueue_job(
+        job_id_1 = self.queue.enqueue_legacy_job_for_test(
             capability="math.square",
             params={"n": 4},
             idempotency_key=idemp_token
@@ -145,7 +156,7 @@ class TestCiphWorkers(unittest.TestCase):
         self.queue.complete_job(job_id_1, "worker_1", {"square": 16}, receipt_id="rcpt_16")
 
         # 3. Duplicate enqueue attempt with same idempotency key
-        job_id_2 = self.queue.enqueue_job(
+        job_id_2 = self.queue.enqueue_legacy_job_for_test(
             capability="math.square",
             params={"n": 4},
             idempotency_key=idemp_token
@@ -192,8 +203,12 @@ class TestCiphWorkers(unittest.TestCase):
             worker_secret_key=worker_key
         )
 
-        # Enqueue job
-        job_id = self.queue.enqueue_job("math.multiply", {"a": 7, "b": 8}, idempotency_key="idemp_mult_56")
+        # Enqueue job through the canonical pipeline the daemon actually executes.
+        job_id = enqueue_permit_bearing_queue_job(
+            queue=self.queue, trust_registry=self.trust_registry,
+            operator_private_key=self.operator_priv, db_path=self.TEST_DB,
+            capability="math.multiply", params={"a": 7, "b": 8}, idempotency_key="idemp_mult_56",
+        ).job_id
         
         # Drain once
         receipt = daemon.drain_once(worker_id="worker_drain_01")
