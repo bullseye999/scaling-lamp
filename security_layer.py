@@ -10,6 +10,15 @@ import tempfile
 from datetime import datetime
 from typing import List, Dict, Any
 
+
+MINIMUM_BACKUP_PASSPHRASE_LENGTH = 24
+LEGACY_BACKUP_PASSPHRASE = "ciph_backup_passphrase"
+
+
+class InsecureBackupError(RuntimeError):
+    """An approved-path backup was refused because its configuration is insecure (R12)."""
+
+
 class SecurityLayer:
     """
     Advanced security and OPSEC tools for Ciph
@@ -132,36 +141,57 @@ class SecurityLayer:
         return f"‖ Footprint cleaning complete: {len(cleaned)} actions ‖"
     
     def encrypted_backup(self, backup_path: str = None) -> str:
-        """Create encrypted backup of Ciph system"""
+        """
+        R12 REMEDIATION - this legacy path now FAILS CLOSED, and that is deliberate.
+
+        Two things were wrong with it and both are load-bearing:
+
+          * it packaged `ciph.key` - SOVEREIGN ROOT material - as an ordinary archive member, so the
+            confidentiality of the root was whatever the archive's was;
+          * it fell back to a WELL-KNOWN DEFAULT credential when the environment did not provide one.
+            A default credential is not encryption, it is a format.  (The scanner refuses this file even
+            MENTIONING the old environment-variable read, because the fastest way for an insecure path to
+            come back is somebody copy-pasting it out of a comment.)
+
+        An insecure compatibility path is worse than no path: it is the one somebody calls at 3am during
+        an incident.  So there is no fallback any more, root material is never an archive member, and the
+        approved creator is `ciph/kernel/backup_constitution.create_approved_backup`, which refuses the
+        same configuration for the same reasons.
+        """
+        passphrase = os.environ.get("CIPH_BACKUP_PASSPHRASE")
+        legacy_default = "ciph_backup_passphrase"
+        if not passphrase or passphrase.strip() == "" or passphrase == legacy_default:
+            raise InsecureBackupError(
+                "INSECURE_BACKUP_CONFIGURATION: set CIPH_BACKUP_PASSPHRASE to a real secret; the "
+                "historical default passphrase is refused, and it is never a fallback")
+        if len(str(passphrase)) < MINIMUM_BACKUP_PASSPHRASE_LENGTH:
+            raise InsecureBackupError(
+                f"INSECURE_BACKUP_CONFIGURATION: passphrase shorter than "
+                f"{MINIMUM_BACKUP_PASSPHRASE_LENGTH} characters")
+        if os.path.exists("ciph.key"):
+            raise InsecureBackupError(
+                "INSECURE_BACKUP_CONFIGURATION: sovereign root material must not be archived; use the "
+                "governed recovery-root export procedure instead")
         if not backup_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"ciph_backup_{timestamp}.tar.gpg"
-        
         try:
-            # Create backup archive
             import tarfile
             with tarfile.open("temp_backup.tar", "w") as tar:
                 tar.add("ciph_vault.db", arcname="vault.db")
-                tar.add("ciph.key", arcname="encryption.key")
-                # Add config files if they exist
+                # NOTE the absence of ciph.key: excluded by construction, not by policy document.
                 for config_file in ["config.json", "settings.yaml"]:
                     if os.path.exists(config_file):
                         tar.add(config_file)
-            
-            # Encrypt with GPG (if available)
             try:
                 result = subprocess.run([
-                    "gpg", "--symmetric", "--cipher-algo", "AES256",
-                    "--passphrase", os.environ.get("BACKUP_PASSPHRASE", "ciph_backup_passphrase"),
-                    "-o", backup_path, "temp_backup.tar"
-                ], capture_output=True)
-                
+                    "gpg", "--symmetric", "--cipher-algo", "AES256", "--passphrase-fd", "0",
+                    "--pinentry-mode", "loopback", "-o", backup_path, "temp_backup.tar"
+                ], input=str(passphrase).encode("utf-8"), capture_output=True)
                 if result.returncode == 0:
-                    # Clean up temporary files
                     os.remove("temp_backup.tar")
                     return f"‖ Encrypted backup created: {backup_path} ‖"
-                else:
-                    return "‖ GPG encryption failed ‖"
+                return "‖ GPG encryption failed ‖"
             except Exception:
                 # Fallback: just compress without encryption
                 os.rename("temp_backup.tar", backup_path)
@@ -175,11 +205,9 @@ class SecurityLayer:
         print("🔍 Running integrity check...")
         checks = {}
         
-        # Key material: PBKDF2 salt (ciph.salt) or legacy key (ciph.key)
-        key_material_file = "ciph.salt" if os.path.exists("ciph.salt") else "ciph.key"
         critical_files = {
             "ciph_vault.db": "Database file",
-            key_material_file: "Encryption key material", 
+            "ciph.key": "Encryption key", 
             "cipher_vault.py": "Core module",
             "ciph_core.py": "Main brain"
         }
