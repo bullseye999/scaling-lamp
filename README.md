@@ -426,6 +426,9 @@ python3 run_ciph.py
 
 Never commit `.env`, `*.key`, `*.salt`, SQLite databases, reports containing targets, monitored identifiers, or operator-profile exports.
 
+On first run Ciph asks for a **callsign** (and pronouns) and addresses you by it; change it later with
+`/name <new>`, `/callsign <new>` or `/set-name <new>`.
+
 ---
 
 ## Security Boundaries
@@ -454,7 +457,7 @@ maintenance, shared exclusion, and the empirical capability ledger.
 ======================================================================
   Verification Scope                                    Result
 ======================================================================
-  Full test discovery (58 suites, 621 tests)         621 / 621 PASS
+  Full test discovery (single tree)                2191 / 2191 PASS
   Dynamic governance matrix (16 capabilities)         16 / 16  COMPLIANT
 ======================================================================
 ```
@@ -470,6 +473,24 @@ Passing tests demonstrate the covered behavior; they are not a claim that every 
 integration, target, feed, or host configuration has been exhaustively validated.
 
 ---
+
+## Development History & Current Status
+
+`docs/` holds one **seal** per completed phase, in chronological order (see `docs/DOCUMENTATION_INDEX.md`):
+
+`CIPH6 → CIPH7 → CIPH8 → CIPH9 → CIPH41 → … → CIPH50 → CIPH_R1 → CIPH_R6 → S3_CODE`
+
+A seal records what a phase actually did and its evidence. It is a **historical record, not an independent
+security certification**.
+
+**CIPH 10.x — FEATURE DEVELOPMENT FROZEN — DEMONSTRATED SCOPE — NOT SEALED.** Outstanding holds: 9.x
+privileged-host enforcement **HOLD**; hardware attestation **HOLD**; physical multi-host federation
+**UNVERIFIED**; real Session network delivery **HOLD**; onion-routing privacy **UNVERIFIED**; **R13/R14 OPEN**.
+The governed runtime and its deterministic containment are demonstrated; general dependable autonomous research
+quality is not claimed.
+
+---
+
 ## Near-Term Engineering Priorities
 
 - Route more interactive commands through `CiphRuntime` and the persistent worker queue.
