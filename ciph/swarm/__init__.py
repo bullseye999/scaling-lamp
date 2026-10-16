@@ -1,5 +1,5 @@
 """
-ciph.swarm - Byzantine Cognitive Swarm Consensus & Operator's Physical Council (Stage 9).
+ciph.swarm - Byzantine Cognitive Swarm Consensus & operator's Physical Council (Stage 9).
 Multi-agent Byzantine fault-tolerant threshold consensus for worldview mutations and critical evolutions.
 """
 
