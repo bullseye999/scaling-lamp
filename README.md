@@ -1,386 +1,259 @@
 <div align="center">
 
-# ⚫ CIPH 4.0
-### Operator-Governed Security Research, Intelligence, Analytics & Cognitive Automation Runtime
+# ⚫ CIPH
+### An Operator-Governed AI Agent for Research, Intelligence, Analytics & Continuous Cognitive Work
 
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Governance](https://img.shields.io/badge/Governance%20Matrix-16%2F16%20Compliant-success?style=flat-square)](ciph_matrix_audit.py)
-[![Storage](https://img.shields.io/badge/Storage-Fernet%20%7C%20WAL%20SQLite-00599C?style=flat-square)](https://sqlite.org)
-[![Transport](https://img.shields.io/badge/Transport-Tor%20SOCKS5h%20%7C%20Direct--Approved-7D4698?style=flat-square&logo=tor-project&logoColor=white)](https://torproject.org)
-[![State](https://img.shields.io/badge/Epistemic%20Graph-9%20States-008080?style=flat-square)](ciph/kernel/transmutation_dag.py)
-[![Predicates](https://img.shields.io/badge/Predicates-Restricted%20AST-critical?style=flat-square)](ciph/planner/predicates.py)
-[![License](https://img.shields.io/badge/License-MIT-black?style=flat-square)](#license--responsible-use)
+A long-running, evidence-grounded architecture for governed initiative, memory, investigation, and operational
+continuity.
 
-**[Overview](#what-is-ciph) · [Capabilities](#the-four-operational-pillars) · [Real Output](#real-output-from-a-clean-public-environment) · [Architecture](#architecture) · [Status](#implementation-status) · [Commands](#command-catalog) · [Install](#installation--quickstart) · [Security](#security-boundaries) · [Tests](#verification)**
+**[Overview](#overview) · [Capabilities](#capabilities) · [Architecture](#architecture) · [Development history](#development-history) · [Verification](#verification--evidence) · [Installation](#installation) · [Security](#security-boundaries) · [Limitations](#known-limitations-and-holds)**
 
 </div>
 
 ---
 
-## What is CIPH?
+## Overview
 
-CIPH is an open-source, operator-governed runtime that brings security research, threat intelligence, cognitive memory, code introspection, sports modeling, and market analysis into one terminal system.
+CIPH is a Python-based, modular AI-agent runtime developed around a simple distinction:
 
-The project has two connected layers:
+> An agent's intent is not authority. A model's claim is not evidence. A successful execution is not proof
+> that its conclusions are true.
 
-- A mature interactive command core in `ciph_core.py` that exposes CIPH's domain engines.
-- A CIPH 4.0 governing layer that adds typed capability manifests, deterministic execution lanes, authorization checks, receipts, durable workers, DAG execution, epistemic state, and remediation primitives.
+It combines an interactive command system with governed execution, durable memory and evidence, bounded
+autonomous work, distributed-worker and federation mechanisms, model-assisted investigation, and conversational
+continuity. The architecture is designed so that observation, reasoning, authorization, execution, and reporting
+remain **distinct responsibilities**.
 
-Phase 4 command execution now uses the governed registry exclusively. Unsupported legacy commands return `COMMAND_UNAVAILABLE`; they have no raw-module fallback. The current supported surface, intentional retirements, grant lifecycle, and verification limits are recorded in [COMMAND_MIGRATION.md](COMMAND_MIGRATION.md). Older command catalogs below describe historical module functionality and do not imply those commands remain executable.
+Its historical domains include authorized security research, OSINT and threat intelligence, knowledge retrieval,
+sports analytics, market analysis, code inspection, and research automation. Some capabilities require
+credentials, network access, an approved target, or an explicitly enabled module; presence in the source tree
+does not imply a publicly deployable or universally enabled command.
 
-### Status legend
+CIPH is **not** a claim of consciousness, infallible autonomous reasoning, or independently certified security. It
+is a research and engineering project with documented internal tests, measured demonstrations, known failures,
+and deliberately retained verification holds.
 
-| Label | Meaning |
+**Project state (October 2026):** the 10.x feature-development cycle is **frozen at its demonstrated scope, not
+sealed**. Private-runtime and infrastructure evidence described in the phase documents is historical checkpoint
+evidence; it does not automatically certify any sanitized public release.
+
+## Core design principles
+
+| Principle | Operational meaning |
 | :--- | :--- |
-| **LIVE** | Wired to a current CLI or runtime path. Focused and command-level test coverage varies by capability. |
-| **IMPLEMENTED** | Working module or contract exists and has focused verification, but is not universal across all commands. |
-| **PARTIAL** | Useful implementation exists; an important integration or enforcement boundary remains. |
-| **OPTIONAL** | Requires an API key, local model, Tor service, loaded module, or other operator configuration. |
+| **Authority is explicit** | Wakes, missions, hypotheses, urgency, and model outputs cannot create execution grants. |
+| **One canonical owner per concern** | Evidence, permits, budgets, deployment, conversational records, and personality policy have defined ownership boundaries. |
+| **Evidence before assertion** | Model statements about findings, counts, work progress, or delivery must resolve to the relevant records. |
+| **Decision ≠ effect** | Selecting an action does not prove it ran; an execution receipt does not prove an analytical conclusion. |
+| **Continuity ≠ permission** | Persistence and scheduled autonomy remain subject to operator grants, resource ceilings, and quiescence. |
+| **Hypothesis ≠ finding** | Incubated possibilities are retained as hypotheses until supported by the proper evidence. |
+| **Uncertainty is representable** | Incomplete observations, stale workers, contradictory evidence, unavailable models, and unverified delivery have explicit outcomes. |
 
 ---
 
-## The Four Operational Pillars
+## Capabilities
 
-### 1. Authorized Recon & Bug-Bounty Research
+### Four historical operational domains
 
-| Capability | Status | What exists today |
-| :--- | :---: | :--- |
-| Scope-policy ingestion | **PARTIAL** | Parses raw policy text or a policy URL and stores structured scope. Automatic target enforcement is currently disabled, so the operator must independently verify authorization. |
-| GhostTransport | **LIVE** | Pooled SOCKS5h Tor transport, remote DNS through Tor-aware requests, randomized headers, and no clearnet fallback inside `GhostTransport`. |
-| Passive discovery cascade | **LIVE** | AlienVault OTX, Wayback CDX, URLScan, crt.sh, and common high-value subdomain candidates. |
-| Dangling-CNAME analysis | **IMPLEMENTED** | Fingerprints for GitHub Pages, AWS S3, Heroku, Fastly, Azure, Shopify, Pantheon, Ghost, Fly.io, and Bitbucket. |
-| Web surface analysis | **IMPLEMENTED** | GraphQL introspection checks, JavaScript/API-route extraction, header review, historical parameter mining, baseline comparison, and soft-404 handling. |
-| CVSS and reporting | **LIVE** | Deterministic FIRST CVSS v3.1 base scoring and structured vulnerability-report generation. |
-| Pentest module | **OPTIONAL** | Port, web, SSL, network-discovery, and security-audit commands after explicit module loading. Use only against systems you own or are authorized to test. |
+These domains span the older interactive command core and the later governed capability adapters. The exact
+currently supported command set should be checked against [`COMMAND_MIGRATION.md`](docs/COMMAND_MIGRATION.md) and the
+running CLI; retired commands have no implied legacy fallback.
 
-Primary commands: `/bounty-scope`, `/bounty-scan`, `/bounty-report`, `/what-changed`, `/hit-list`, `/chain-reaction`, `/watchtower`, `/ghost-rating`.
+| Domain | Implemented components and examples | Boundaries |
+| :--- | :--- | :--- |
+| **Authorized reconnaissance and bug-bounty research** | Scope-policy ingestion, passive source collection, historical URL/asset changes, dangling-CNAME fingerprints, web-surface checks, CVSS v3.1 scoring, structured reporting | A parsed scope is not proof of authorization. External targeting requires independent scope verification. |
+| **Threat intelligence and world telemetry** | RSS/CVE feeds, defensive monitoring, darknet-related research via configured transports, asset history, stored briefings and alerts | Transport policy is capability-specific; Tor routing must not be assumed for every module. |
+| **Cognition, memory and code analysis** | Encrypted selected memory, document ingestion and retrieval, source/AST inspection, staged proposals, event-backed claims, model-assisted analysis | Proposals and curiosity cannot independently authorize deployment or execution. |
+| **Sports and market analysis** | Poisson-based sports predictions, result tracking, odds enrichment, market snapshots, arbitrage comparisons, paper portfolio, heuristic signals | Outputs are analyses, not guaranteed profits, betting outcomes, or authorized live financial execution. |
 
-### 2. Threat Intelligence, World Telemetry & Darknet Radar
+### Governed agent capabilities
 
-| Capability | Status | What exists today |
-| :--- | :---: | :--- |
-| RSS and CVE intelligence | **LIVE** | Curated security feeds, CVE extraction, severity heuristics, alert scoring, and stored scan summaries. |
-| Optional X intelligence | **OPTIONAL** | Recent-search integration when an operator supplies an X bearer token through the encrypted vault. |
-| World telemetry | **LIVE** | Cybersecurity, technology, macro, and darknet-topology collection with synthesized briefings. |
-| Darknet monitor | **LIVE** | Ahmia search, Tor status, onion-signal collection, bounty-lead queries, and defensive identifier monitoring. |
-| Proactive briefing | **OPTIONAL** | Named intelligence synthesis when a supported model is configured; deterministic fallback summaries remain available. |
-| Asset and change memory | **LIVE** | Recon snapshots, historical diffs, watchtower events, asset inventory, OPSEC history, and alert retrieval. |
+The later phases add a broader operating architecture:
 
-Transport is capability-specific: `GhostTransport` fails closed over Tor, while `WorldTelemetry` deliberately falls back to direct clearnet when Tor verification fails. The runtime does not pretend these are the same policy.
+- **4.x — Execution and epistemic constitution:** typed manifests, risk/transport lanes, permits and guarded
+  execution, event-backed continuity, claim standing and supersession, world/self-models, governed curiosity,
+  comparative trials, candidate evolution, and deployment ownership.
+- **5.x — Continuous governed autonomy:** standing grants, time-scoped work identity, scheduling, deterministic
+  eligibility, operator modes, risk/resource ceilings, quiescence, safe idleness, and bounded maintenance.
+- **6.x — Governed swarm:** worker generations, delegations, budgets, provenance, aggregation, and bounded
+  coordination without creating universal worker authority.
+- **7.x — Federation:** node identity, authority domains, transport, partition/staleness handling, and membership
+  controls. Tests included local multi-process/socket arrangements; **separate physical hosts remain unverified**.
+- **8.x — Sovereignty and recovery:** authority-material separation, fencing/recovery contracts,
+  backup/reconstitution rules, and stale-node treatment, with documented limitations for disconnected hosts.
+- **9.x — CiphOS environment:** Linux-host isolation/boot/operator concepts, environment observation and
+  scanners. Implementation complete within the reported software scope; **privileged-host verification on HOLD**.
+- **10.x — Cognitive and operational continuity:** durable referents and conversations, sensory fabric,
+  architectural proprioception, awareness and selective attention, governed reflexes, homeostasis, bounded
+  expeditions, incubation, personality policy, real-model boundary, evidence publication, notification outbox
+  and a Session local adapter.
 
-Primary commands: `/osint`, `/world-brief`, `/sync-reality`, `/world-map`, `/darknet-deep`, `/darknet-scan`, `/darknet-report`, `/darknet-status`, `/tor-check`, `/monitor-id`.
+### What the 10.x runtime demonstrated
 
-### 3. Cognition, Memory, Strategy & Self-Evolution
+In bounded tests, the ordinary `CiphRuntime` can:
 
-| Capability | Status | What exists today |
-| :--- | :---: | :--- |
-| Model routing | **LIVE** | Unified routing across configured cloud and local-model paths, with explicit status and model-test commands. |
-| Encrypted operator memory | **LIVE** | Conversation history, configuration values, narrative milestones, profile facts, entity links, decisions, evidence, and selected telemetry fields through `CipherVault`. |
-| Knowledge library | **LIVE** | PDF and text ingestion, encrypted chunks, cached inverted index, passage retrieval, and situational book context. |
-| War Room | **OPTIONAL** | Three-perspective Hunter / Stoic / Arbiter stress testing when a reasoning model is configured. |
-| Cognitive evolution | **LIVE** | Runtime-bound curiosity daemon, cross-domain blueprints, synthesis links, council theses, self-audits, and engineering-hypothesis mining. It runs while the CIPH process is active, not as a guaranteed OS service. |
-| Self-awareness and proposals | **IMPLEMENTED** | AST/source inspection, code index, issue detection, proposal generation, benchmarking, staging cards, approval, rejection, and rollback paths. |
-| Dialogue and cadence | **IMPLEMENTED** | Six epistemic dialogue registers plus deep-focus, tactical, async-away, and re-engaging alert rhythms. Integration is not yet universal across legacy responses. |
-| Memory governance | **IMPLEMENTED** | Hash-chained events, materialized claims, claim leases, disputed-state circuit breaker, supersession, and recursive descendant invalidation. |
+1. Receive an eligible scheduled work nomination through the existing 5.x owners, enforcing operator grants and budgets.
+2. Invoke the configured reasoning model through a **single recorded model boundary**.
+3. Gather and reconcile canonical evidence, distinguishing rule-derived conclusions from actual model contributions.
+4. Store a supported result, or retain a model-generated contribution as an explicitly **unresolved hypothesis** (`is_a_result: false`).
+5. Create an evidence-backed notification candidate **without claiming it was delivered** on a real messaging network.
+6. Reconstruct previous findings, hypotheses and conversational references after a **fresh-process restart**.
+7. Stop or remain **idle** when there is no eligible work, grants expire, resource ceilings are exhausted, or the operator imposes a hold.
 
-Primary commands: `/router-status`, `/search`, `/memory-stats`, `/profile`, `/memory-graph`, `/timeline`, `/retroactive-learn`, `/add-book`, `/ask-book`, `/book-advice`, `/war-room`, `/curiosity`, `/mind-log`, `/mind-metrics`, `/operator-council`, `/self-audit`, `/hypotheses`, `/bridge-status`.
-
-### 4. Sports, Markets & Decision Analytics
-
-| Capability | Status | What exists today |
-| :--- | :---: | :--- |
-| Deterministic sports layer | **LIVE** | Poisson scoreline distributions, expected-goals calculations, outcome probabilities, and confidence aggregation. |
-| Multi-layer match analysis | **OPTIONAL** | Team data, odds, news, reasoning, and arbiter layers improve when football/odds/model integrations are configured. |
-| Sports learning and reporting | **IMPLEMENTED** | Stored predictions, result resolution, adaptive weighting, performance statistics, scheduled reports, and optional email delivery. |
-| Public market data | **OPTIONAL** | BTC/crypto market snapshots and trend analysis from public exchange endpoints after loading the trading module. |
-| Arbitrage analysis | **OPTIONAL** | Cross-exchange price comparison and threshold-based opportunity reporting. This is analysis, not guaranteed executable profit. |
-| Paper portfolio and signals | **IMPLEMENTED** | Local paper trades, portfolio state, health checks, risk labels, and heuristic signals. No authenticated live-exchange order execution is documented as production-ready. |
-
-Primary commands: `/predict`, `/today`, `/predictions`, `/result`, `/sports-stats`, `/sports-mode`, `/market-data`, `/arbitrage-scan`, `/market-trends`, `/trading-signals`, `/portfolio-health`.
-
----
-
-## Real Output from a Clean Public Environment
-
-The following output was generated from an isolated copy containing only Git-tracked files. Credential-like environment variables were removed, the vault was empty, no real security target was contacted, and generated receipt identifiers were normalized before publication.
-
-### Runtime and evolution status
-
-```text
-$ /bridge-status
-🌉 CIPH EVOLUTION BRIDGE STATUS
-• Status: ACTIVE
-• Capability Mappings: verification, compression, concurrency, rate_limiting, resilience
-• Unified CiphRouter: ACTIVE
-• Pre/Post Empirical Benchmarking: ACTIVE
-• Retroactive Blueprints Mining: READY (/reanalyze-blueprints)
-
-$ /modules
-‖ Available: ['osint', 'memory', 'pentest', 'trading', 'bounty', 'orchestrator']
-  Active: ['memory', 'osint', 'orchestrator'] ‖
-
-$ /darknet-status
-Last scan: Never | Feeds: 5 | Alerts: 0
-```
-
-This intentionally shows an empty public state rather than fabricated intelligence findings.
-
-### Knowledge-library ingestion and retrieval
-
-```text
-Text ingested: Public Systems Fixture. 1 chunks stored.
-Search hits: 1 | Top source: Public Systems Fixture | Relevance: 2
-```
-
-The fixture contained synthetic documentation text; no private books or conversation memory were loaded.
-
-### Lane-derived receipt and event integrity
-
-```text
-Lane: LANE_1_READ_ONLY
-Outcome: SUCCESS | Result: 42 | Exit: 0
-✅ [RECEIPT <generated>] • Capability: demo.multiply
-  Target   : local_system
-  Outcome  : SUCCESS (Exit: 0, Duration: 0.0s)
-  Transport: OFFLINE_ONLY (Idempotency: <generated>)
-
-Events: 2 | Hash chain valid: True | Corrupted event: None
-```
-
-### Durable worker and deterministic CVSS
-
-```text
-Initial worker state: QUEUED
-Final worker state: SUCCEEDED | Result: 81
-
-Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-Base score: 9.8 | Severity: CRITICAL
-Impact: 5.87 | Exploitability: 3.89
-```
-
-These examples are reproducible offline fixtures exercising the real runtime, queue, receipt, event-store, library, and CVSS implementations—not mocked terminal screenshots.
+These behaviours were demonstrated in bounded local / fixture-based trials. **General autonomous research
+dependability has not been established.** In one small contribution evaluation, the configured model supplied
+**6 correct contributions out of 8** tasks that were not settled by the deterministic rule owner; two were
+missed. An ordinary scheduled demonstration preserved a model-produced contradiction interpretation as an
+**unresolved hypothesis** rather than publishing it as a verified finding.
 
 ---
 
 ## Architecture
 
 ```text
-                                  OPERATOR CLI
-                                       │
-                    ┌──────────────────┴──────────────────┐
-                    │                                     │
-          MATURE COMMAND CORE                    CIPH 4.0 RUNTIME
-            ciph_core.py                          ciph/runtime.py
-                    │                                     │
-     ┌──────────────┼──────────────┐          ┌───────────┼───────────┐
-     │              │              │          │           │           │
- Security/Intel  Cognition     Analytics   Manifests   Receipts   Event Store
-     │              │              │          │           │           │
- Bounty, OSINT,  Memory, Books,  Sports,    Policy &    Typed      Worldview,
- Darknet,        Evolution,      Markets    Lanes       Outcomes   Claims, Leases
- Pentest         War Room
-                    │                                     │
-                    └──────────────────┬──────────────────┘
-                                       │
-                         ┌─────────────┴─────────────┐
-                         │                           │
-                    DAG PLANNER                DURABLE WORKERS
-                 Predicates, rollback,       Queue, leases, heartbeat,
-                 compensation, skills        watchdog, daemon
+                       Operator / CLI / Approved Runtime Entry Points
+                                        |
+                        Intent, mission, work nomination
+                                        |
+               +------------------- Governance -------------------+
+               | Standing authority · Scope · Risk · Budgets      |
+               | Operator modes · Quiescence · Execution permits  |
+               +-----------------------+--------------------------+
+                                       |
+                              CiphRuntime (ciph/runtime.py)
+                                       |
+               +-----------------------+--------------------------+
+               |                       |                          |
+         Model boundary          Evidence owners           Governed execution
+         Served identity         Observations/claims       GuardedExecutor,
+         Failure/usage           Standing/reconciliation   receipts, effects
+         Actual vs derived       Findings vs hypotheses
+               |                       |                          |
+               +-----------------------+--------------------------+
+                                       |
+                           Continuity and projections
+                  Memory · Conversation · Attention · Awareness
+                        Notifications (local adapter)
+                                       |
+                          Evidence-grounded reporting
 ```
 
-### CIPH 4.0 operating model
+This diagram is conceptual, not a claim that every historical CLI command passes through every subsystem.
+Supported commands are routed through the registered governance surface; unsupported legacy commands are
+unavailable. Worker queues and DAG planning are implemented but are not automatically involved in every
+interactive command.
 
-Runtime-routed capabilities follow this model:
+### Execution, evidence and model attribution
 
-$$\text{Intent} \longrightarrow \text{Manifest-Derived Lane} \longrightarrow \text{Policy and Authorization} \longrightarrow \text{Execution Receipt} \longrightarrow \text{Optional Adversarial Gate} \longrightarrow \text{Event Record}$$
+- **Execution.** Consequential work is subject to existing authorization and guarded execution; a mission, a schedule, or an LLM response is not itself a permit.
+- **Epistemic state.** Observations, inferences, disputed claims, supported findings, stale evidence, and supersession are tracked separately from job-execution states.
+- **Model identity.** The model boundary records the model **actually served**, rather than equating a requested alias with the served model.
+- **Inference failure.** Empty final completions do not count as successful answers. `REASONING_BUDGET_EXHAUSTED` is distinguished from `EMPTY_MODEL_OUTPUT` where provider metadata supports it.
+- **Result attribution.** `MODEL_SUPPORTED`, `MODEL_CORRECTED`, `RULE_DERIVED`, and unresolved outcomes are distinguished. A model's *abstention* on a rule-settled case is not misrepresented as a false factual assertion.
+- **Publication.** Rule-derived corrections and safe abstentions do not earn independent model-reasoning credit.
 
-The DAG planner and durable worker are implemented subsystems, but they are not inserted automatically into every interactive command path.
+### Selected implementation surfaces
 
-### Five execution lanes
+| Surface | Responsibility |
+| :--- | :--- |
+| `ciph_core.py` | Historical interactive command core and domain-facing CLI integrations. |
+| `ciph/runtime.py` | Governed runtime integration, including bounded investigation and autonomy ticks. |
+| `ciph/kernel/model_boundary.py` | Real/simulated model separation, model identity, output/failure and invocation metadata. |
+| `ciph/kernel/evidence_reconciliation.py` | Rule-governed standing, support/contradiction and unresolved outcomes. |
+| `ciph/kernel/evidence_publication.py` | Evidence-grounded publication and model-versus-rule attribution. |
+| `ciph/kernel/referential_continuity.py` | Durable findings and result-set references for later follow-up. |
+| `ciph/kernel/personality_policy.py` | Versioned conversational preference authority, without storing operational facts. |
+| `ciph/kernel/session_adapter.py` | Narrow Session transport adapter; local semantics tested, external network delivery unverified. |
+| `ciph/kernel/integration_ownership.py` | Executable integration-boundary ownership map. |
+| `tests/` | Discovered unit, integration, adversarial, negative-specimen and regression suites. |
+| `tools/` | Verification and controlled demonstration utilities; not all are production daemon entry points. |
 
-| Lane | Manifest derivation | Intended workload |
+Other historical packages include `ciph.memory`, `ciph.workers`, `ciph.planner`, `ciph.perception`, `ciph.operator`,
+and capability adapters. Consult the source and phase documents for precise ownership and integration contracts.
+
+---
+
+## Development history
+
+The historical documents should be browsed in **numeric phase order**, starting with the earliest extant phase.
+Historical seal labels are internal, scope-specific checkpoints — **not independent audits or certifications**.
+See [`docs/DOCUMENTATION_INDEX.md`](docs/DOCUMENTATION_INDEX.md).
+
+| Phase | Focus | Historical status / boundary |
 | :--- | :--- | :--- |
-| **Lane 1: Read-only** | `READ_ONLY` + `NONE` risk + local/offline policy | Vault and memory reads |
-| **Lane 2: Local compute** | `READ_ONLY` + elevated risk + local/offline policy | Deterministic local analysis |
-| **Lane 3: External observation** | `READ_ONLY` + external network policy | Passive recon, feeds, and live data |
-| **Lane 4: Consequential** | `REVERSIBLE` or `COMPENSATABLE` | Local mutation, staging, and compensatable work |
-| **Lane 5: Irreversible** | `IRREVERSIBLE` | Explicitly authorized external side effects |
-
-Network and authorization policies remain independent manifest fields; a lane does not silently grant either one.
-
-### Core CIPH 4.0 packages
-
-| Package | Responsibility |
-| :--- | :--- |
-| `ciph.kernel` | Network/reversibility/risk/authorization contracts, nine-state epistemic categories, assurance scoring, and adversarial-gate logic. |
-| `ciph.memory` | SHA-256 hash-chained event log, indexed active worldview, claim leases, dispute handling, supersession, and recursive invalidation. |
-| `ciph.workers` | Persistent SQLite IPC jobs, operational state machine, typed receipts, worker leases, heartbeats, retries, watchdog recovery, and standalone daemon. |
-| `ciph.planner` | Restricted AST success predicates, topological DAG execution, compensation hooks, explicit-path rollback, and five-stage skill promotion. |
-| `ciph.perception` | Typed observations with source reliability and freshness deadlines plus a pub/sub sensory bus. |
-| `ciph.operator` | Epistemic dialogue formatting and attention/cadence management. |
-| `ciph.capabilities` | Typed capability base class, registry, and current bounty, OSINT, and sports adapters. |
-| `ciph.runtime` | Registry wiring, lane derivation, `NETWORK_DENIED` blocking, mandatory authorization checks, receipts, gate hooks, and event recording. |
-
-### Experimental packages (not enabled)
-
-`ciph.crucible`, `ciph.federation`, `ciph.sovereignty`, `ciph.swarm`, `ciph.silicon`, and
-`ciph.zk` are experimental, not-enabled primitives. They are not advertised as working
-capabilities and are not part of the governed surface.
-
-### Operational and epistemic state are different
-
-```text
-Operational job: QUEUED → LEASED → EXECUTING → SUCCEEDED / FAILED / TIMED_OUT
-Epistemic claim: INTELLIGENCE_GAP ↔ OBSERVED ↔ INFERRED ↔ HYPOTHESIZED
-                                      ↓             ↓
-                                  SUPPORTED ↔ DISPUTED → REFUTED
-                                      ↓
-                              STALE / SUPERSEDED
-```
-
-A successful process exit is evidence that a job ran; it is not automatically proof that every claim in its output is true.
+| 0.x–3.x | Early architecture and remediation | See surviving records; do not infer a seal for undocumented phases. |
+| 4.0–4.7 | Execution constitution, epistemic continuity, governed research and evolution | Internally verified in the reported scopes. |
+| 5.x | Continuous governed autonomy | Internally sealed in the reported software/test scope. |
+| 6.x | Swarm work and delegation | Internally sealed in the reported scope. |
+| 7.x | Federation | Internally sealed in the reported scope; separate physical multi-host proof absent. |
+| 8.x | Recovery and sovereignty | Internally sealed in the reported scope; disconnected-host limitations stated. |
+| 9.x | CiphOS environment | Final seal **HOLD** pending privileged-host proof and related external validation. |
+| 10.x / 10.x-R | Continuous cognitive integration, real model, investigation, personality, evidence publication | **Feature development frozen at demonstrated scope — NOT SEALED.** |
 
 ---
 
-## Governed Agent Capabilities (the `ciph/` layer)
+## Verification & evidence
 
-Beyond the domain engines, `ciph/` implements the governed-agent architecture. Each line is an owning
-module that other modules *reference*; the censuses check the tree, not the docs.
+**This public tree's own measurement** (clean virtual environment, current release):
 
-**Governed execution & memory (4.x)**
-- Typed capability manifests, five execution lanes, deterministic receipts, durable SQLite workers with leases/heartbeats/recovery, and a restricted-AST DAG planner with compensation and rollback.
-- Continuity (4.1), the epistemic ledger and belief revision (4.2), world + self model with the capability ladder (4.3), governed curiosity (4.4), the improvement crucible (4.5), and meta-evolution (4.7).
-- SHA-256 hash-chained event store, materialised worldview, claim leases and supersession.
-
-**Governed autonomy (5.x)**
-- Operator-registered schedules, a pure eligibility function (mode → authority → risk → budget → conflict), resource ceilings (invocation-count and token), operator quiescence/emergency stop, idempotent work identity, and constitutional idleness.
-
-**Swarm (6.x) · Federation (7.x) · Recovery (8.x) · CiphOS (9.x)**
-- Worker registrations, generations and delegations (6.x); federation nodes, keys and partition handling, **loopback only** (7.x); the recovery engine and fencing (8.x); system-scope boot/isolation primitives (9.x, **HOLD — needs a privileged host**).
-
-**Cognitive layer (10.x)**
-- Referential & conversational continuity, a sensory fabric, architectural proprioception, operational awareness, selective attention, governed reflexes, operational homeostasis, independent expeditions, incubation (hypotheses ≠ findings), a personality policy that stores no facts, a single model boundary, an executable 36-boundary integration map, evidence reconciliation, and rule-governed evidence publication.
-
-**The model boundary**
-- One canonical entry for inference (DeepSeek V4 Pro by default). It records the provider, the model actually served, the output and its digest, usage and any refusal. An **empty completion is a failure**, never an answer; `REASONING_BUDGET_EXHAUSTED` is distinguished from `EMPTY_MODEL_OUTPUT`; deterministic reconciliation is never credited as model reasoning.
-
----
-
-## Implementation Status
-
-| Area | Current boundary |
+| Measurement | Result |
 | :--- | :--- |
-| Interactive command core | `ciph_core.py` remains the primary interactive CLI path. The thinner runtime migration is incremental. |
-| Live runtime routing | All supported slash commands, including `/bounty-scan`, `/predict`, and `/osint`, route through `CiphRuntime`; unregistered legacy commands are explicitly unavailable. |
-| Network enforcement | Runtime blocks `NETWORK_DENIED` and enforces `MANDATORY_INTERRUPT`. Central enforcement of every `TOR_MANDATORY`, `LOCAL_ONLY`, and `OFFLINE_ONLY` socket boundary is not complete. |
-| Durable dispatch | Queue, daemon, leases, heartbeat, retries, and recovery work in focused tests and `run_worker.py`; interactive commands do not universally enqueue through it. |
-| DAG execution | Dependency ordering, restricted predicates, compensation, and explicit-path rollback work. Natural-language requests do not universally compile into DAGs. |
-| Claim leases | The lease manager blocks supersession of explicitly pinned claims. Worker jobs do not automatically pin every epistemic dependency. |
-| Adversarial gate | Gate logic is wired into the runtime. Current built-in manifests do not set `requires_red_team=True`. |
-| Scope enforcement | Bounty scope policies can be parsed and stored, but `BountyHunter.is_in_scope()` currently permits open recon. Treat explicit external authorization as mandatory. |
-| Event sourcing | `ciph_event_store` is append-only and hash-chained. Vault tables, queues, leases, and materialized views are mutable by design. |
-| Encryption | Selected `CipherVault` fields use Fernet authenticated encryption. The event store, IPC queue, and materialized worldview are not blanket-encrypted. |
-| Code staging | AST parsing, compilation, and timeout-bound subprocess execution are implemented. The subprocess is not an OS-level security sandbox. |
+| Full-tree test discovery/run | **2,191 tests — OK (1 skipped)** |
+| Sanitized public-tree fingerprint (all `*.py`) | `cb2879c298927b9997038a1fdb4ee3b6` |
+| Contribution-path regression | 5/5 discovered tests (hypothesis status, provenance, refs, notification candidate, empty-output refusal, verdict preservation) |
+| Program status | 10.x frozen, not sealed |
 
-This table is intentionally direct: visitors can distinguish capability breadth from integration completeness without reverse-engineering the repository first.
+A historical private-tree checkpoint reported a full run of 2,191 tests OK with fingerprint
+`e45fa9641dabaeebe4ad718cc2b8533a`; the public tree above is a **separate, sanitized tree** with its own
+fingerprint. A historical result is not proof that every feature, host configuration, live external service, or
+source disclosure has been audited.
 
----
-
-## Command Catalog
-
-### Core, models and modules
-
-| Command | Purpose |
-| :--- | :--- |
-| `/status`, `/reality-check` | Runtime and deterministic local-state summaries. |
-| `/model-status`, `/test-deepseek`, `/router-status` | Model and router diagnostics. |
-| `/modules`, `/load <module>`, `/unload <module>` | Inspect and change hot-loadable modules. |
-| `/help`, `/exit` | Command help and graceful shutdown. |
-
-### Authorized recon and pentesting
-
-| Command | Purpose |
-| :--- | :--- |
-| `/bounty-scope <text-or-url>` | Parse and store a program policy; does not replace manual authorization verification. |
-| `/bounty-scan <target>` | Run the bounty reconnaissance pipeline through the registered runtime adapter. |
-| `/bounty-report <target>` | Generate a structured report from stored scan results. |
-| `/bounty-list`, `/what-changed <target>` | Review scopes/programs and historical reconnaissance differences. |
-| `/hit-list [target]`, `/chain-reaction [target]` | Rank stored findings and construct stored attack-path relationships. |
-| `/watchtower`, `/ghost-rating`, `/asset-inventory` | Review sentry events, OPSEC score, and known assets. |
-| `/port-scan <target>`, `/web-scan <url>` | Optional pentest-module scans for explicitly authorized targets. |
-| `/security-audit <target>`, `/ssl-scan <domain>` | Optional composite and TLS checks. |
-| `/network-discovery` | Local-network discovery; load the pentest module and confirm scope first. |
-
-### Intelligence and darknet
-
-| Command | Purpose |
-| :--- | :--- |
-| `/osint`, `/osint-status`, `/alerts` | Refresh or inspect feed-derived intelligence. |
-| `/world-brief`, `/sync-reality`, `/world-map` | Inspect or refresh world telemetry. |
-| `/darknet-deep <query>`, `/darknet-scan` | Query Ahmia/onion intelligence through the configured transport. |
-| `/darknet-status`, `/darknet-report`, `/tor-check` | Review stored darknet findings and Tor state. |
-| `/monitor-id <identifier>` | Add a defensive breach-monitoring identifier to the private local vault; never put identifiers in public screenshots. |
-| `/briefing`, `/war-room <proposal>` | Model-assisted intelligence briefing and three-perspective stress test. |
-
-### Memory, books and cognition
-
-| Command | Purpose |
-| :--- | :--- |
-| `/search <query>`, `/memory-stats`, `/tag <tag>` | Search and inspect stored conversational memory. |
-| `/profile`, `/profile-clear`, `/memory-graph <query>` | Review or manage encrypted operator memory and entity links. |
-| `/timeline`, `/retroactive-learn` | Narrative history and cold-start entity extraction. |
-| `/add-book <path> [| title]`, `/library` | Ingest PDFs and list the encrypted library. |
-| `/ask-book <question>`, `/book-advice <situation>` | Retrieve source-grounded passages or situational context. |
-| `/curiosity on|off|status`, `/mind-log`, `/mind-metrics` | Control and inspect the runtime-bound evolution engine. |
-| `/operator-council`, `/self-audit` | Review generated theses and metacognitive audits. |
-| `/hypotheses`, `/bridge-status`, `/reanalyze-blueprints` | Connect historical blueprints to actionable engineering hypotheses. |
-
-### Self-awareness, staging and orchestration
-
-| Command | Purpose |
-| :--- | :--- |
-| `/self-report`, `/self-analyze`, `/inspect <module>` | Inspect source structure and detected engineering issues. |
-| `/upgrades`, `/review <id>`, `/reject <id>` | Review staged proposals without applying them. |
-| `/apply <id>`, `/rollback <file>` | Consequential local writes; review staged code and backups first. |
-| `/benchmark-proposals`, `/changelog` | Run proposal checks and inspect mutation history. |
-| `/start-workflow <name>`, `/stop-workflow <name>` | Control orchestrated background workflows. |
-| `/workflow-status`, `/auto-mode`, `/stop-all-workflows` | Inspect or control orchestration. |
-| `/schedule-start`, `/schedule-stop`, `/schedule-status` | Control the in-process scheduler. |
-| `/jobs`, `/job-status <id>` | Inspect the persistent job queue. |
-
-### Sports and market analytics
-
-| Command | Purpose |
-| :--- | :--- |
-| `/predict <home> vs <away>`, `/today`, `/predictions` | Create or review sports-model outputs. |
-| `/result <id> <outcome>`, `/sports-stats`, `/sports-mode on|off` | Resolve predictions, inspect performance, and control the sports daemon. |
-| `/market-data`, `/market-trends`, `/arbitrage-scan` | Public market and cross-exchange analysis after `/load trading`. |
-| `/trading-signals`, `/portfolio-health`, `/wealth-strategy <amount>` | Heuristic signals, paper-portfolio state, and scenario projections—not financial advice. |
-
-### Host and vault operations
-
-| Command | Risk | Purpose |
-| :--- | :---: | :--- |
-| `/security-scan`, `/integrity-check` | Read-only | Inspect host permissions and tracked-file integrity. |
-| `/backup-now` | Consequential | Create an encrypted backup; requires `BACKUP_PASSPHRASE`. |
-| `/clean-footprints` | **Host-destructive** | Clears shell/temp/cache data. Read `security_layer.py` and understand its scope before use. |
-| `/zeroize-mind` | **Data-destructive** | Erases cognitive-evolution records from the local vault. |
-| `/emergency-wipe` | Stub | Intentionally not implemented for safety. |
-
----
-
-## Installation & Quickstart
-
-> CIPH requires **Python 3.12 or newer**.
-
-### Linux / VPS
+Typical local checks, subject to dependencies and the released test tree:
 
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git tor curl
-sudo systemctl enable --now tor
+python -m unittest discover -s tests -p "test_*.py"
+python ciph_matrix_audit.py
+```
 
+Some real-model tests may **skip** when the configured provider is temporarily unreachable. A skipped external
+leg should not be described as a passed real-network or real-model verification. Negative specimens, scanner
+censuses, ownership checks and sanitized-clone comparisons are explained in the project documentation. The
+reported governance matrix was 16/16 compliant within its specified scope; that number is **not** a general
+security rating.
+
+### Historical offline examples
+
+Earlier clean-environment demonstrations included a local read-only capability returning `42` with a generated
+receipt, a hash-chain integrity check, an isolated durable worker progressing from QUEUED to SUCCEEDED, a
+synthetic knowledge-library retrieval, and deterministic CVSS v3.1 scoring (9.8 for the displayed critical
+vector). These are illustrative offline fixtures — **not** evidence of real-world intelligence collection or
+unattended external actions.
+
+## Known limitations and holds
+
+| Area | Status / limitation |
+| :--- | :--- |
+| CiphOS privileged-host enforcement (9.x) | **HOLD** — privileged Linux/host validation not completed. |
+| Hardware attestation | **HOLD** — no verified hardware attestation proof. |
+| Physical multi-host federation | **UNVERIFIED** — local/process/socket tests do not establish independent-host deployment. |
+| Real Session network | **HOLD** — local adapter/outbox verified; actual end-to-end delivery untested. |
+| Session onion-routing metadata protection | **UNVERIFIED** for the intended integration; no silent downgrade should be inferred. |
+| R13 / R14 | **OPEN** — tracked independently of the 10.x software-mechanics results. |
+| General autonomous research dependability | **NOT ESTABLISHED** — promising contributions observed in small bounded evaluations; no broad field validation. |
+| Model reasoning | Model responses can still abstain on settled rule-verdict tasks or miss valuable relationships/next questions. Canonical correction is not model competence. |
+| Long-running production autonomy | Bounded wall-clock / disposable-runner demonstrations exist; a sustained production deployment is not thereby verified. |
+| Historical command coverage | Registered commands and legacy modules have different support status; consult the migration record. |
+
+---
+
+## Installation
+
+Requires **Python 3.12+** and the repository's declared dependencies. Do not use production keys, vaults or
+sensitive datasets for first-run testing.
+
+### Linux / Ubuntu
+
+```bash
 git clone https://github.com/bullseye999/scaling-lamp.git
 cd scaling-lamp
 python3 -m venv .venv
@@ -388,151 +261,78 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
-python3 run_ciph.py
-```
-
-Optional standalone durable worker:
-
-```bash
-python3 run_worker.py --workers 2
-```
-
-### Windows through WSL2
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Then follow the Linux instructions inside Ubuntu.
-
-### Windows native
-
-```powershell
-winget install Python.Python.3.12 Git.Git
-git clone https://github.com/bullseye999/scaling-lamp.git
-cd scaling-lamp
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
+# Edit .env locally with credentials and services you intentionally enable.
 python run_ciph.py
 ```
 
-Install and run the Tor Expert Bundle or Tor Browser separately when using Tor-dependent capabilities. Native Tor commonly exposes SOCKS5 on `127.0.0.1:9050` or `127.0.0.1:9150`; confirm your own configuration.
-
-### macOS
+Optional worker, if included and configured:
 
 ```bash
-brew install python git tor
-brew services start tor
-
-git clone https://github.com/bullseye999/scaling-lamp.git
-cd scaling-lamp
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python3 run_ciph.py
+python run_worker.py --workers 2
 ```
+
+### Windows and macOS
+
+WSL2 with Ubuntu is the preferred Windows path for Linux-oriented integrations (process isolation, Linux host
+controls, Tor). Native Python virtual environments may support subsets of the codebase. On macOS, use an
+appropriate Python 3.12+ environment and configure optional network services separately.
 
 ### Configuration
 
-`.env.example` documents the supported public configuration surface:
+Public configuration uses **placeholders only** in `.env.example`; never commit a working `.env`.
 
-| Variable | Required? | Purpose |
-| :--- | :---: | :--- |
-| `DEEPSEEK_API_KEY` | Optional | Cloud reasoning, War Room, briefings, and synthesis paths. |
-| `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL` | Optional | Compatible endpoint and model selection. |
-| `FOOTBALL_DATA_API_KEY` | Optional | Fixtures, results, and team-data enrichment. |
-| `ODDS_API_KEY` | Optional | Market-odds enrichment for sports analysis. |
-| `CIPH_VAULT_PASSPHRASE` | Recommended | Derives the primary vault key. Without it, CIPH creates an ignored random installation key. |
-| `BACKUP_PASSPHRASE` | Required for backups | Encrypts `/backup-now` output; there is no plaintext fallback. |
-
-Never commit `.env`, `*.key`, `*.salt`, SQLite databases, reports containing targets, monitored identifiers, or operator-profile exports.
+| Setting | Purpose |
+| :--- | :--- |
+| `DEEPSEEK_API_KEY` | Credential for configured DeepSeek inference, if used. |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Endpoint and model selection. The last reported private configuration used `deepseek-v4-pro`; served identity should be checked rather than assumed. |
+| `CIPH_VAULT_PASSPHRASE` | Primary vault passphrase where the applicable vault setup requires it. |
+| `BACKUP_PASSPHRASE` | Encryption for explicitly configured backup operations. |
+| `FOOTBALL_DATA_API_KEY` / `ODDS_API_KEY` | Optional sports enrichment integrations. |
 
 On first run Ciph asks for a **callsign** (and pronouns) and addresses you by it; change it later with
 `/name <new>`, `/callsign <new>` or `/set-name <new>`.
 
----
+Optional services and model-provider usage can incur charges. Governed ceilings are not a promise of zero cost;
+verify allowed quotas, credentials, model usage, and deployment grants before unattended operation.
 
-## Security Boundaries
+### Command surface
 
-1. **Authorization is external ground truth.** CIPH is for systems you own or are explicitly authorized to assess. Stored scope parsing currently does not enforce target denial automatically.
-2. **Transport & Network Policy Enforcement.** `GhostTransport` fails closed over SOCKS5h Tor. `WorldTelemetry` handles configurable transport. `CiphRuntime` and `network_sandbox.py` enforce `OFFLINE_ONLY`, `LOCAL_ONLY`, and `TOR_MANDATORY` at runtime across `socket` and `_socket` using CPython PEP 578 audit hooks.
-3. **Rollback is explicit.** `DAGExecutor` restores only file and directory paths supplied for a reversible plan. External requests, messages, trades, and other irreversible effects cannot be rolled back by copying files.
-4. **Predicates avoid Python `eval()`.** DAG success conditions use a restricted AST interpreter. This does not make arbitrary generated code safe.
-5. **Code Staging & Evolution Filesystem Isolation.** Code self-evolution performs static AST analysis, fail-closed manifest extraction, and timeout-bound subprocess execution with PEP 578 filesystem isolation hooks preventing host-side modifications outside sandbox directories.
-6. **Encryption is scoped.** Sensitive `CipherVault` fields use Fernet authenticated encryption (AES-128-CBC with HMAC-SHA256). Event-store payloads, job queues, and materialized projections are not blanket-encrypted; protect the host and database file.
-7. **Adversarial gating is opt-in.** Gate logic can reject execution failures, soft-404s, and unsupported takeover claims, but current built-in manifests do not require it by default.
-8. **Analytics are not guarantees.** Market, arbitrage, and sports outputs are probabilistic or heuristic and are not financial advice or automatic live execution.
-9. **Destructive commands are real.** `/clean-footprints` and `/zeroize-mind` can remove local data. Inspect their implementation and maintain backups before use.
+The interactive CLI contains commands across these families; the following are examples from the historical
+catalogue, **not** a promise that every command is enabled in every release.
 
----
+| Family | Examples |
+| :--- | :--- |
+| Core and model | `/status`, `/reality-check`, `/model-status`, `/router-status`, `/modules`, `/help` |
+| Recon and bounty | `/bounty-scope`, `/bounty-scan`, `/bounty-report`, `/what-changed`, `/port-scan`, `/web-scan` |
+| Intelligence | `/osint`, `/alerts`, `/world-brief`, `/darknet-status`, `/tor-check` |
+| Memory and research | `/search`, `/memory-stats`, `/timeline`, `/add-book`, `/ask-book`, `/hypotheses` |
+| Self-inspection and jobs | `/self-report`, `/self-analyze`, `/inspect`, `/jobs`, `/job-status`, `/workflow-status` |
+| Operator identity | `/name`, `/callsign`, `/set-name` |
+| Sports and markets | `/predict`, `/sports-stats`, `/market-data`, `/arbitrage-scan`, `/portfolio-health` |
+| Security and host | `/security-scan`, `/integrity-check`, `/backup-now` |
 
-## Verification
-
-The current suite covers typed contracts, lane derivation, cryptographic receipts, network
-policy blocking, safe predicates, event integrity, multi-claim leases, recursive
-invalidation, durable workers with atomic CAS leases, DAG compensation, rollback, skill
-promotion, cadence, authentication, adversarial recovery, governed commands, idle
-maintenance, shared exclusion, and the empirical capability ledger.
-
-```text
-======================================================================
-  Verification Scope                                    Result
-======================================================================
-  Full test discovery (single tree)                2191 / 2191 PASS
-  Dynamic governance matrix (16 capabilities)         16 / 16  COMPLIANT
-======================================================================
-```
-
-Run the same verification locally:
-
-```bash
-python3 -m unittest discover -s tests -p "test_*.py"
-python3 ciph_matrix_audit.py
-```
-
-Passing tests demonstrate the covered behavior; they are not a claim that every external
-integration, target, feed, or host configuration has been exhaustively validated.
+> Potentially destructive commands and actions involving remote systems should never be treated as harmless
+> merely because they are offered by an AI interface.
 
 ---
 
-## Development History & Current Status
+## Security boundaries
 
-`docs/` holds one **seal** per completed phase, in chronological order (see `docs/DOCUMENTATION_INDEX.md`):
+1. **Authorization remains external reality.** CIPH's scope files, model decisions and command inputs are not substitutes for explicit authorization to assess a third-party system.
+2. **Execution is governed.** The architecture distinguishes proposals, permits, guarded execution, effects and receipts. Do not assume a successful job proves the correctness of its analytical output.
+3. **Transport assurances are scoped.** The historical `GhostTransport` path was designed to fail closed using Tor-aware SOCKS5h, while other telemetry paths may permit configured direct connections. Runtime-level policy checks are not proof of whole-host isolation.
+4. **OS controls have limits.** Python audit hooks, static scanners and subprocess restrictions reduce selected bypass opportunities but are not a substitute for a privileged-host sandbox or comprehensive isolation.
+5. **Storage encryption is selective.** Fernet-protected vault fields do not mean all event-store, queue, projection and log payloads are encrypted.
+6. **Rollback has boundaries.** Local file restoration does not undo emails, external network effects, trades or other irreversible actions.
+7. **No inference is inherently authoritative.** Models may produce wrong conclusions, overly cautious abstentions or unsupported claims; structured evidence publication and explicit uncertainty remain necessary.
+8. **Sensitive data must stay private.** Do not commit real secrets, credential-bearing configuration, private conversation archives, security targets, identifiers, databases, or operator backups.
 
-`CIPH6 → CIPH7 → CIPH8 → CIPH9 → CIPH41 → … → CIPH50 → CIPH_R1 → CIPH_R6 → S3_CODE`
+## Public release notes
 
-A seal records what a phase actually did and its evidence. It is a **historical record, not an independent
-security certification**.
-
-**CIPH 10.x — FEATURE DEVELOPMENT FROZEN — DEMONSTRATED SCOPE — NOT SEALED.** Outstanding holds: 9.x
-privileged-host enforcement **HOLD**; hardware attestation **HOLD**; physical multi-host federation
-**UNVERIFIED**; real Session network delivery **HOLD**; onion-routing privacy **UNVERIFIED**; **R13/R14 OPEN**.
-The governed runtime and its deterministic containment are demonstrated; general dependable autonomous research
-quality is not claimed.
-
----
-
-## Near-Term Engineering Priorities
-
-- Route more interactive commands through `CiphRuntime` and the persistent worker queue.
-- Couple worker checkout to automatic epistemic dependency leases.
-- Make stored bounty scope deny by default before dispatch.
-- Promote adversarial gating only where deterministic tests and latency budgets justify it.
-- Define encrypted or redacted storage policy for event, queue, and projection payloads.
-- Add package metadata that enforces the Python 3.12 minimum mechanically.
-
----
-
-## Fuel the Build & Support CIPH
-
-CIPH is an independent open-source project. If it improves your research or engineering workflow, you can support continued development:
-
-| Network | Asset | Address |
-| :--- | :--- | :--- |
-| **Bitcoin** | `BTC` | `bc1q7wr0zkhk92aqr33fdy0tynadxuxgepnrpqds85` |
+This README describes a **sanitized public copy** of a privately developed project. The public tree is a
+different tree from the private development tree and carries **its own** verification; see
+[Verification & evidence](#verification--evidence). Blueprints and personal working notes are intentionally not
+published; the retained phase records are the seals, checkpoints, remediation and gate records under `docs/`.
 
 ---
 
@@ -543,10 +343,20 @@ For research inquiries, responsible vulnerability disclosure, or project feedbac
 - **Encrypted Mail:** `ciphcontact.ranger783@passinbox.com`
 - **Session ID:** `05fa17d37438cb789700327416962eaa8649a582f66d06be63ef1b7f8b85b8fd09`
 
+## Support
+
+CIPH is an independent project. If it improves your research or engineering workflow:
+
+| Network | Asset | Address |
+| :--- | :--- | :--- |
+| **Bitcoin** | `BTC` | `bc1q7wr0zkhk92aqr33fdy0tynadxuxgepnrpqds85` |
+
 ---
 
-## License & Responsible Use
+## License & responsible use
 
-Licensed under the **MIT License** — see the bundled `LICENSE` file.
+Licensed under the **MIT License** — see the bundled [`LICENSE`](LICENSE) file (`Copyright (c) 2026 bullseye999`).
 
-> CIPH is designed for authorized security research, education, defensive intelligence, and bug-bounty programs operating within explicit scope. Operators are responsible for complying with applicable law, provider terms, and program rules.
+> CIPH is designed for authorized security research, education, defensive intelligence, and bug-bounty programs
+> operating within explicit scope. Operators are responsible for complying with applicable law, provider terms,
+> and program rules.
