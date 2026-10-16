@@ -37,7 +37,7 @@ class CiphConversation:
             self.history = self.history[2:]
             u_text = overflow_turn[0].get('content', '')[:160] if overflow_turn else ""
             a_text = overflow_turn[1].get('content', '')[:160] if len(overflow_turn) > 1 else ""
-            summary_snippet = f"Earlier in session: Operator discussed '{u_text}' -> Ciph guided: '{a_text}'."
+            summary_snippet = f"Earlier in session: operator discussed '{u_text}' -> Ciph guided: '{a_text}'."
             if self.running_session_summary:
                 self.running_session_summary = f"{self.running_session_summary}\n{summary_snippet}"[-800:]
             else:
@@ -170,7 +170,9 @@ class CiphConversation:
             memory_context=memory_context,
             book_context=book_context,
             operational_context=full_op_context,
-            world_context=world_context
+            world_context=world_context,
+            operator_name=getattr(self, 'vault', None) and self.vault.get_operator_name() or "",
+            operator_pronoun=getattr(self, 'vault', None) and getattr(self.vault, "get_operator_pronoun", lambda: None)() or ""
         )
 
     def bridge_command_execution(self, command: str, output: str):
@@ -191,7 +193,7 @@ class CiphConversation:
         if any(trigger in user_input.lower() for trigger in live_data_triggers):
             return "use /market-data for live crypto prices — I don't guess numbers."
 
-        # 1. Check for Operator's Council Triggers
+        # 1. Check for operator's Council Triggers
         council_triggers = [
             'talk to me', "what's on your mind", "what is on your mind",
             'what have you been thinking about', 'what have you been exploring',
@@ -203,7 +205,7 @@ class CiphConversation:
             if theses:
                 top_thesis = theses[0]
                 self.vault.mark_council_thesis_discussed(top_thesis['id'])
-                operational_context += f"\n\n[OPERATOR'S COUNCIL DIALECTIC THESIS]\nTitle: {top_thesis['title']}\nConclusion: {top_thesis['conclusion']}\nDialogue Prompt: {top_thesis['dialogue_prompt']}\nInitiate direct, thoughtful peer dialogue with Operator around this thesis."
+                operational_context += f"\n\n[operator'S COUNCIL DIALECTIC THESIS]\nTitle: {top_thesis['title']}\nConclusion: {top_thesis['conclusion']}\nDialogue Prompt: {top_thesis['dialogue_prompt']}\nInitiate direct, thoughtful peer dialogue with operator around this thesis."
 
         # 2. Real-Time Operational Status / Sitrep / Catch-Up Trigger
         status_triggers = [
@@ -251,12 +253,12 @@ class CiphConversation:
                     "CRITICAL INSTRUCTION FOR TARGET RECOMMENDATIONS:\n"
                     "- You MUST recommend ONLY from the registered targets listed above.\n"
                     "- NEVER suggest phantom targets (like AWS or WordPress) unless they are in the above list.\n"
-                    "- Pick one of the active registered targets, give a sharp technical rationale based on its scope, and ask Operator if you should launch a passive recon scan."
+                    "- Pick one of the active registered targets, give a sharp technical rationale based on its scope, and ask operator if you should launch a passive recon scan."
                 )
             else:
                 operational_context += (
                     "\n\n[ACTIVE REGISTERED TARGETS IN VAULT: None registered]\n"
-                    "State clearly that no bug bounty targets are currently registered in the vault, and ask Operator to register a target scope or provide a domain to scan."
+                    "State clearly that no bug bounty targets are currently registered in the vault, and ask operator to register a target scope or provide a domain to scan."
                 )
 
         # 4. Scan Status & Progress Inquiry Trigger
