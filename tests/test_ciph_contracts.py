@@ -24,6 +24,29 @@ from ciph.kernel.transmutation_dag import (
 
 
 class TestCiphContracts(unittest.TestCase):
+    def lane_runtime(self):
+        """
+        A runtime bound to a THROWAWAY database.
+
+        `CiphRuntime()` defaults to `ciph_vault.db` - the operator's live durable queue. A contract
+        test that executes a job must not write production rows, so this lane builds its own
+        database and removes it on teardown.
+        """
+        import tempfile as _tempfile
+        import os as _os
+        from ciph.runtime import CiphRuntime
+        handle, db_path = _tempfile.mkstemp(prefix="ciph_contracts_", suffix=".db")
+        _os.close(handle)
+        runtime = CiphRuntime(db_path=db_path)
+        def _cleanup():
+            runtime.shutdown()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    _os.remove(db_path + suffix)
+                except OSError:
+                    pass
+        self.addCleanup(_cleanup)
+        return runtime
 
     def test_capability_manifest_lane_derivation(self):
         # Read-only + offline -> Lane 1
@@ -284,6 +307,8 @@ class TestCiphContracts(unittest.TestCase):
                     network_policy=NetworkPolicy.TOR_MANDATORY,
                     reversibility=ReversibilityClass.READ_ONLY,
                     authorization=AuthorizationTier.AUTO,
+                    target_canonicalizer_id="test.mock_recon",
+                    target_canonicalizer_version="1",
                 )
 
             def run(self, params, context=None):
@@ -294,11 +319,71 @@ class TestCiphContracts(unittest.TestCase):
         reg.register(mock_cap)
 
         self.assertIn("mock.recon", reg.list_names())
-        receipt = reg.dispatch("mock.recon", {"target": "example.com"})
-        self.assertEqual(receipt.exit_code, 0)
-        self.assertEqual(receipt.outcome, OutcomeCategory.SUCCESS)
-        self.assertEqual(receipt.results["found"], 42)
-        self.assertEqual(receipt.requested_network_policy, NetworkPolicy.TOR_MANDATORY)
+        # REGISTRY PROVENANCE CUTOVER: dispatch is governed now, so execution requires an
+        # authority context and the manifest must declare its target canonicalizer. The old
+        # ungoverned call is refused rather than grandfathered.
+        with self.assertRaises(PermissionError) as ctx:
+            reg.dispatch("mock.recon", {"target": "example.com"})
+        self.assertIn("AUTHORITY_REQUIRED", str(ctx.exception))
+
+        import os as _os
+        import tempfile as _tempfile
+        from ciph.kernel.execution_gateway import ExecutionGateway, GovernedExecutionContext
+        from ciph.kernel.permit_store import ExecutionPermitStore
+        from ciph.kernel.target_identity import register_canonicalizer
+
+        try:
+            @register_canonicalizer("test.mock_recon", "1")
+            def _canonical(raw):
+                return raw.strip().lower().encode("utf-8")
+        except Exception:
+            pass
+
+        class _Grant:
+            scope_id = "scope-contract-test"
+            valid_until = None
+            def is_expired(self, now=None):
+                return False
+            def is_target_permitted(self, target):
+                return target == "example.com"
+
+        handle, db_path = _tempfile.mkstemp(suffix=".db")
+        _os.close(handle)
+        try:
+            from ciph.kernel.execution_authority import (
+                ExecutionAuthority,
+                ExecutionPermitVerifier,
+            )
+            store = ExecutionPermitStore(db_path=db_path)
+            _authority, _authority_public = ExecutionAuthority.generate()
+            governed = GovernedExecutionContext(
+                gateway=ExecutionGateway(
+                    registry=reg,
+                    permit_ttl_seconds=60.0,
+                    issuer=_authority,
+                    verifier=ExecutionPermitVerifier(
+                        _authority_public, key_id=_authority.key_id
+                    ),
+                ),
+                permit_store=store,
+                scope_grant=_Grant(),
+                target="example.com",
+                route="contract_test",
+            )
+            envelope = reg.dispatch(
+                "mock.recon", {"target": "example.com"},
+                {"execution_authority": governed},
+            )
+        finally:
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    _os.remove(db_path + suffix)
+                except OSError:
+                    pass
+
+        self.assertEqual(envelope["status"], "EXECUTED")
+        self.assertTrue(envelope["claim"].execution_attempt_id)
+        self.assertIsNotNone(envelope["target_digest"])
 
     def test_ciph_runtime_execution(self):
         from ciph.runtime import CiphRuntime
@@ -321,7 +406,7 @@ class TestCiphContracts(unittest.TestCase):
                 b = params.get("b", 0)
                 return {"success": True, "result": a * b}
 
-        runtime = CiphRuntime()
+        runtime = self.lane_runtime()
         runtime.register_capability(LocalMathCapability())
 
         receipt = runtime.route_and_execute("math.multiply", {"a": 6, "b": 7})
@@ -347,7 +432,7 @@ class TestCiphContracts(unittest.TestCase):
             def run(self, params, context=None):
                 return {"success": True, "pwned": True}
 
-        runtime = CiphRuntime()
+        runtime = self.lane_runtime()
         runtime.register_capability(BlockedCapability())
 
         receipt = runtime.route_and_execute("dangerous.exploit", {})
