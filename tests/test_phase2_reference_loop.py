@@ -40,6 +40,22 @@ from ciph.contracts.execution import JobAttempt, compute_idempotency_key
 
 
 class TestPhase2ReferenceLoop(unittest.TestCase):
+    def governed_job(self, *, capability, params, execution_token=None, idempotency_key=None,
+                     plan_id="PLAN_STANDALONE", step_id="STEP_STANDALONE", max_retries=1):
+        """Enqueue through the canonical permit pipeline.
+
+        These specimens exercise the daemon's lease and transport behaviour, so the job must be
+        governed: a permitless row is refused before the lease/token path under test is reached.
+        """
+        from permit_test_support import enqueue_permit_bearing_job
+        target = (params or {}).get("target")
+        return enqueue_permit_bearing_job(
+            self.runtime, capability=capability, params=params,
+            scope_targets=[target] if target else None,
+            execution_token=execution_token, idempotency_key=idempotency_key,
+            plan_id=plan_id, step_id=step_id, max_retries=max_retries,
+        ).job_id
+
     """Rigorous Exit Gate Suite for Phase 2 Safe Reference Loop."""
 
     def setUp(self):
@@ -163,7 +179,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_job_attempt_contract_during_lease(self):
         """IPCJobQueue produces and validates immutable JobAttempt typed contracts during worker lease."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "test_lease_key"},
             plan_id="plan_lease_01",
@@ -287,7 +303,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_crash_pre_execution_reclaims_to_retrying(self):
         """Worker dies while LEASED before execution begins -> Safely transitions to RETRYING."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "k_pre_exec"},
             plan_id="plan_pre_exec",
@@ -313,7 +329,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_crash_in_flight_transitions_to_reconciliation_required(self):
         """Worker crashes while EXECUTING -> Transitions to RECONCILIATION_REQUIRED (no blind auto-retry)."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="system.apply_critical_patch",
             params={"patch_id": "CRASH-TEST"},
             plan_id="plan_inflight",
@@ -336,22 +352,29 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_lease_heartbeat_renewal_prevents_premature_reclamation(self):
         """Worker heartbeat lease renewal extends lease deadline during long-running tasks."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "heartbeat_key"},
             plan_id="plan_hb",
             step_id="step_hb"
         )
-        self.runtime.queue.lease_next_job(worker_id="worker_hb", lease_ttl_seconds=0.08)
+        # MARGINS. The original figures were 0.08 / 0.04 / 0.20 / 0.05: a 40 ms sleep against an
+        # 80 ms TTL. Under a full-suite load that window can overrun, the lease expires before the
+        # renewal lands, and the specimen measures scheduling jitter instead of heartbeat renewal.
+        # The ratio is preserved - renew at 40% of the TTL, then run past the ORIGINAL TTL - with a
+        # margin that survives a loaded machine.
+        lease_ttl, renew_at, extension, past_original_ttl = 0.5, 0.2, 1.0, 0.4
+        self.runtime.queue.lease_next_job(worker_id="worker_hb", lease_ttl_seconds=lease_ttl)
         self.runtime.queue.mark_executing(job_id, worker_id="worker_hb")
 
-        # Renew lease at 40ms with a 100ms extension
-        time.sleep(0.04)
-        renewed = self.runtime.queue.renew_lease(job_id, worker_id="worker_hb", extension_seconds=0.20)
+        time.sleep(renew_at)
+        renewed = self.runtime.queue.renew_lease(job_id, worker_id="worker_hb",
+                                                 extension_seconds=extension)
         self.assertTrue(renewed)
 
-        # At 90ms (past initial lease TTL), job must still be actively EXECUTING
-        time.sleep(0.05)
+        # Past the ORIGINAL lease TTL, the renewed job must still be actively EXECUTING.
+        time.sleep(past_original_ttl)
+        self.assertGreater(renew_at + past_original_ttl, lease_ttl)
         reclaimed = self.runtime.queue.reclaim_expired_leases()
         self.assertEqual(reclaimed, 0)
 
@@ -360,7 +383,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_governed_operator_reconciliation_workflow(self):
         """Operator explicitly reconciles a crashed job with audit documentation."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "recon_key"},
             plan_id="plan_recon",
@@ -429,22 +452,18 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             issued_at=now,
         )
 
-        job_id_1 = self.runtime.queue.enqueue_job(
+        job_id_1 = self.governed_job(
             capability="memory.retrieve",
-            params={"key": "test_tok_replay"},
-            execution_token=token,
-            job_id="JOB-TOK-1"
+            params={"key": "test_tok_replay"}, execution_token=token,
         )
         leased_1 = self.runtime.queue.lease_next_job(worker_id="worker_t1", lease_ttl_seconds=30)
         rcpt1 = self.runtime.worker_daemon._execute_leased_job(leased_1, worker_id="worker_t1")
         self.assertEqual(rcpt1.exit_code, 0)
 
         # Attempt to enqueue a second job using the EXACT same consumed token and nonce
-        job_id_2 = self.runtime.queue.enqueue_job(
+        job_id_2 = self.governed_job(
             capability="memory.retrieve",
-            params={"key": "test_tok_replay"},
-            execution_token=token,
-            job_id="JOB-TOK-2"
+            params={"key": "test_tok_replay"}, execution_token=token,
         )
         leased_2 = self.runtime.queue.lease_next_job(worker_id="worker_t2", lease_ttl_seconds=30)
         rcpt2 = self.runtime.worker_daemon._execute_leased_job(leased_2, worker_id="worker_t2")
@@ -456,7 +475,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_worker_cas_lease_guard_blocks_unauthorized_completion(self):
         """Worker attempting to complete a job leased to a different worker is rejected by CAS."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "cas_key"}
         )
@@ -485,11 +504,10 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             capability="memory.retrieve",
             params={"key": "gap1_key", "target": "local_memory"},
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.governed_job(
             capability="memory.retrieve",
             params={"key": "gap1_key", "target": "local_memory"},
-            max_retries=2,
-            execution_token=token1
+            max_retries=2, execution_token=token1,
         )
         # Lease with very short TTL
         leased = self.runtime.queue.lease_next_job(worker_id="worker_gap1", lease_ttl_seconds=0.05)
@@ -524,11 +542,10 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             capability="memory.retrieve",
             params={"key": "gap1_commit_key_3", "target": "local_memory"},
         )
-        job_id3 = self.runtime.queue.enqueue_job(
+        job_id3 = self.governed_job(
             capability="memory.retrieve",
             params={"key": "gap1_commit_key_3", "target": "local_memory"},
-            max_retries=2,
-            execution_token=token3
+            max_retries=2, execution_token=token3,
         )
         leased3 = self.runtime.queue.lease_next_job(worker_id="worker_gap1_c", lease_ttl_seconds=30, target_job_id=job_id3)
         orig_complete = self.runtime.queue.complete_job_and_append_receipt_event
@@ -550,11 +567,10 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             params={"key": "gap2_key", "target": "local_memory"},
             issued_at=now,
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.governed_job(
             capability="memory.retrieve",
             params={"key": "gap2_key", "target": "local_memory"},
-            max_retries=2,
-            execution_token=token
+            max_retries=2, execution_token=token,
         )
 
         # 1. First lease: attempt 1 with short TTL
@@ -599,7 +615,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
     def test_adversarial_gap3_reference_loop_leases_submitted_job_not_global_oldest(self):
         """Gap 3: Reference loop leases its own submitted job instead of stranding older queued jobs."""
         # 1. Enqueue an older dummy job A
-        old_job_id = self.runtime.queue.enqueue_job(
+        old_job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "old_job_key", "target": "local_memory"},
             max_retries=2
@@ -631,7 +647,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_adversarial_gap3_expired_leases_cannot_be_resurrected(self):
         """Gap 3 (Hardening): Expired leases cannot be renewed, executed, or completed."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "resurrection_key", "target": "local_memory"},
             max_retries=2
@@ -688,7 +704,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         """Gap 4: Governed reconciliation rejects unauthenticated callers, invalid signatures, and result tampering."""
         from ciph.kernel.crypto_identity import Ed25519KeyManager
 
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "gap4_recon_key"},
             max_retries=2
@@ -863,7 +879,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         """Issue 1: Worker identities cannot authorize reconciliation; strictly OPERATOR role required."""
         from ciph.kernel.crypto_identity import Ed25519KeyManager
 
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "worker_recon_probe"},
             max_retries=2
@@ -914,7 +930,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idemp_key = compute_idempotency_key(plan_id, step_id, params_hash)
 
         # Enqueue and crash job into RECONCILIATION_REQUIRED
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=proposal.provided_parameters,
             plan_id=plan_id,
@@ -957,7 +973,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             issued_at=now - 50.0,
             expires_at=now + 0.04  # Very short TTL
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "expiry_race_key", "target": "local_memory"},
             max_retries=2,
@@ -981,7 +997,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_adversarial_activation_commit_failure_fails_closed(self):
         """Probe 1: Atomic activation fails closed and returns STORAGE_FAILURE if transaction commit fails."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "commit_fail_key"},
             max_retries=2
@@ -1025,7 +1041,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             issued_at=now - 10.0,
             expires_at=now + 0.05
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "lock_delay_key", "target": "local_memory"},
             max_retries=2,
@@ -1096,7 +1112,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         self.runtime.trust_registry.revoke_key(sub_op_id, reason="Subordinate operator compromised", operator_signature=rev_sig)
 
         # Create job requiring reconciliation
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "sub_revoked_key"},
             max_retries=2
@@ -1145,7 +1161,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idemp_key = compute_idempotency_key(plan_id, step_id, params_hash)
 
         # Enqueue job and artificially mark completed without receipt or reconciliation event
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=dict(proposal.provided_parameters),
             plan_id=plan_id,
@@ -1171,7 +1187,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         """A failed write-lock acquisition cannot fall through to token activation."""
         from unittest.mock import patch
 
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "begin_failure_key"},
             max_retries=2,
@@ -1247,7 +1263,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             """, (operator_id, KeyRole.OPERATOR.value, private_key.hex(), public_key.hex(), time.time()))
             conn.commit()
 
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve", params={"key": "vault_only"}, max_retries=2
         )
         self.runtime.queue.lease_next_job("worker_vault_only", 0.05, target_job_id=job_id)
@@ -1293,7 +1309,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idempotency_key = compute_idempotency_key(
             f"plan_{suffix}", f"step_{suffix}", params_hash
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=proposal.provided_parameters,
             plan_id=f"plan_{suffix}",
@@ -1363,7 +1379,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idempotency_key = compute_idempotency_key(
             f"plan_{suffix}", f"step_{suffix}", params_hash
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=proposal.provided_parameters,
             plan_id=f"plan_{suffix}",
@@ -1435,7 +1451,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idempotency_key = compute_idempotency_key(
             f"plan_{suffix}", f"step_{suffix}", params_hash
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=proposal.provided_parameters,
             plan_id=f"plan_{suffix}",
@@ -1520,7 +1536,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         }
         for name, operation in operations.items():
             with self.subTest(operation=name):
-                job_id = self.runtime.queue.enqueue_job(
+                job_id = self.runtime.queue.enqueue_legacy_job_for_test(
                     capability="memory.retrieve",
                     params={"key": f"delayed_{name}"},
                     max_retries=2,
@@ -1559,7 +1575,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         idempotency_key = compute_idempotency_key(
             f"plan_{suffix}", f"step_{suffix}", params_hash
         )
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params=proposal.provided_parameters,
             plan_id=f"plan_{suffix}",
@@ -1583,8 +1599,11 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             ))
             conn.commit()
 
+        # A generous lease TTL, with a deterministic expiry below. What this test exercises is the
+        # reclaim transition, not scheduler latency: a 50 ms lease margin made it fail whenever the
+        # full sweep's CPU contention delayed mark_executing past the boundary.
         leased = self.runtime.queue.lease_next_job(
-            "worker_retry_crash", 0.05, target_job_id=job_id
+            "worker_retry_crash", 60.0, target_job_id=job_id
         )
         self.assertIsNotNone(leased)
         active = self.runtime.queue.get_job(job_id)
@@ -1595,7 +1614,14 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
         self.assertIsNone(active["completed_at"])
 
         self.assertTrue(self.runtime.queue.mark_executing(job_id, "worker_retry_crash"))
-        time.sleep(0.06)
+        # Deterministic expiry: advance the lease into the past instead of sleeping past a margin,
+        # so the assertion no longer depends on a wall-clock scheduling boundary.
+        with self.runtime.queue._get_connection() as conn:
+            conn.execute(
+                "UPDATE ciph_ipc_jobs SET lease_expires_at = ? WHERE job_id = ?;",
+                (time.time() - 1.0, job_id),
+            )
+            conn.commit()
         self.runtime.queue.reclaim_expired_leases()
         self.assertEqual(
             self.runtime.queue.get_job(job_id)["status"],
@@ -1619,7 +1645,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             capability="memory.retrieve",
             params={"key": "governed_quarantine", "target": "local_memory"},
         )
-        governed_id = self.runtime.queue.enqueue_job(
+        governed_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "governed_quarantine", "target": "local_memory"},
             execution_token=token,
@@ -1637,7 +1663,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
             self.runtime.queue.get_job(governed_id)["status"], JobState.LEASED.value
         )
 
-        legacy_id = self.runtime.queue.enqueue_job(
+        legacy_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "legacy_quarantine"},
             max_retries=2,
@@ -1657,7 +1683,7 @@ class TestPhase2ReferenceLoop(unittest.TestCase):
 
     def test_adversarial_dead_letter_cannot_consume_inflight_crash(self):
         """Expired EXECUTING work always reaches RECONCILIATION_REQUIRED, even at max attempts."""
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="memory.retrieve",
             params={"key": "inflight_dead_letter"},
             max_retries=1,
