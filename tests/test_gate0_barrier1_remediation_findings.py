@@ -50,7 +50,7 @@ class TestGate0Barrier1RemediationFindings(unittest.TestCase):
         queue = IPCJobQueue(self.DB_PATH, trust_registry=reg, worker_secret_key=priv_bytes)
 
         # Enqueue and lease job
-        job_id = queue.enqueue_job("osint.find_monetizable_threats", {"target": "audit.corp"})
+        job_id = queue.enqueue_legacy_job_for_test("osint.find_monetizable_threats", {"target": "audit.corp"})
         leased = queue.lease_next_job("worker_01", lease_ttl_seconds=30)
         self.assertIsNotNone(leased)
         self.assertEqual(leased["job_id"], job_id)
@@ -94,7 +94,7 @@ class TestGate0Barrier1RemediationFindings(unittest.TestCase):
         priv_bytes, pub_bytes = reg.get_or_create_keypair("worker_01", KeyRole.WORKER)
         queue = IPCJobQueue(self.DB_PATH, trust_registry=reg, worker_secret_key=priv_bytes)
 
-        job_id = queue.enqueue_job("osint.find_monetizable_threats", {"target": "audit.corp"})
+        job_id = queue.enqueue_legacy_job_for_test("osint.find_monetizable_threats", {"target": "audit.corp"})
         leased = queue.lease_next_job("worker_01", lease_ttl_seconds=30)
         self.assertIsNotNone(leased)
 
@@ -137,7 +137,7 @@ class TestGate0Barrier1RemediationFindings(unittest.TestCase):
         priv_bytes, pub_bytes = reg.get_or_create_keypair("worker_01", KeyRole.WORKER)
         queue = IPCJobQueue(self.DB_PATH, trust_registry=reg, worker_secret_key=priv_bytes)
 
-        job_id = queue.enqueue_job("osint.find_monetizable_threats", {"target": "audit.corp"})
+        job_id = queue.enqueue_legacy_job_for_test("osint.find_monetizable_threats", {"target": "audit.corp"})
         leased = queue.lease_next_job("worker_01", lease_ttl_seconds=30)
         self.assertIsNotNone(leased)
 
@@ -197,7 +197,7 @@ class TestGate0Barrier1RemediationFindings(unittest.TestCase):
         priv_bytes, pub_bytes = reg.get_or_create_keypair("worker_01", KeyRole.WORKER)
         queue = IPCJobQueue(self.DB_PATH, trust_registry=reg, worker_secret_key=priv_bytes)
 
-        job_id = queue.enqueue_job("osint.find_monetizable_threats", {"target": "audit.corp"})
+        job_id = queue.enqueue_legacy_job_for_test("osint.find_monetizable_threats", {"target": "audit.corp"})
         leased = queue.lease_next_job("worker_01", lease_ttl_seconds=30)
         self.assertIsNotNone(leased)
 
