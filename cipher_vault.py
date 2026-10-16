@@ -228,7 +228,7 @@ class CipherVault:
                 created_at REAL
             )
         ''')
-        # Operator's Council Vault table (Theses for dialogue)
+        # operator's Council Vault table (Theses for dialogue)
         c.execute('''
             CREATE TABLE IF NOT EXISTS operators_council_vault (
                 id TEXT PRIMARY KEY,
@@ -252,7 +252,7 @@ class CipherVault:
                 created_at REAL
             )
         ''')
-        # Operator's Implicit Strategic Profile (Encrypted Long-Term Memory)
+        # operator's Implicit Strategic Profile (Encrypted Long-Term Memory)
         c.execute('''
             CREATE TABLE IF NOT EXISTS operator_profile (
                 id TEXT PRIMARY KEY,
@@ -516,14 +516,25 @@ class CipherVault:
         return None
 
     def get_operator_name(self) -> Optional[str]:
-        """Get the authenticated operator's callsign/name from encrypted vault."""
+        """The operator's callsign/name, stored encrypted in the vault."""
         return self.get_config("OPERATOR_NAME")
 
     def set_operator_name(self, name: str) -> bool:
-        """Store the operator's callsign/name encrypted in vault."""
+        """Store the operator's callsign/name encrypted in the vault."""
         if not name or not name.strip():
             return False
         self.set_config("OPERATOR_NAME", name.strip())
+        return True
+
+    def get_operator_pronoun(self) -> Optional[str]:
+        """The operator's preferred pronouns, stored encrypted in the vault."""
+        return self.get_config("OPERATOR_PRONOUN")
+
+    def set_operator_pronoun(self, pronoun: str) -> bool:
+        """Store the operator's preferred pronouns encrypted in the vault."""
+        if not pronoun or not pronoun.strip():
+            return False
+        self.set_config("OPERATOR_PRONOUN", pronoun.strip())
         return True
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
@@ -1152,7 +1163,7 @@ class CipherVault:
 
     def store_council_thesis(self, thesis_id: str, thesis_title: str,
                              ciph_conclusion: str, dialogue_prompt: str) -> bool:
-        """Store an encrypted thesis in Operator's Council vault."""
+        """Store an encrypted thesis in operator's Council vault."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
@@ -1175,7 +1186,7 @@ class CipherVault:
             return False
 
     def get_pending_council_theses(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve undiscussed theses from Operator's Council vault."""
+        """Retrieve undiscussed theses from operator's Council vault."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
@@ -1202,7 +1213,7 @@ class CipherVault:
             return []
 
     def mark_council_thesis_discussed(self, thesis_id: str) -> bool:
-        """Mark a council thesis as discussed with Operator."""
+        """Mark a council thesis as discussed with operator."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
@@ -1357,11 +1368,11 @@ class CipherVault:
             }
 
     # ══════════════════════════════════════════════════════════════════════════
-    # OPERATOR PROFILE, ENTITY GRAPH & DECISION MEMORY (AES-256 ENCRYPTED)
+    # operator PROFILE, ENTITY GRAPH & DECISION MEMORY (AES-256 ENCRYPTED)
     # ══════════════════════════════════════════════════════════════════════════
 
     def store_profile_fact(self, fact_id: str, category: str, key: str, value: str, confidence: float = 1.0) -> bool:
-        """Store an encrypted fact/preference in Operator's strategic profile."""
+        """Store an encrypted fact/preference in operator's strategic profile."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
@@ -1384,7 +1395,7 @@ class CipherVault:
             return False
 
     def get_profile_facts(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Retrieve and decrypt Operator's profile facts in volatile RAM."""
+        """Retrieve and decrypt operator's profile facts in volatile RAM."""
         try:
             conn = self._get_connection()
             c = conn.cursor()
