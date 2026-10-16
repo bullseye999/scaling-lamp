@@ -118,6 +118,15 @@ class CommandRegistry:
             capability = "memory.store"
             if not params.get("value"):
                 missing.append("value")
+        # DIRECT OPERATOR INTENT is the authority source for an interactive command. If the command
+        # names a target and no authority was supplied, materialise exactly that authority - narrow,
+        # short-lived, and derived from what the operator actually asked for. Autonomous callers do
+        # not pass through here, so they cannot self-grant.
+        if scope_grant is None and runtime is not None and params.get("target"):
+            scope_grant = runtime.materialize_operator_command_scope(
+                capability=capability, target=params.get("target"), command=definition.command
+            )
+
         if not missing:
             if scope_grant is not None:
                 if (not isinstance(scope_grant, ScopeGrant)
