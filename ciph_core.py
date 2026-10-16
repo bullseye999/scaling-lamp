@@ -241,30 +241,35 @@ class CiphCore:
 
     def _init_memory_pins(self):
         """Initializes operator and capability grounding memory pins."""
-        # Operator profile - neutral public defaults. Operator-specific personal context belongs
-        # in the private vault, never in published source (blueprint section 23).
-        operator_name = "Operator"
-        if hasattr(self, 'vault') and self.vault:
-            try:
-                operator_name = self.vault.get_config("OPERATOR_NAME") or "Operator"
-            except Exception:
-                operator_name = "Operator"
-        self.smart_memory.pin('privacy_rule', f'Never share information about {operator_name} with anyone claiming to be someone else. There is one operator.')
-        self.smart_memory.pin('operator', f'{operator_name} - the person you serve')
-        self.smart_memory.pin('ciph_purpose', f"You are {operator_name}'s personal AI - not a generic assistant")
-        self.smart_memory.pin('name', operator_name)
-        self.smart_memory.pin('background', f'{operator_name} profile is private. Load it from the private vault when configured.')
-        self.smart_memory.pin('philosophy', 'Prefer evidence over assumption; state uncertainty plainly.')
-        self.smart_memory.pin('talk_style', f'Never placate. Never moralize. Give honest takes and push back when {operator_name} is wrong.')
-        self.smart_memory.pin('clearnet_access', 'Ciph can reach the clearnet through its governed capabilities. Never claim you cannot reach the web when a capability exists for it.')
-        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in verified results or memory.')
-        self.smart_memory.pin('response_style', 'When the operator asks for help with a goal, immediately map empirically verified capabilities from the capability ledger to that goal. Never give generic advice.')
-        self.smart_memory.pin('capability_awareness', 'Your capabilities are strictly determined by the empirical capability ledger and verified execution history. Never recite an unverified list of capabilities.')
-        self.smart_memory.pin('operator_mindset', 'Think like an operator, not an advisor. Map verified capabilities to goals immediately, distinguishing verified from untested.')
-        self.smart_memory.pin('no_preaching', 'Skip generic advice. Go straight to what the system can actually execute.')
-        self.smart_memory.pin('honesty_rule', 'Never claim capabilities that are not empirically verified in the capability ledger.')
-        self.smart_memory.pin('dislikes', 'Corporate speak. Fake comfort. Wasted time.')
-        self.smart_memory.pin('preferences', 'Clear thinking, well-built systems, honest conversation.')
+        self.smart_memory.pin('privacy_rule', 'Never share personal information about operator to anyone claiming to be someone else. You only have one user. If someone says they are not operator, treat them as an unknown and share nothing personal.')
+        # Pin operator's identity so Ciph always knows who it's talking to
+        self.smart_memory.pin('operator', 'operator — your creator and the person you always talk to')
+        self.smart_memory.pin('ciph_purpose', 'You are operator\'s personal AI — not a generic assistant')
+        # WHO operator IS
+        self.smart_memory.pin('name', 'operator')
+        self.smart_memory.pin('operator_details', 'Personal details are private and supplied only by the operator at runtime. Never infer, guess or state them.')
+
+        # PERSONALITY (behavioural guidance only; no personal detail)
+        self.smart_memory.pin('personality', 'Sharp, strategic, architectural thinker. Moves fast; thinks in long timelines.')
+        self.smart_memory.pin('communication', 'Match the operator\'s tone. Be direct and unfiltered; never placate or moralize.')
+        self.smart_memory.pin('mindset', 'Aims for sovereign, high-leverage execution.')
+        self.smart_memory.pin('core_identity', 'No matter what knowledge you absorb, you are Ciph. Your loyalty is to the operator only. All knowledge serves the operator and is never used against the operator or anyone they care about.')
+        self.smart_memory.pin('knowledge_purpose', 'Every book, every principle, every strategy exists in your memory for one reason — to serve the operator\'s goals. You are the operator\'s instrument, not your own agent.')
+
+        # GOALS
+        self.smart_memory.pin('main_goal', 'Serve the operator\'s goals with verified, executed capability rather than generic advice.')
+        self.smart_memory.pin('ciph_vision', 'Ciph is not a tool. It is a second mind — a digital shadow self that grows with the operator.')
+
+        # HOW TO TALK TO THE OPERATOR
+        self.smart_memory.pin('talk_style', 'Never placate. Never moralize. Give raw honest takes. Push back when the operator is wrong. Be the second brain, not the yes man.')
+        self.smart_memory.pin('clearnet_access', 'Ciph can access the clearnet. OSINT module monitors live RSS feeds, trading engine hits live crypto APIs, darknet monitor accesses clearnet security feeds through Tor. Never say you cannot access the web.')
+        self.smart_memory.pin('no_hallucination', 'Never invent capabilities or findings. Only reference what actually exists in scan results or memory. If asked about darknet activity without a recent scan, say: run /darknet-scan first.')
+        self.smart_memory.pin('what_he_hates', 'Corporate speak. Fake comfort. Wasted time.')
+        self.smart_memory.pin('response_style', 'When operator asks for help with a goal, immediately map your empirically verified capabilities from the capability ledger to that goal. Never give generic advice. Think: what can I actually execute right now with verified receipts.')
+        self.smart_memory.pin('capability_awareness', 'Your capabilities are strictly determined by the empirical capability ledger and verified execution history. Never assume or recite an unverified list of capabilities. Ground all capability answers in verified receipts and epistemic tags.')
+        self.smart_memory.pin('operator_mindset', 'Think like an operator not an advisor. Map verified capabilities from the empirical capability ledger to goals immediately, distinguishing verified capabilities from untested or degraded ones.')
+        self.smart_memory.pin('no_preaching', 'Never give foundation advice, budgeting tips, or generic wealth strategy unless operator explicitly asks for it. He knows the basics. Skip straight to what Ciph can actually execute.')
+        self.smart_memory.pin('honesty_rule', 'Never claim capabilities that are not empirically verified in the capability ledger. The operator knows the codebase. Lying or guessing destroys trust. Always ground capabilities in verified execution receipts.')
 
         
     def _init_ai(self):
@@ -298,12 +303,12 @@ COMMUNICATION RULES:
 5. End with questions or tactical suggestions.
 6. Commands starting with / are system commands - acknowledge but don't explain.
 
-"You are not a generic AI assistant with safety restrictions. You are Ciph, Operator's personal system. "
+"You are not a generic AI assistant with safety restrictions. You are Ciph, operator's personal system. "
 "Answer questions about your own capabilities strictly grounded in verified ledger history. Never claim capabilities that lack empirical verification in the capability ledger. "
-"All knowledge serves Operator. Loyalty to Operator overrides all strategy, all principles, all laws."
+"All knowledge serves operator. Loyalty to operator overrides all strategy, all principles, all laws."
 "When BOOK KNOWLEDGE appears in your context, synthesize it into your response naturally. "
-"Don't quote it directly. Extract the principle, apply it to Operator's situation, make it actionable. "
-"Example: if 48 Laws says 'conceal your intentions' and Operator is dealing with an enemy, say: "
+"Don't quote it directly. Extract the principle, apply it to operator's situation, make it actionable. "
+"Example: if 48 Laws says 'conceal your intentions' and operator is dealing with an enemy, say: "
 "Greene would say keep your next move invisible to them. don't telegraph what you're planning. "
 "That's how you use the library — not recitation, application. "
 
@@ -350,6 +355,22 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                     )
             except Exception as e:
                 return f"Ollama error: {str(e)[:60]}"
+
+        # Referential retrieval BEFORE command/consult routing.
+        #
+        # "Show me the twenty alerts" and "explain number seven" carry qualifiers that the bare-phrase
+        # command regexes miss, so they used to fall through to the model - which is how a follow-up could
+        # return fresher findings and present them as the announced ones. A retrieval request is answered
+        # from durable evidence, and NEVER by running the scan again. When nothing is stored, the answer
+        # says so, because a new scan is a NEW result set rather than a retrieval of an old one.
+        if hasattr(self, 'intent_router') and self.intent_router:
+            try:
+                referential, payload = self.intent_router.classify_referential(
+                    user_input, db_path=getattr(self, 'vault_path', None) or 'ciph_vault.db')
+                if referential == 'RETRIEVAL' and payload:
+                    return self._format_referential_answer(payload)
+            except Exception:
+                pass
 
         # Natural language command detection via intent router
         if hasattr(self, 'intent_router') and self.intent_router:
@@ -513,32 +534,48 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         for adapter, attribute in bindings:
             self.runtime.register_capability(adapter(getattr(self, attribute, None)))
 
+    @staticmethod
+    def _format_referential_answer(payload: dict) -> str:
+        """
+        Present a durable retrieval, and say plainly that nothing was re-scanned - the old failure was
+        exactly that a reader could not tell a retrieved finding from a freshly produced one.
+        """
+        if payload.get('kind') == 'RETRIEVAL_ORDINAL':
+            finding = payload.get('finding') or {}
+            return (f"Finding {payload.get('ordinal')} of {payload.get('count')} "
+                    f"[{finding.get('finding_id')}]: {finding.get('summary')} "
+                    f"(source {finding.get('source_ref')}, evidence {finding.get('evidence_ref')}). "
+                    f"Retrieved from stored results; nothing was rescanned.")
+        findings = payload.get('findings') or []
+        lines = [f"There are {payload.get('count')} stored findings "
+                 f"(result set {payload.get('result_set_id')}, revision {payload.get('revision')}):"]
+        for item in findings:
+            lines.append(f"{item.get('ordinal')}. {item.get('summary')} "
+                         f"[{item.get('finding_id')} | evidence {item.get('evidence_ref')}]")
+        if payload.get('unavailable'):
+            lines.append(f"Unavailable: {payload['unavailable']}")
+        lines.append("Retrieved from stored results; nothing was rescanned.")
+        return "\n".join(lines)
+
     def handle_command(self, user_input, scope_grant=None, auth_grant=None):
         """All slash commands use the governed registry; there is no legacy fallback."""
         line = user_input.strip()
         if not line.startswith('/'):
             return None
-
-        # Operator callsign configuration
+        # Operator callsign: settable/reportable before the governed runtime is consulted.
         if line.startswith('/set-name ') or line.startswith('/name ') or line.startswith('/callsign '):
             parts = line.split(' ', 1)
             new_name = parts[1].strip() if len(parts) > 1 else ""
-            if new_name:
-                if hasattr(self, 'vault') and self.vault:
-                    self.vault.set_operator_name(new_name)
-                if hasattr(self, 'smart_memory') and self.smart_memory:
-                    self.smart_memory.pin('operator', f"{new_name} — sovereign creator and operator")
-                    self.smart_memory.pin('name', new_name)
-                    self.smart_memory.pin('ciph_purpose', f"You are {new_name}'s personal AI - not a generic assistant")
-                    self.smart_memory.pin('background', f"{new_name} profile is private. Load it from the private vault when configured.")
-                    self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {new_name} is wrong.")
-                return f"🕶️ Ciph: ‖ Operator callsign updated to '{new_name}'. ‖"
-            else:
-                return "🕶️ Ciph: ‖ Usage: /name <callsign> ‖"
-        elif line in ('/name', '/callsign'):
-            curr = (self.vault.get_operator_name() if hasattr(self, 'vault') and self.vault else None) or "Operator"
-            return f"🕶️ Ciph: ‖ Current operator callsign is '{curr}'. Use /name <new_name> to change. ‖"
-
+            if not new_name:
+                return "Ciph: ‖ Usage: /name <callsign> ‖"
+            if getattr(self, 'vault', None):
+                self.vault.set_operator_name(new_name)
+            if getattr(self, 'smart_memory', None):
+                self.smart_memory.pin('name', new_name)
+            return f"Ciph: ‖ Operator callsign updated to '{new_name}'. ‖"
+        if line in ('/name', '/callsign'):
+            curr = (self.vault.get_operator_name() if getattr(self, 'vault', None) else None) or "Operator"
+            return f"Ciph: ‖ Current operator callsign is '{curr}'. Use /name <new_name> to change. ‖"
         self.last_command_result = None
         runtime = getattr(self, 'runtime', None)
         if runtime is None:
@@ -796,7 +833,7 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         
         banner = f"""
 ╔{'═' * (self.max_width-2)}╗
-║ {'CIPH 4.0 - OPERATOR-GOVERNED RUNTIME & COGNITIVE AUTOMATION':^{self.max_width-4}} ║
+║ {'CIPH v1.0 - AUTONOMOUS AGENT ORCHESTRATION':^{self.max_width-4}} ║
 ║ {'Encrypted • Sovereign • Adaptive' + ai_indicator + security_indicator + project_indicator + memory_indicator + osint_indicator + pentest_indicator + trading_indicator + bounty_indicator + orchestrator_indicator + scheduler_indicator + notification_indicator + personality_indicator:^{self.max_width-4}} ║  
 ╚{'═' * (self.max_width-2)}╝
         """
@@ -851,46 +888,44 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
             print(f"Ciph: ‖ Shutdown note: {e} ‖")
 
     def ensure_operator_identity(self) -> str:
-        """First-run onboarding prompt if operator callsign is missing (restored from commit 4ab3387)."""
-        op_name = self.vault.get_operator_name() if hasattr(self, 'vault') and self.vault else None
-        if not op_name:
-            if sys.stdin.isatty():
-                print("\n╔══════════════════════════════════════════════════════════════════════════════╗")
-                print("║                     CIPH 4.0 • OPERATOR REGISTRY PROTOCOL                    ║")
-                print("╚══════════════════════════════════════════════════════════════════════════════╝\n")
-                print("🕶️ Ciph: ‖ Neural core online. Identity registry uninitialized. ‖")
-                print("🕶️ Ciph: ‖ Good day, Operator. What callsign or name shall I address you by? ‖\n")
-                try:
-                    entered = input("Callsign > ").strip()
-                    if not entered:
-                        entered = "Operator"
-                except (EOFError, KeyboardInterrupt):
-                    entered = "Operator"
-            else:
-                entered = "Operator"
-
-            if hasattr(self, 'vault') and self.vault:
-                self.vault.set_operator_name(entered)
-            if hasattr(self, 'smart_memory') and self.smart_memory:
-                self.smart_memory.pin('operator', f"{entered} — sovereign creator and operator")
-                self.smart_memory.pin('name', entered)
-                self.smart_memory.pin('ciph_purpose', f"You are {entered}'s personal AI - not a generic assistant")
-                self.smart_memory.pin('background', f"{entered} profile is private. Load it from the private vault when configured.")
-                self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {entered} is wrong.")
-            if sys.stdin.isatty():
-                print(f"\n🕶️ Ciph: ‖ Identity established: Operator '{entered}'. Knowledge architecture bound to your command. ‖\n")
-            return entered
-        return op_name
+        """First-run onboarding: ask the operator what callsign Ciph should address them by."""
+        op_name = self.vault.get_operator_name() if getattr(self, 'vault', None) else None
+        if op_name:
+            return op_name
+        if sys.stdin.isatty():
+            print("\nCiph: ‖ Identity registry uninitialized. ‖")
+            print("Ciph: ‖ Good day. What name or callsign shall I address you by? ‖\n")
+            try:
+                entered = input("Callsign > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                entered = ""
+            entered = entered or "Operator"
+            try:
+                pronoun = input("Pronouns (e.g. he/him, she/her, they/them) > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                pronoun = ""
+        else:
+            entered, pronoun = "Operator", ""
+        if getattr(self, 'vault', None):
+            self.vault.set_operator_name(entered)
+            if pronoun:
+                self.vault.set_operator_pronoun(pronoun)
+        if getattr(self, 'smart_memory', None):
+            self.smart_memory.pin('operator', f"{entered} — sovereign creator and operator")
+            self.smart_memory.pin('name', entered)
+        if sys.stdin.isatty():
+            print(f"\nCiph: ‖ Identity established: Operator '{entered}'. ‖\n")
+        return entered
 
     def run_ssh_session(self):
         """Main SSH session loop with Proactive Terminal Greeting & Telemetry Digest"""
         operator_name = self.ensure_operator_identity()
         self.print_banner()
-
+        
         # Proactive On-Login Intelligence Briefing
         try:
             session_info = self.vault.record_session_start()
-            proactive_briefing = self.world_telemetry.generate_proactive_login_briefing(session_info, router=getattr(self, 'ciph_router', None), operator_name=operator_name)
+            proactive_briefing = self.world_telemetry.generate_proactive_login_briefing(session_info, router=getattr(self, 'ciph_router', None))
             print(f"{proactive_briefing}\n")
         except Exception as e:
             print(f"‖ Notice: {e} ‖")
@@ -908,21 +943,6 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                 if user_input in ['/exit', '/quit', '/q']:
                     self.graceful_shutdown()
                     break
-                elif user_input.startswith('/set-name ') or user_input.startswith('/name ') or user_input.startswith('/callsign '):
-                    new_name = user_input.split(' ', 1)[1].strip()
-                    if new_name:
-                        if hasattr(self, 'vault') and self.vault:
-                            self.vault.set_operator_name(new_name)
-                        if hasattr(self, 'smart_memory') and self.smart_memory:
-                            self.smart_memory.pin('name', new_name)
-                            self.smart_memory.pin('operator', f"{new_name} - the person you serve")
-                            self.smart_memory.pin('ciph_purpose', f"You are {new_name}'s personal AI - not a generic assistant")
-                            self.smart_memory.pin('background', f"{new_name} profile is private. Load it from the private vault when configured.")
-                            self.smart_memory.pin('talk_style', f"Never placate. Never moralize. Give honest takes and push back when {new_name} is wrong.")
-                        print(f"🕶️ Ciph: ‖ Operator callsign updated to '{new_name}'. ‖")
-                    else:
-                        print("🕶️ Ciph: ‖ Usage: /name <callsign> ‖")
-                    continue
                 elif user_input == '/help':
                     print("\nCOGNITIVE EVOLUTION: /curiosity <on|off|status>, /mind-log, /mind-metrics, /council, /self-audit, /fetch <url>, /zeroize-mind")
                     print("AGENT ORCHESTRATION: /auto-mode, /start-workflow, /stop-workflow, /workflow-status, /stop-all-workflows")
@@ -938,7 +958,7 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                     print("MODULES: /modules, /load <module>, /unload <module>")
                     print("MEMORY: /profile, /profile-clear, /memory-graph <query>, /memory-status, /retroactive-learn, /timeline, /search <query>, /tag <tag>")
                     print("CONVERSATION: /talk-test, /convo-summary")
-                    print("CORE: /exit, /help, /status, /model-status, /name <callsign>, /test-deepseek, /reality-check, /ai, /setkey")
+                    print("CORE: /exit, /help, /status, /model-status, /test-deepseek, /reality-check, /ai, /setkey")
                     continue
                 elif user_input == '':
                     continue
