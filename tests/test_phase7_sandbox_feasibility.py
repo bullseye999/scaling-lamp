@@ -152,7 +152,7 @@ class TestPhase7SandboxFeasibility(unittest.TestCase):
         self.runtime.register_capability(SandboxedProbeCapability())
 
         token = self.runtime.mint_execution_token("cybersecurity.test_probe_denial", {"target": "t1"})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="cybersecurity.test_probe_denial",
             params={"target": "t1"},
             execution_token=token,
@@ -207,7 +207,7 @@ class TestPhase7SandboxFeasibility(unittest.TestCase):
         self.runtime.register_capability(cap)
 
         token = self.runtime.mint_execution_token("cybersecurity.test_missing_adapter", {"target": "x"})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="cybersecurity.test_missing_adapter",
             params={"target": "x"},
             execution_token=token,
@@ -276,7 +276,7 @@ class TestPhase7SandboxFeasibility(unittest.TestCase):
         self.runtime.register_capability(DeniedSecondLaunchCap())
 
         token = self.runtime.mint_execution_token("cybersecurity.test_denied_second_launch", {})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="cybersecurity.test_denied_second_launch",
             params={},
             execution_token=token,
@@ -468,7 +468,7 @@ print(json.dumps({'has_keys': has_keys, 'params': data}))
         self.runtime.register_capability(ExternalInspectionCapability())
 
         token = self.runtime.mint_execution_token("cybersecurity.test_key_isolation", {"param1": "safe_val"})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="cybersecurity.test_key_isolation",
             params={"param1": "safe_val"},
             execution_token=token,
@@ -640,7 +640,7 @@ time.sleep(10.0)
         cleaned_up=False with UNCERTAIN_CLEANUP, and IPCJobQueue marks RECONCILIATION_REQUIRED.
         """
         token = self.runtime.mint_execution_token("ciph.internal.curiosity_probe", {})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="ciph.internal.curiosity_probe",
             params={},
             execution_token=token,
@@ -688,7 +688,7 @@ time.sleep(10.0)
         self.runtime.register_capability(FailingCapability())
 
         token = self.runtime.mint_execution_token("cybersecurity.test_failing_cap", {})
-        job_id = self.runtime.queue.enqueue_job(
+        job_id = self.runtime.queue.enqueue_legacy_job_for_test(
             capability="cybersecurity.test_failing_cap",
             params={},
             execution_token=token,
