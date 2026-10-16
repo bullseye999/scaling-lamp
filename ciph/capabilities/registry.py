@@ -40,15 +40,136 @@ class CapabilityRegistry:
         return list(self._capabilities.keys())
 
     def dispatch(self, name: str, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Any:
-        """Dispatch execution through capability wrapper under Gate Zero invariant."""
+        """
+        REGISTRY PROVENANCE CUTOVER. Registry execution is governed by construction.
+
+        Two distinct failures live here, and they are not the same thing:
+          - no authority context        -> REFUSED. This is the hard cutover. There is no
+            compatibility bypass and no "execute anyway, label it legacy" path, because a
+            label applied after the effect is auditing, not enforcement.
+          - authority present           -> TargetIdentity -> scope NOW -> PermitRequest ->
+            signed permit -> durable ISSUED -> claim -> raw execution.
+
+        The registry never calls the raw capability primitive itself; that belongs to
+        GuardedExecutor alone.
+        """
         cap = self.get(name)
         if not cap:
-            raise KeyError(f"Capability '{name}' not found in registry. Available: {self.list_names()}")
-        # Under Gate Zero, direct dispatch of production capabilities without worker context is prohibited
-        from ciph.capabilities.base import CANONICAL_CAPABILITIES
-        if name in CANONICAL_CAPABILITIES and (not context or not context.get("worker_context")):
-            raise PermissionError(f"GATE_ZERO_VIOLATION: Direct registry dispatch forbidden for '{name}'. Capability invocation requires an authenticated worker execution context.")
-        return cap.execute(params, context)
+            raise KeyError(
+                f"Capability '{name}' not found in registry. Available: {self.list_names()}"
+            )
+
+        governed = (context or {}).get("execution_authority")
+        if governed is None:
+            # Registry-local cutover: even while the daemon is still a named migration debt, the
+            # registry may never mint legacy provenance for new execution.
+            raise PermissionError(
+                "AUTHORITY_REQUIRED: registry dispatch requires an execution authority context. "
+                "Missing authority fails closed; executing without a permit would make the throat "
+                "decorative for this path."
+            )
+
+        from ciph.kernel.execution_gateway import (
+            GuardedExecutor,
+            ExecutionRequest,
+        )
+
+        target = governed.target
+        manifest = getattr(cap, "manifest", None)
+
+        # A target-bearing capability must declare its canonicalizer. There is deliberately no
+        # fallback: adopting a reference implementation by accident would turn demo code into
+        # authorization policy.
+        if target is not None:
+            canonicalizer_id = getattr(manifest, "target_canonicalizer_id", None)
+            canonicalizer_version = getattr(manifest, "target_canonicalizer_version", None)
+            if not canonicalizer_id or not canonicalizer_version:
+                raise PermissionError(
+                    f"CANONICALIZER_REQUIRED: target-bearing capability '{name}' declares no "
+                    "target canonicalizer, so its target has no canonical identity. Registry "
+                    "execution is refused rather than defaulted."
+                )
+            from ciph.kernel.target_identity import canonicalize
+            identity = canonicalize(canonicalizer_id, canonicalizer_version, target)
+            target_digest = identity.digest
+        else:
+            target_digest = None
+
+        from ciph.kernel.policy_engine import replay_policy_digest
+
+        request = ExecutionRequest(
+            capability=name,
+            params=dict(params or {}),
+            target=target,
+            scope_grant=governed.scope_grant,
+            mission_id=governed.mission_id,
+            authorization_envelope_id=governed.authorization_envelope_id,
+            logical_action_id=governed.logical_action_id,
+            route=governed.route,
+            replay_policy_digest=replay_policy_digest(manifest),
+        )
+
+        # Scope is evaluated NOW, before authority is minted for this target.
+        permit = governed.gateway.issue_permit(request)
+
+        # A signed permit is not usable authority until its durable ISSUED row exists.
+        governed.permit_store.register(
+            permit_id=permit.payload.permit_id,
+            digest=permit.permit_digest(),
+            issued_at=permit.payload.issued_at_us / 1_000_000,
+            expires_at=permit.payload.expires_at_us / 1_000_000,
+            authorization_epoch=governed.authorization_epoch,
+            mission_id=governed.mission_id,
+            logical_action_id=governed.logical_action_id,
+            action_fingerprint=permit.payload.action_fingerprint,
+        )
+
+        # The governed path MANDATES provenance. A registry execution that cannot state which
+        # capability identity ran is not a governed execution, so there is deliberately no
+        # code path here that omits the builder: `GuardedExecutor` keeps the builder optional
+        # for generic reuse, but the governed production route may not silently downgrade
+        # into that mode.
+        from ciph.kernel.governed_provenance import (
+            assemble_provenance,
+            build_pre_claim_authority,
+            complete_authority_after_claim,
+        )
+        from ciph.kernel.authorization_provenance import PROVENANCE_PERMIT_V1
+
+        if manifest is None or not hasattr(manifest, "identity"):
+            raise PermissionError(
+                f"MANIFEST_IDENTITY_REQUIRED: capability '{name}' has no manifest identity, "
+                "so execution could not record which semantics ran."
+            )
+        manifest_identity = manifest.identity()
+        pre_claim_authority = build_pre_claim_authority(
+            manifest_identity=manifest_identity,
+            permit=permit,
+            authorization_provenance=PROVENANCE_PERMIT_V1,
+        )
+
+        caller_provenance = (context or {}).get("provenance")
+
+        def _complete_provenance(claim):
+            # Composed from canonical objects, not by mutating one dict through stages. The
+            # attempt identity comes from the durable claim and nowhere else.
+            return assemble_provenance(
+                caller_provenance,
+                complete_authority_after_claim(pre_claim_authority, claim),
+            )
+
+        executor = GuardedExecutor(governed.gateway, permit_store=governed.permit_store)
+        result, claim = executor.execute(
+            request, cap, context, permit, claimant=governed.route,
+            provenance_builder=_complete_provenance,
+        )
+        return {
+            "status": "EXECUTED",
+            "result": result,
+            "permit": permit,
+            "claim": claim,
+            "target_digest": target_digest,
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
