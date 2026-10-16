@@ -15,6 +15,57 @@ from collections.abc import Mapping
 from ciph.workers.receipts import JobState, ExecutionReceipt
 
 
+def inspect_permitless_backlog_readonly(db_path: str) -> Dict[str, Any]:
+    """
+    READ-ONLY preflight for the S3 gate.
+
+    Deliberately does NOT construct `IPCJobQueue`: that runs schema initialisation and migrations,
+    so pointing it at the production database merely to count rows would write to it. This opens
+    the file with SQLite `mode=ro` and runs one aggregate query.
+
+        live permitless (QUEUED / RETRYING / LEASED / EXECUTING) == 0   -> S3 may proceed
+        historical permitless (terminal)           may remain as archival evidence
+
+    Nothing here reconstructs a permit from an ExecutionToken, and nothing upgrades a row.
+    """
+    import os
+    import sqlite3
+
+    live_states = ("QUEUED", "RETRYING", "LEASED", "EXECUTING")
+    if not os.path.exists(db_path):
+        return {
+            "available": False, "reason": "DATABASE_NOT_FOUND",
+            "by_state": {}, "live_permitless": None, "s3_gate_satisfied": False,
+        }
+    uri = f"file:{db_path}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=10.0)
+    conn.row_factory = sqlite3.Row
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS n FROM ciph_ipc_jobs "
+                "WHERE execution_permit IS NULL GROUP BY status;"
+            ).fetchall()
+        except sqlite3.OperationalError as error:
+            return {
+                "available": False, "reason": f"UNREADABLE:{error}",
+                "by_state": {}, "live_permitless": None, "s3_gate_satisfied": False,
+            }
+    finally:
+        conn.close()
+
+    by_state = {str(row["status"]): int(row["n"]) for row in rows}
+    live = sum(n for state, n in by_state.items() if state in live_states)
+    return {
+        "available": True,
+        "reason": "",
+        "by_state": by_state,
+        "live_permitless": live,
+        "historical_permitless": sum(by_state.values()) - live,
+        "s3_gate_satisfied": live == 0,
+    }
+
+
 class IPCJobQueue:
     """
     Durable, crash-resilient IPC queue backed by SQLite in WAL mode.
@@ -70,6 +121,7 @@ class IPCJobQueue:
                     step_id TEXT,
                     worker_signature TEXT,
                     execution_token TEXT,
+                    execution_permit TEXT,
                     created_at REAL NOT NULL,
                     started_at REAL,
                     completed_at REAL
@@ -78,12 +130,34 @@ class IPCJobQueue:
             # Auto-migrate columns if table already existed without new fields
             cursor = conn.execute("PRAGMA table_info(ciph_ipc_jobs);")
             existing_cols = {row[1] for row in cursor.fetchall()}
-            for col in ['idempotency_key', 'receipt_id', 'plan_id', 'step_id', 'worker_signature', 'execution_token', 'pending_receipt']:
+            for col in ['idempotency_key', 'receipt_id', 'plan_id', 'step_id', 'worker_signature', 'execution_token', 'execution_permit', 'pending_receipt']:
                 if col not in existing_cols:
                     try:
                         conn.execute(f"ALTER TABLE ciph_ipc_jobs ADD COLUMN {col} TEXT;")
                     except Exception:
                         pass
+
+            # Register item 0.2. A job declares the claims it depends on and the epistemic
+            # domains those claims address; checkout will not release the job to a worker
+            # that does not hold those domains.
+            for column, ddl in (
+                ('epistemic_dependencies', 'TEXT'),
+                ('epistemic_domains', 'TEXT'),
+                ('dependency_declaration', 'TEXT'),
+                ('dependency_lease_id', 'TEXT'),
+                ('dependency_blocked_at', 'REAL'),
+                ('dependency_block_reason', 'TEXT'),
+            ):
+                if column not in existing_cols:
+                    try:
+                        conn.execute(
+                            f"ALTER TABLE ciph_ipc_jobs ADD COLUMN {column} {ddl};"
+                        )
+                    except Exception:
+                        pass
+
+            from ciph.memory.claim_leases import ensure_domain_lease_schema
+            ensure_domain_lease_schema(conn)
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ipc_status ON ciph_ipc_jobs(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ipc_lease_exp ON ciph_ipc_jobs(lease_expires_at);")
@@ -150,7 +224,97 @@ class IPCJobQueue:
         idempotency_key: Optional[str] = None,
         plan_id: Optional[str] = None,
         step_id: Optional[str] = None,
-        execution_token: Optional[Any] = None
+        execution_token: Optional[Any] = None,
+        epistemic_dependencies: Optional[List[str]] = None,
+        epistemic_domains: Optional[List[str]] = None,
+        *,
+        execution_permit,
+    ) -> str:
+        """
+        PRODUCTION durable enqueue. The canonical permit is structurally required.
+
+        The keyword has no default, so a permitless production enqueue is a TypeError rather than a
+        quiet legacy job; passing None explicitly is refused as well. Legacy/token-only construction
+        lives in `enqueue_legacy_job_for_test`, which is named to make misuse obvious and is scanned
+        to have zero production callers.
+        """
+        if execution_permit is None:
+            raise ValueError(
+                "PERMIT_REQUIRED: production enqueue requires a canonical SignedExecutionPermit; "
+                "use enqueue_legacy_job_for_test for explicitly non-production fixtures."
+            )
+        return self._enqueue_impl(
+            capability, params, max_retries, job_id, idempotency_key, plan_id, step_id,
+            execution_token, execution_permit, epistemic_dependencies, epistemic_domains,
+        )
+
+    def enqueue_legacy_job_for_test(
+        self,
+        capability: str,
+        params: Dict[str, Any],
+        max_retries: int = 1,
+        job_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        plan_id: Optional[str] = None,
+        step_id: Optional[str] = None,
+        execution_token: Optional[Any] = None,
+        epistemic_dependencies: Optional[List[str]] = None,
+        epistemic_domains: Optional[List[str]] = None,
+    ) -> str:
+        """
+        LEGACY/TEST ONLY - a token-only durable job. Not a production shape.
+
+        Deliberately ugly so a production caller is obvious in review, and scanned to have zero
+        production call sites. It exists so historical fixtures keep constructing the old shape
+        without the production API quietly retaining the ability to omit a permit.
+        """
+        return self._enqueue_impl(
+            capability, params, max_retries, job_id, idempotency_key, plan_id, step_id,
+            execution_token, None, epistemic_dependencies, epistemic_domains,
+        )
+
+    # A permitless row in one of these states can still be executed or retried, so it is an S3
+    # blocker. Every other state is terminal/historical and may remain as archival evidence.
+    LIVE_EXECUTABLE_STATES = ("QUEUED", "RETRYING", "LEASED", "EXECUTING")
+
+    def permitless_backlog_inventory(self) -> Dict[str, Any]:
+        """
+        Inventory permitless durable rows by lifecycle state.
+
+        Terminal/historical permitless rows are allowed to remain as evidence. A permitless row in a
+        LIVE executable state must reach zero before the daemon can be flipped: after S3 a job
+        without a canonical permit is refused, and nothing here would ever reconstruct one from an
+        ExecutionToken. Live backlog drains under the token-authorized daemon or is cancelled and
+        re-submitted through the canonical producer.
+        """
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS n FROM ciph_ipc_jobs "
+                "WHERE execution_permit IS NULL GROUP BY status;"
+            ).fetchall()
+        by_state = {str(row["status"]): int(row["n"]) for row in rows}
+        live = sum(n for state, n in by_state.items() if state in self.LIVE_EXECUTABLE_STATES)
+        total = sum(by_state.values())
+        return {
+            "by_state": by_state,
+            "live_permitless": live,
+            "historical_permitless": total - live,
+            "s3_gate_satisfied": live == 0,
+        }
+
+    def _enqueue_impl(
+        self,
+        capability: str,
+        params: Dict[str, Any],
+        max_retries: int = 1,
+        job_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        plan_id: Optional[str] = None,
+        step_id: Optional[str] = None,
+        execution_token: Optional[Any] = None,
+        execution_permit: Optional[Any] = None,
+        epistemic_dependencies: Optional[List[str]] = None,
+        epistemic_domains: Optional[List[str]] = None,
     ) -> str:
         """
         Enqueue a new persistent job with concurrency-safe atomic idempotency.
@@ -158,9 +322,32 @@ class IPCJobQueue:
         Stores signed ExecutionToken when provided.
         """
         now = time.time()
+        dep_json = json.dumps(sorted(set(epistemic_dependencies or [])), sort_keys=True)
+        domain_json = json.dumps(sorted(set(epistemic_domains or [])), sort_keys=True)
+        # Register item 0.2b. Three states, and they are NOT interchangeable:
+        #   dependencies declared non-empty  -> EXPLICIT with domains
+        #   dependencies declared empty      -> EXPLICIT with no domains
+        #   dependencies never supplied      -> UNDECLARED, and must never be read as
+        #                                       "no dependencies, carry on"
+        dependency_declaration = (
+            'EXPLICIT'
+            if (epistemic_domains is not None or epistemic_dependencies is not None)
+            else 'UNDECLARED'
+        )
         params_data = params.to_dict() if hasattr(params, "to_dict") else (dict(params) if isinstance(params, Mapping) else params)
         params_str = json.dumps(params_data, sort_keys=True, default=str)
         jid = job_id or f"JOB-{uuid.uuid4().hex[:8].upper()}"
+        # S2.3: the queue CARRIES a centrally issued permit. It does not verify it, spend it
+        # or consult it - authority remains the token until S3. Stored verbatim so a reader
+        # recovers the exact signed artifact, signature and digest intact.
+        permit_str = None
+        if execution_permit is not None:
+            if isinstance(execution_permit, str):
+                permit_str = execution_permit
+            elif hasattr(execution_permit, "to_dict"):
+                permit_str = json.dumps(execution_permit.to_dict(), sort_keys=True)
+            else:
+                raise ValueError("execution_permit must be a SignedExecutionPermit or its JSON text")
 
         token_str = None
         if execution_token is not None:
@@ -217,10 +404,11 @@ class IPCJobQueue:
                 cursor = conn.execute("""
                     INSERT INTO ciph_ipc_jobs (
                         job_id, capability, params, status, attempt_number,
-                        max_retries, idempotency_key, plan_id, step_id, execution_token, created_at
-                    ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                        max_retries, idempotency_key, plan_id, step_id, execution_token, execution_permit, created_at,
+                        epistemic_dependencies, epistemic_domains, dependency_declaration
+                    ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(idempotency_key) DO NOTHING;
-                """, (jid, capability, params_str, JobState.QUEUED.value, max_retries, idempotency_key, plan_id, step_id, token_str, now))
+                """, (jid, capability, params_str, JobState.QUEUED.value, max_retries, idempotency_key, plan_id, step_id, token_str, permit_str, now, dep_json, domain_json, dependency_declaration))
                 
                 if cursor.rowcount == 0:
                     # Conflict hit: Fetch existing job_id
@@ -234,9 +422,10 @@ class IPCJobQueue:
             conn.execute("""
                 INSERT INTO ciph_ipc_jobs (
                     job_id, capability, params, status, attempt_number,
-                    max_retries, idempotency_key, plan_id, step_id, execution_token, created_at
-                ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
-            """, (jid, capability, params_str, JobState.QUEUED.value, max_retries, idempotency_key, plan_id, step_id, token_str, now))
+                    max_retries, idempotency_key, plan_id, step_id, execution_token, execution_permit, created_at,
+                    epistemic_dependencies, epistemic_domains, dependency_declaration
+                ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (jid, capability, params_str, JobState.QUEUED.value, max_retries, idempotency_key, plan_id, step_id, token_str, permit_str, now, dep_json, domain_json, dependency_declaration))
             conn.commit()
             return jid
 
@@ -264,10 +453,72 @@ class IPCJobQueue:
                 "receipt_id": row['receipt_id'],
                 "worker_signature": row['worker_signature'],
                 "execution_token": row['execution_token'] if 'execution_token' in row.keys() else None,
+                "execution_permit": json.loads(row['execution_permit']) if ('execution_permit' in row.keys() and row['execution_permit']) else None,
                 "pending_receipt": json.loads(row["pending_receipt"]) if row["pending_receipt"] else None,
                 "created_at": row['created_at'],
                 "completed_at": row['completed_at']
             }
+
+    def _declared_epistemic_domains(self, conn, job_id: str) -> List[str]:
+        """Epistemic domains this job declared at enqueue time."""
+        row = conn.execute(
+            "SELECT epistemic_domains FROM ciph_ipc_jobs WHERE job_id = ?;", (job_id,)
+        ).fetchone()
+        if not row or row[0] in (None, "", "[]"):
+            return []
+        try:
+            return sorted({d for d in json.loads(row[0]) if d})
+        except (ValueError, TypeError):
+            return []
+
+    def _lease_candidate(self, conn, candidate, worker_id, lease_exp, now, lease_ttl_seconds):
+        """
+        Register item 0.2: acquire-or-refuse, inside the caller's write transaction.
+
+        Returns the leased row, or None when the candidate cannot be taken. A job whose declared
+        dependencies rest on an epistemic domain held by another worker is left QUEUED; it is
+        never handed to a worker that does not own the knowledge it depends on. Because the
+        conflict check and the CAS lease happen under one BEGIN IMMEDIATE, the dependency set is
+        acquired all-or-nothing: there is no state where some domains are held and others are not.
+        """
+        from ciph.memory.claim_leases import domain_lease_conflicts, insert_domain_leases
+
+        domains = self._declared_epistemic_domains(conn, candidate)
+        if domains:
+            conflicts = domain_lease_conflicts(conn, domains, worker_id, now)
+            if conflicts:
+                conn.execute(
+                    "UPDATE ciph_ipc_jobs SET dependency_blocked_at = ?, "
+                    "dependency_block_reason = ? WHERE job_id = ?;",
+                    (now, "EPISTEMIC_DOMAIN_CONFLICT:" + ",".join(conflicts), candidate),
+                )
+                return None
+
+        cursor = conn.execute("""
+            UPDATE ciph_ipc_jobs
+            SET status = ?, leased_to = ?, lease_expires_at = ?, attempt_number = attempt_number + 1,
+                started_at = ?, completed_at = NULL, result = NULL, error = NULL,
+                receipt_id = NULL, worker_signature = NULL, pending_receipt = NULL,
+                dependency_block_reason = NULL
+            WHERE job_id = ? AND status IN ('QUEUED', 'RETRYING')
+            RETURNING job_id, capability, params, attempt_number, max_retries, idempotency_key,
+                      plan_id, step_id, execution_token, execution_permit,
+                      lease_expires_at, started_at;
+        """, (JobState.LEASED.value, worker_id, lease_exp, now, candidate))
+        row = cursor.fetchone()
+        if row is None:
+            return None
+
+        if domains:
+            lease_id = insert_domain_leases(
+                conn, domains, worker_id=worker_id, job_id=candidate,
+                expires_at=lease_exp, acquired_at=now,
+            )
+            conn.execute(
+                "UPDATE ciph_ipc_jobs SET dependency_lease_id = ? WHERE job_id = ?;",
+                (lease_id, candidate),
+            )
+        return row
 
     def lease_next_job(
         self,
@@ -279,55 +530,151 @@ class IPCJobQueue:
         Atomically lease the next available job (QUEUED or RETRYING) to a worker thread using CAS.
         If target_job_id is provided, specifically leases that job if available.
         Sets status to LEASED and establishes lease expiration deadline in a single atomic statement.
+
+        Register item 0.2: candidates are walked in creation order, and a candidate whose declared
+        epistemic dependencies conflict with another worker's held domains is skipped rather than
+        leased. The job stays queued for a worker that can legitimately take it.
         """
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             now = time.time()
             lease_exp = now + lease_ttl_seconds
-            # Single atomic UPDATE ... RETURNING with CAS status check
+
             if target_job_id:
-                cursor = conn.execute("""
-                    UPDATE ciph_ipc_jobs 
-                    SET status = ?, leased_to = ?, lease_expires_at = ?, attempt_number = attempt_number + 1,
-                        started_at = ?, completed_at = NULL, result = NULL, error = NULL,
-                        receipt_id = NULL, worker_signature = NULL, pending_receipt = NULL
-                    WHERE job_id = ? AND status IN ('QUEUED', 'RETRYING')
-                    RETURNING job_id, capability, params, attempt_number, max_retries, idempotency_key, plan_id, step_id, execution_token, lease_expires_at, started_at;
-                """, (JobState.LEASED.value, worker_id, lease_exp, now, target_job_id))
+                candidates = [target_job_id]
             else:
-                cursor = conn.execute("""
-                    UPDATE ciph_ipc_jobs 
-                    SET status = ?, leased_to = ?, lease_expires_at = ?, attempt_number = attempt_number + 1,
-                        started_at = ?, completed_at = NULL, result = NULL, error = NULL,
-                        receipt_id = NULL, worker_signature = NULL, pending_receipt = NULL
-                    WHERE job_id = (
-                        SELECT job_id FROM ciph_ipc_jobs 
-                        WHERE status IN ('QUEUED', 'RETRYING') 
-                        ORDER BY created_at ASC 
-                        LIMIT 1
-                    ) AND status IN ('QUEUED', 'RETRYING')
-                    RETURNING job_id, capability, params, attempt_number, max_retries, idempotency_key, plan_id, step_id, execution_token, lease_expires_at, started_at;
-                """, (JobState.LEASED.value, worker_id, lease_exp, now))
-            row = cursor.fetchone()
-            if not row:
-                return None
+                candidates = [
+                    r[0] for r in conn.execute(
+                        "SELECT job_id FROM ciph_ipc_jobs "
+                        "WHERE status IN ('QUEUED', 'RETRYING') "
+                        "ORDER BY created_at ASC LIMIT 64;"
+                    ).fetchall()
+                ]
 
-            exec_token_raw = row['execution_token']
+            for candidate in candidates:
+                row = self._lease_candidate(
+                    conn, candidate, worker_id, lease_exp, now, lease_ttl_seconds
+                )
+                if row is None:
+                    continue
+                exec_token_raw = row['execution_token']
+                conn.commit()
+                return {
+                    "job_id": row['job_id'],
+                    "capability": row['capability'],
+                    "params": json.loads(row['params']),
+                    "attempt_number": row['attempt_number'],
+                    "max_retries": row['max_retries'],
+                    "idempotency_key": row['idempotency_key'],
+                    "plan_id": row['plan_id'],
+                    "step_id": row['step_id'],
+                    "execution_token": exec_token_raw,
+                    # S3: the leased job must carry the exact canonical permit, or the worker has
+                    # no authority to execute and refuses. This dict is the daemon's job view.
+                    "execution_permit": (json.loads(row['execution_permit'])
+                                         if ('execution_permit' in row.keys() and row['execution_permit'])
+                                         else None),
+                    "lease_expires_at": row['lease_expires_at'],
+                    "started_at": row['started_at'],
+                }
             conn.commit()
+            return None
 
-            return {
-                "job_id": row['job_id'],
-                "capability": row['capability'],
-                "params": json.loads(row['params']),
-                "attempt_number": row['attempt_number'],
-                "max_retries": row['max_retries'],
-                "idempotency_key": row['idempotency_key'],
-                "plan_id": row['plan_id'],
-                "step_id": row['step_id'],
-                "execution_token": exec_token_raw,
-                "lease_expires_at": row['lease_expires_at'],
-                "started_at": row['started_at'],
-            }
+    # ---------------------------------------------------------------- S3 retry transaction seam
+
+    def get_job_for_retry(self, job_id: str, *, conn=None) -> Optional[Dict[str, Any]]:
+        """
+        Read the job row for a retry decision.
+
+        With `conn` supplied the read happens inside the CALLER's snapshot, so the canonical job
+        state, the permit rows and the effect evidence are all read from one authoritative view. The
+        caller owns the transaction; this method never begins, commits or rolls back.
+        """
+        if conn is not None:
+            row = conn.execute("SELECT * FROM ciph_ipc_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            return dict(row) if row is not None else None
+        with self._get_connection() as owned:
+            row = owned.execute("SELECT * FROM ciph_ipc_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            return dict(row) if row is not None else None
+
+    def apply_retry_transition(
+        self,
+        *,
+        job_id: str,
+        status: str,
+        carried_permit: Optional[str] = None,
+        carried_token: Optional[str] = None,
+        expected_permit_id: Optional[str] = None,
+        receipt: Optional[Dict[str, Any]] = None,
+        conn=None,
+    ) -> bool:
+        """
+        Apply a retry transition to the job row.
+
+        `expected_permit_id` is the correlation fact the worker observed. If the job no longer
+        carries that permit, the report is stale - someone already advanced or settled this job - and
+        the transition is refused rather than applied to whatever is current. Returns False.
+
+        With `conn` supplied the caller owns the transaction: no BEGIN, no COMMIT, no ROLLBACK here.
+        """
+        owns = conn is None
+        active = self._get_connection() if owns else conn
+        try:
+            if owns:
+                active.execute("BEGIN IMMEDIATE")
+            row = active.execute(
+                "SELECT execution_permit FROM ciph_ipc_jobs WHERE job_id = ?;", (job_id,)
+            ).fetchone()
+            if row is None:
+                if owns:
+                    active.execute("ROLLBACK")
+                return False
+            if expected_permit_id is not None:
+                raw = row["execution_permit"] if "execution_permit" in row.keys() else None
+                current = json.loads(raw) if raw else None
+                current_id = current.get("permit_id") if isinstance(current, dict) else None
+                if current_id != expected_permit_id:
+                    if owns:
+                        active.execute("ROLLBACK")
+                    return False
+            # `carried_token=None` means "keep the transport artifact the row already has". A
+            # renewal is supplied by the CENTRAL retry path only; the queue never mints one.
+            #
+            # `receipt` binds a settled job to the signed evidence it settled on. A non-runnable
+            # outcome must still be self-describing: an operator inspecting a reconciliation needs
+            # the receipt the decision was made about, and without this pointer the evidence exists
+            # in the store while the row claims it never produced one.
+            receipt_id = worker_signature = pending_receipt = None
+            if isinstance(receipt, dict) and receipt.get("receipt_id"):
+                receipt_id = receipt.get("receipt_id")
+                worker_signature = receipt.get("worker_signature")
+                pending_receipt = json.dumps(receipt, sort_keys=True, default=str)
+            active.execute(
+                "UPDATE ciph_ipc_jobs SET status = ?, execution_permit = ?, "
+                "execution_token = COALESCE(?, execution_token), "
+                "receipt_id = COALESCE(?, receipt_id), "
+                "worker_signature = COALESCE(?, worker_signature), "
+                "pending_receipt = COALESCE(?, pending_receipt), "
+                "leased_to = NULL, lease_expires_at = NULL WHERE job_id = ?;",
+                (status, carried_permit, carried_token, receipt_id, worker_signature,
+                 pending_receipt, job_id),
+            )
+            if owns:
+                active.execute("COMMIT")
+            return True
+        except Exception:
+            if owns:
+                try:
+                    active.execute("ROLLBACK")
+                except Exception:
+                    pass
+            raise
+        finally:
+            if owns:
+                try:
+                    active.close()
+                except Exception:
+                    pass
 
     def get_job_attempt(self, job_id: str) -> Optional[Any]:
         """Retrieve the immutable JobAttempt contract for an active job lease."""
@@ -343,6 +690,8 @@ class IPCJobQueue:
             tok_hash = None
             if row['execution_token']:
                 tok_hash = hashlib.sha256(row['execution_token'].encode('utf-8')).hexdigest()
+            permit = (json.loads(row['execution_permit'])
+                      if ('execution_permit' in row.keys() and row['execution_permit']) else None)
             return JobAttempt(
                 job_id=row['job_id'],
                 capability=row['capability'],
@@ -353,6 +702,8 @@ class IPCJobQueue:
                 lease_expires_at=row['lease_expires_at'] or time.time(),
                 idempotency_key=row['idempotency_key'] or "",
                 execution_token_hash=tok_hash,
+                execution_permit=permit,
+                authorization_generation=(permit or {}).get("authorization_generation"),
                 plan_id=row['plan_id'],
                 step_id=row['step_id'],
             )
@@ -634,7 +985,8 @@ class IPCJobQueue:
         self,
         job_id: str,
         worker_id: str,
-        receipt_dict: Dict[str, Any]
+        receipt_dict: Dict[str, Any],
+        within_transaction=None,
     ) -> int:
         """
         Atomically mark job SUCCEEDED and insert ExecutionReceiptStoredEvent into EventStore
@@ -672,6 +1024,11 @@ class IPCJobQueue:
                 conn.commit()
                 return 0
 
+            # The caller may attach its own completion step for THIS terminal fact - for the governed
+            # lane, retiring the permit whose attempt just became terminal. It runs inside this
+            # transaction, so "the evidence is durable" and "the authority is retired" cannot come
+            # apart into two adjacent hopes.
+
             # 2. Append to EventStore table within the same atomic transaction
             cursor = conn.execute("SELECT event_hash FROM ciph_event_store ORDER BY event_id DESC LIMIT 1;")
             row = cursor.fetchone()
@@ -685,6 +1042,8 @@ class IPCJobQueue:
                 (event_type, aggregate_id, payload, timestamp, previous_hash, event_hash)
                 VALUES ('ExecutionReceiptStoredEvent', ?, ?, ?, ?, ?);
             """, (receipt_id, payload_str, now, prev_hash, event_hash))
+            if within_transaction is not None:
+                within_transaction(conn)
             conn.commit()
             return cur.lastrowid
 
@@ -763,6 +1122,21 @@ class IPCJobQueue:
                         next_status = JobState.FAILED.value
                 else:
                     next_status = JobState.RETRYING.value
+
+            # ONE RETRY ENGINE (S3). A governed, permit-bearing job may NOT be made runnable again by
+            # this autonomous path. Its permit was claimed, so execution authority is spent and retry
+            # eligibility must be decided against canonical evidence by the atomic retry
+            # transaction - not by the queue's own counter. A claimed permit on a RETRYING row is
+            # exactly the state the transition exists to make unreachable.
+            _carried = job_row["execution_permit"] if "execution_permit" in job_row.keys() else None
+            if _carried and next_status == JobState.RETRYING.value:
+                # REFUSE, do not substitute. FAILED is itself a disposition, and choosing it here
+                # would preempt the canonical retry authority's decision (which may legitimately be
+                # REDELIVER_SAME_GENERATION, NEXT_GENERATION, RECONCILIATION_REQUIRED or TERMINAL).
+                # For a governed job this path may neither make the row runnable nor pick a terminal
+                # replacement state: it mutates nothing and the disposition belongs to
+                # apply_retry_transition.
+                return 0
 
             # 1. Update job status with CAS guard (enforce leased_to = worker_id and active lease)
             cursor = conn.execute("""
@@ -845,6 +1219,10 @@ class IPCJobQueue:
                 SET status = ?, result = ?, receipt_id = ?, worker_signature = ?, completed_at = ?, leased_to = NULL, lease_expires_at = NULL 
                 WHERE job_id = ? AND leased_to = ? AND status IN ('LEASED', 'EXECUTING') AND lease_expires_at > ?;
             """, (JobState.SUCCEEDED.value, res_str, receipt_id, worker_signature, now, job_id, worker_id, now))
+            if cursor.rowcount > 0:
+                # Register item 0.2: the attempt is over, so free the knowledge it held.
+                from ciph.memory.claim_leases import release_domain_leases_for_job
+                release_domain_leases_for_job(conn, job_id)
             conn.commit()
             return cursor.rowcount > 0
 
@@ -899,6 +1277,10 @@ class IPCJobQueue:
                 SET status = ?, error = ?, completed_at = ?, leased_to = NULL, lease_expires_at = NULL 
                 WHERE job_id = ? AND leased_to = ? AND status IN ('LEASED', 'EXECUTING') AND lease_expires_at > ?;
             """, (next_status, error, now, job_id, worker_id, now))
+            if cursor.rowcount > 0:
+                # Register item 0.2: a finished or retrying attempt no longer holds domains.
+                from ciph.memory.claim_leases import release_domain_leases_for_job
+                release_domain_leases_for_job(conn, job_id)
             conn.commit()
             return cursor.rowcount > 0
 
@@ -1075,6 +1457,18 @@ class IPCJobQueue:
         """
         now = time.time()
         with self._get_connection(calling_holder_id=calling_holder_id) as conn:
+            # Register item 0.2: collect the expired jobs BEFORE the recovery updates below,
+            # because those updates set lease_expires_at = NULL and would hide the rows from
+            # this query - leaving the crashed worker's epistemic domains locked.
+            from ciph.memory.claim_leases import release_domain_leases_for_job
+            expired_job_ids = [
+                r[0] for r in conn.execute(
+                    "SELECT job_id FROM ciph_ipc_jobs "
+                    "WHERE lease_expires_at IS NOT NULL AND lease_expires_at < ?;",
+                    (now,),
+                ).fetchall()
+            ]
+
             # 1a. Pre-execution lease expiry with retries remaining -> RETRYING
             c1 = conn.execute("""
                 UPDATE ciph_ipc_jobs 
@@ -1098,6 +1492,10 @@ class IPCJobQueue:
                 WHERE status = 'EXECUTING' AND lease_expires_at < ?;
             """, (now,))
 
+            # Register item 0.2: a reclaimed job must not keep holding epistemic domains,
+            # or a crashed worker would block its domain until the lease quietly leaked.
+            for expired_job_id in expired_job_ids:
+                release_domain_leases_for_job(conn, expired_job_id)
             conn.commit()
             return c1.rowcount + c_fail.rowcount + c2.rowcount
 
@@ -1220,7 +1618,8 @@ class IPCJobQueue:
         resolution_notes: str,
         result: Optional[Dict[str, Any]] = None,
         operator_id: str = "operator_root",
-        operator_signature: Optional[str] = None
+        operator_signature: Optional[str] = None,
+        permit_store=None,
     ) -> bool:
         """
         Governed reconciliation transition: resolves a RECONCILIATION_REQUIRED job
@@ -1282,7 +1681,28 @@ class IPCJobQueue:
             if not job_row or job_row['status'] != JobState.RECONCILIATION_REQUIRED.value:
                 return False
 
-            err_text = f"Reconciled ({operator_id}): {resolution_notes.strip()}"
+            # OPERATOR SETTLEMENT RESOLVES THE ATTEMPT, so the authority that produced it is retired
+            # in the SAME transaction. A human decision is not machine proof - `terminal_evidence`
+            # stays False - but it is a resolution, and an attempt that is resolved must not stay
+            # CLAIMED. The settlement's authority is the operator signature, so a permit store that
+            # disagrees is recorded rather than allowed to block the operator.
+            consume_note = ""
+            if permit_store is not None and job_row["execution_permit"]:
+                from ciph.kernel.permit_store import PermitStoreError
+                try:
+                    carried = json.loads(job_row["execution_permit"])
+                except (TypeError, ValueError):
+                    carried = {}
+                permit_id = (carried or {}).get("permit_id")
+                if permit_id:
+                    try:
+                        consumed = permit_store.consume(permit_id, operator_id, conn=conn,
+                                                        allow_foreign_claimant=True, now=now)
+                        consume_note = " permit=CONSUMED" if consumed else " permit=ALREADY_TERMINAL"
+                    except PermitStoreError as error:
+                        consume_note = f" permit=NOT_CONSUMED({error.reason})"
+
+            err_text = f"Reconciled ({operator_id}): {resolution_notes.strip()}{consume_note}"
             cursor = conn.execute("""
                 UPDATE ciph_ipc_jobs
                 SET status = ?, error = ?, result = ?, completed_at = ?,
@@ -1355,6 +1775,7 @@ class IPCJobQueue:
                 "receipt_id": row['receipt_id'],
                 "worker_signature": row['worker_signature'],
                 "execution_token": row['execution_token'] if 'execution_token' in row.keys() else None,
+                "execution_permit": json.loads(row['execution_permit']) if ('execution_permit' in row.keys() and row['execution_permit']) else None,
                 "pending_receipt": json.loads(row["pending_receipt"]) if row["pending_receipt"] else None,
                 "created_at": row['created_at'],
                 "started_at": row['started_at'],
