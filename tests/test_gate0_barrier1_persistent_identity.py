@@ -110,7 +110,7 @@ class TestGate0Barrier1PersistentIdentity(unittest.TestCase):
         runtime = CiphRuntime(db_path=self.DB_PATH)
 
         # Enqueue a job
-        job_id = runtime.queue.enqueue_job(
+        job_id = runtime.queue.enqueue_legacy_job_for_test(
             capability="tor.check_status",
             params={},
             plan_id="p_forged",
