@@ -117,7 +117,9 @@ class AutonomousActionAgent:
         exit_status_str = "• Exit Status: COMPLETED (Verified in SQLite runtime)" if is_success else f"• Exit Status: FAILED (Verified in SQLite runtime) - Reason: {exec_res.get('error_reason', 'Execution failed')}"
 
         synth_prompt = (
-            get_worldview(mood_context, memory_context, book_context) +
+            get_worldview(mood_context, memory_context, book_context,
+                          operator_name=self.core.vault.get_operator_name() or "",
+                          operator_pronoun=getattr(self.core.vault, "get_operator_pronoun", lambda: None)() or "") +
             f"\n\n{receipt_header}\n" +
             f"• Receipt ID: {rcpt_id}\n" +
             f"• Tool: {tool} (Target: {target or 'unspecified'})\n" +
