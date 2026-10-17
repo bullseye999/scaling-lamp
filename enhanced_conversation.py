@@ -172,7 +172,8 @@ class CiphConversation:
             operational_context=full_op_context,
             world_context=world_context,
             operator_name=getattr(self, 'vault', None) and self.vault.get_operator_name() or "",
-            operator_pronoun=getattr(self, 'vault', None) and getattr(self.vault, "get_operator_pronoun", lambda: None)() or ""
+            operator_pronoun=getattr(self, 'vault', None) and getattr(self.vault, "get_operator_pronoun", lambda: None)() or "",
+            policy_db=getattr(self, 'vault', None) and getattr(self.vault, 'db_path', None) or None
         )
 
     def bridge_command_execution(self, command: str, output: str):
