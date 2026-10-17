@@ -248,6 +248,7 @@ class WorldTelemetry:
         critical_items = digest.get("critical_findings", [])
         macro_items = digest.get("macro_news", [])
         dn_signals = digest.get("darknet_pulse", {}).get("onion_signals", [])
+        operator_name = (self.vault.get_operator_name() if getattr(self, 'vault', None) else None) or "Operator"
 
         # Get Cognitive Evolution metrics
         evolution_meta = ""
@@ -262,8 +263,8 @@ class WorldTelemetry:
         if router and getattr(router, 'api_key', None):
             try:
                 prompt = f"""
-You are Ciph. operator (your creator/operator) just logged into his terminal session.
-You have been running 24/7 telemetry and curiosity expeditions on his VPS while he was offline.
+You are Ciph. {operator_name} (your creator and operator) just logged into their terminal session.
+You have been running 24/7 telemetry and curiosity expeditions on the host while they were offline.
 
 OFFLINE DURATION: {elapsed}
 COGNITIVE PROGRESS: {evolution_meta}
@@ -275,13 +276,13 @@ ACTIVE TOR DARKNET SIGNALS:
 {json.dumps(dn_signals[:2], indent=2)}
 
 TASK:
-1. Greet operator directly ("Welcome back, operator" or sovereign equivalent). Mention his offline duration naturally.
-2. Deliver a crisp, high-impact intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts (e.g. name the exact software, CVE-XXXX-XXXX, and what the vulnerability does). Explain WHY it matters to our operations.
-3. Proactively ask operator 1-2 sharp, strategic tactical questions regarding what to attack, investigate, or prioritize today.
-4. Voice: Sovereign, razor-sharp, peer-to-peer, respectful, street-smart and philosophical. No sycophancy, no robotic lists. Keep it under 200 words.
+1. Greet {operator_name} directly by name. Mention the offline duration naturally.
+2. Deliver a crisp intelligence briefing detailing the SPECIFIC named CVEs, zero-days, or threat alerts (name the exact software, CVE-XXXX-XXXX, and what the vulnerability does). Explain why it matters to our operations.
+3. Ask {operator_name} 1-2 sharp, strategic questions about what to investigate or prioritise today.
+4. Voice: direct, sharp, peer-to-peer and respectful. No sycophancy, no robotic lists. Keep it under 200 words.
 """
                 ai_brief = router.think(
-                    user_input="operator logged into terminal.",
+                    user_input=f"{operator_name} logged into terminal.",
                     history=[],
                     system_prompt=prompt,
                     temperature=0.3
@@ -293,7 +294,7 @@ TASK:
 
         # Deterministic High-Fidelity Fallback (Guaranteed clean output with exact findings)
         lines = [
-            f"🕶️ Ciph: ‖ Welcome back, operator. Offline duration: {elapsed}. ‖",
+            f"🕶️ Ciph: ‖ Welcome back, {operator_name}. Offline duration: {elapsed}. ‖",
             "📡 24/7 VPS Background Telemetry Digest:\n"
         ]
 
@@ -314,8 +315,8 @@ TASK:
         if critical_items:
             cves_list = critical_items[0].get('cves', [])
             first_cve = cves_list[0] if cves_list else "the latest exploit drop"
-            lines.append(f"\"operator, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or execute a surface audit on our primary target list?\"")
+            lines.append(f"\"{operator_name}, given {critical_items[0].get('title')[:60]} ({first_cve}), should we map out an exploit validation chain on this vulnerability today, or run a surface audit on our primary target list?\"")
         else:
-            lines.append("\"operator, all sensory pipelines are clear. What vector are we targeting today?\"")
+            lines.append(f"\"{operator_name}, all sensory pipelines are clear. What vector are we targeting today?\"")
 
         return "\n".join(lines)
