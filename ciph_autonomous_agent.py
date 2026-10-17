@@ -119,7 +119,8 @@ class AutonomousActionAgent:
         synth_prompt = (
             get_worldview(mood_context, memory_context, book_context,
                           operator_name=self.core.vault.get_operator_name() or "",
-                          operator_pronoun=getattr(self.core.vault, "get_operator_pronoun", lambda: None)() or "") +
+                          operator_pronoun=getattr(self.core.vault, "get_operator_pronoun", lambda: None)() or "",
+                          policy_db=getattr(self.core.vault, "db_path", None)) +
             f"\n\n{receipt_header}\n" +
             f"• Receipt ID: {rcpt_id}\n" +
             f"• Tool: {tool} (Target: {target or 'unspecified'})\n" +
