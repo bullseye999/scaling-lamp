@@ -592,6 +592,36 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
         self.last_command_result = result
         return result.get('dialogue') or f"Command status: {result.get('status', 'UNKNOWN')}"
 
+    def _command_bridge_text(self, response):
+        """
+        Text handed to the model's context after a command. The terminal card may be a short
+        summary (e.g. a file read does not echo the document), but the model still needs the
+        actual content, so the full report_data is passed here.
+        """
+        result = getattr(self, 'last_command_result', None)
+        receipt = result.get('receipt') if isinstance(result, dict) else None
+        data = getattr(receipt, 'results', None)
+        if isinstance(data, dict) and isinstance(data.get('report_data'), dict):
+            body = data['report_data']
+            if 'content' in body and 'path' in body:
+                return f"[FILE {body.get('path')} — {body.get('bytes')} bytes]\n{body.get('content', '')}"
+        return response
+
+    def _bridge_command_output(self, user_input, response):
+        """Add a command's output to the conversation history so the model can see its own tool results."""
+        if not response or not getattr(self, 'conversation', None):
+            return
+        line = user_input.strip()
+        command = line if line.startswith('/') else None
+        if command is None:
+            try:
+                intent, cmd = self.intent_router.classify(user_input)
+                command = cmd if (intent == 'COMMAND' and cmd) else None
+            except Exception:
+                command = None
+        if command:
+            self.conversation.bridge_command_execution(command, self._command_bridge_text(response))
+
     def generate_response(self, user_input: str) -> str:
         """Route command effects through the kernel; handle ordinary dialogue separately."""
 
@@ -963,7 +993,7 @@ Refer strictly to the verified capability ledger and runtime execution receipts 
                 elif user_input == '':
                     continue
                 
-                self.generate_response(user_input)
+                self._bridge_command_output(user_input, self.generate_response(user_input))
                 
             except Exception as e:
                 print(f"\nCiph: ‖ Error: {e} ‖")
