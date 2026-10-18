@@ -78,7 +78,16 @@ class DialogueFormatter:
         if receipt.error_message:
             lines.append(f"  Error    : {receipt.error_message}")
         if receipt.results and isinstance(receipt.results, dict):
-            if "report_data" in receipt.results and receipt.capability.startswith("operator."):
+            if receipt.capability == "operator.read_file" and isinstance(receipt.results.get("report_data"), dict):
+                # Do not echo the document into the terminal. The content is loaded into the
+                # model's context by the command bridge; the operator only sees a compact summary.
+                body = receipt.results["report_data"]
+                content = str(body.get("content", ""))
+                n_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+                suffix = " (truncated)" if body.get("truncated") else ""
+                lines.append(f"  [FILE] {body.get('path')} — {body.get('bytes')} bytes, "
+                             f"{n_lines} lines loaded into context{suffix}")
+            elif "report_data" in receipt.results and receipt.capability.startswith("operator."):
                 import json
                 rendered = json.dumps(receipt.results["report_data"], ensure_ascii=True, indent=2, sort_keys=True)
                 lines.append("  " + receipt.results.get("semantics", "Local inspection report"))
