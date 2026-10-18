@@ -176,11 +176,18 @@ class CiphConversation:
             policy_db=getattr(self, 'vault', None) and getattr(self.vault, 'db_path', None) or None
         )
 
+    # Command output bridged into conversation history: file reads keep the whole document
+    # (matching the read-file content cap) while other commands stay terse.
+    _BRIDGE_LIMIT = 1200
+    _FILE_READ_BRIDGE_LIMIT = 24000
+
     def bridge_command_execution(self, command: str, output: str):
         """Bridge a slash command and its structured output into conversation history."""
         self._add_to_history("user", f"[OPERATIONAL COMMAND] {command}")
         clean_out = output.strip()
-        condensed = clean_out[:1200] + "..." if len(clean_out) > 1200 else clean_out
+        head = command.strip().split(None, 1)[0].lower() if command.strip() else ""
+        limit = self._FILE_READ_BRIDGE_LIMIT if head in ("/read-file", "/cat") else self._BRIDGE_LIMIT
+        condensed = clean_out[:limit] + "..." if len(clean_out) > limit else clean_out
         self._add_to_history("assistant", f"[TOOL OUTPUT FOR {command}]\n{condensed}")
 
     def process_input(self, user_input: str, mood_context: str = "", memory_context: str = "", book_context="", operational_context="", world_context="", temperature: float = 0.3) -> str:
