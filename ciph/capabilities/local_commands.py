@@ -4,6 +4,7 @@ Inspection reports establish what the local stores contain, not external truth.
 Each operation has its own manifest, fixed implementation and validated inputs.
 """
 import json
+import re
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -54,6 +55,7 @@ LOCAL_COMMANDS = (
     LocalCommand("/watchtower", "watchtower_history", "Read stored watchtower events without launching a monitor"),
     LocalCommand("/blueprints", "blueprints", "Read stored blueprint records without running experimental evolution"),
     LocalCommand("/recon-diff", "recon_diff", "Compare the two latest stored reconnaissance snapshots", (), "target"),
+    LocalCommand("/read-file", "read_file", "Read a text file inside the project folder (read-only, path-confined; never writes)", ("/cat",), "path"),
     LocalCommand("/assets", "asset_inventory", "Read stored reconnaissance assets and counts; records are unverified", ("/asset-inventory", "/global-assets")),
     LocalCommand("/briefing", "briefing", "Summarize local jobs, usable claims and curiosity state", ("/daily-brief", "/morning-brief", "/today")),
     LocalCommand("/command-status", "commands", "Show command coverage and deferred legacy families"),
@@ -217,6 +219,37 @@ class LocalOperatorCapability(BaseCapability):
                     continue
         return {"records": predictions[:25], "truncated": len(predictions) > 25}
 
+    def _project_root(self):
+        root = getattr(self.runtime, "repo_root", None)
+        if not root:
+            # local_commands.py -> capabilities -> ciph -> project root
+            root = Path(__file__).resolve().parents[2]
+        return Path(root).resolve()
+
+    def _read_text_file(self, requested):
+        """Read a text file inside the project root. Read-only and path-confined; never writes."""
+        root = self._project_root()
+        candidate = Path(requested)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        resolved = candidate.resolve()
+        if resolved != root and root not in resolved.parents:
+            raise ValueError("PATH_OUTSIDE_PROJECT_ROOT: read access is confined to the project folder")
+        if not resolved.is_file():
+            raise ValueError("FILE_NOT_FOUND: no readable file at that path inside the project folder")
+        raw = resolved.read_bytes()
+        if b"\x00" in raw[:4096]:
+            raise ValueError("BINARY_FILE_NOT_READABLE: only text files can be read")
+        text = raw.decode("utf-8", errors="replace")
+        truncated = False
+        if len(text) > 24000:
+            text, truncated = text[:24000], True
+        # Keep the encoded content comfortably inside the report size bound.
+        while len(json.dumps(text, ensure_ascii=True)) > 48000 and text:
+            text, truncated = text[: int(len(text) * 0.8)], True
+        return {"path": str(resolved.relative_to(root)), "bytes": len(raw),
+                "truncated": truncated, "content": text}
+
     def run(self, params, context=None):
         validate_parameters(self.spec, params)
         r, op = self.runtime, self.spec.operation
@@ -302,6 +335,8 @@ class LocalOperatorCapability(BaseCapability):
             data = self._changelog()
         elif op == "predictions":
             data = self._predictions()
+        elif op == "read_file":
+            data = self._read_text_file(params["path"])
         else:
             data = self._vault_records(op, params)
         return report(data)
@@ -317,7 +352,19 @@ def register_local_commands(registry):
     import shlex
     for spec in LOCAL_COMMANDS:
         def parser(text, spec=spec):
-            params = _assign_arguments(shlex.split(text), [spec.argument] if spec.argument else [])
+            tokens = shlex.split(text)
+            if spec.operation == "read_file":
+                # Accept "<path> <operator commentary>": only when the sole problem is an
+                # over-supplied positional count, take the first token as the path. A key=value
+                # token is still a parameter error, so strict validation is preserved.
+                try:
+                    params = _assign_arguments(tokens, [spec.argument])
+                except ValueError as exc:
+                    if "Too many positional" not in str(exc) or not tokens:
+                        raise
+                    params = {spec.argument: tokens[0]}
+            else:
+                params = _assign_arguments(tokens, [spec.argument] if spec.argument else [])
             validate_parameters(spec, params)
             return params
         registry.register(CommandDefinition(command=spec.command, capability_name=spec.capability,
